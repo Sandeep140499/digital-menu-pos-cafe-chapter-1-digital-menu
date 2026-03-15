@@ -7,12 +7,12 @@ const NotFound = () => {
   useEffect(() => {
     console.error(
       "404 Error: User attempted to access non-existent route:",
-      location.pathname
+      location.pathname,
     );
   }, [location.pathname]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-olive-50 via-olive-100 to-olive-200 px-4">
+    <div className="min-h-[100dvh] flex items-center justify-center bg-gradient-to-br from-olive-50 via-olive-100 to-olive-200 px-4">
       <div className="w-full max-w-md text-center rounded-2xl bg-white/90 px-6 py-8 shadow-lg ring-1 ring-black/5">
         <h1 className="text-5xl sm:text-6xl font-extrabold mb-3 text-emerald-800 tracking-tight">
           404

@@ -31,13 +31,15 @@ export function useApi() {
 
       const data = await res.json();
       if (!res.ok) {
-        const err = new Error((data as { message?: string }).message || "Request failed");
+        const err = new Error(
+          (data as { message?: string }).message || "Request failed",
+        );
         (err as Error & { status: number }).status = res.status;
         throw err;
       }
       return data;
     },
-    []
+    [],
   );
 
   return { fetchApi, apiBase: API_BASE_URL };

@@ -15,7 +15,7 @@ const LocationMap = () => {
 
   const handleGetDirections = () => {
     const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
-      restaurantLocation.address
+      restaurantLocation.address,
     )}`;
     window.open(googleMapsUrl, "_blank");
   };
@@ -50,7 +50,9 @@ const LocationMap = () => {
           <div className="space-y-1 sm:space-y-2 text-gray-700 text-xs sm:text-sm">
             <div className="flex items-start gap-2">
               <MapPin className="w-4 h-4 mt-0.5 text-olive-600" />
-              <span className="font-semibold">{restaurantLocation.landmark}</span>
+              <span className="font-semibold">
+                {restaurantLocation.landmark}
+              </span>
             </div>
             <div className="flex items-start gap-2">
               <span className="w-4" />
@@ -132,8 +134,8 @@ const LocationMap = () => {
       <div className="text-center text-xs sm:text-sm text-gray-600 px-1">
         <p>
           Tap{" "}
-          <span className="font-semibold text-olive-700">Get Directions</span> to
-          open the location in Google Maps, or{" "}
+          <span className="font-semibold text-olive-700">Get Directions</span>{" "}
+          to open the location in Google Maps, or{" "}
           <span className="font-semibold text-olive-700">Call Now</span> to
           contact us directly.
         </p>

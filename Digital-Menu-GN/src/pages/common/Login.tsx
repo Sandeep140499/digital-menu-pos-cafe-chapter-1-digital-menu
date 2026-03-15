@@ -4,7 +4,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useToast } from "@/hooks/use-toast";
+import toast from "react-hot-toast";
 import { Link } from "react-router-dom";
 import { API_BASE_URL } from "@/constants";
 import cafeLogo from "@/assets/logo.png";
@@ -14,7 +14,6 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { toast } = useToast();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -30,9 +29,10 @@ const Login = () => {
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        const msg = res.status === 403
-          ? (data.message || "Please verify your email before logging in.")
-          : (data.message || "Login failed");
+        const msg =
+          res.status === 403
+            ? data.message || "Please verify your email before logging in."
+            : data.message || "Login failed";
         throw new Error(msg);
       }
 
@@ -41,10 +41,7 @@ const Login = () => {
       window.sessionStorage.setItem("dm_auth_token", data.token);
       window.sessionStorage.setItem("dm_auth_role", data.role);
 
-      toast({
-        title: "Logged in",
-        description: `You are logged in as ${data.role}.`,
-      });
+      toast.success(`Logged in as ${data.role}`, { duration: 4000 });
 
       if (data.role === "ADMIN") {
         navigate("/admin");
@@ -52,10 +49,8 @@ const Login = () => {
         navigate("/employee");
       }
     } catch (error: any) {
-      toast({
-        title: "Login error",
-        description: error.message ?? "Unable to login. Check credentials.",
-        variant: "destructive",
+      toast.error(error.message ?? "Unable to login. Check credentials.", {
+        duration: 5000,
       });
     } finally {
       setLoading(false);
@@ -66,7 +61,11 @@ const Login = () => {
     <div className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-gradient-to-br from-olive-50 via-olive-100 to-emerald-100 px-4 py-6 sm:py-8">
       <div className="w-full max-w-md rounded-2xl bg-white/95 p-5 sm:p-6 shadow-xl border border-emerald-100">
         <div className="flex justify-center mb-3 sm:mb-4">
-          <img src={cafeLogo} alt="Cafe Chapter 1" className="h-16 w-auto object-contain sm:h-20" />
+          <img
+            src={cafeLogo}
+            alt="Cafe Chapter 1"
+            className="h-16 w-auto object-contain sm:h-20"
+          />
         </div>
         <h1 className="text-lg sm:text-2xl font-bold text-emerald-900 mb-1 sm:mb-2 text-center leading-tight">
           Cafe Chapter 1 Restro Private Limited
@@ -105,7 +104,11 @@ const Login = () => {
                 aria-label={showPassword ? "Hide password" : "Show password"}
                 tabIndex={-1}
               >
-                {showPassword ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                {showPassword ? (
+                  <Eye className="h-4 w-4" />
+                ) : (
+                  <EyeOff className="h-4 w-4" />
+                )}
               </button>
             </div>
           </div>
@@ -120,7 +123,8 @@ const Login = () => {
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mt-3 text-center sm:text-left">
             <p className="text-[11px] text-muted-foreground order-2 sm:order-1">
-              Customer orders do not require login. This panel is for staff only.
+              Customer orders do not require login. This panel is for staff
+              only.
             </p>
             <Link
               to="/reset-password"

@@ -4,7 +4,7 @@
  */
 export function calculateLate(
   scheduledStart: string | Date | null | undefined,
-  actualLogin: string | Date | null | undefined
+  actualLogin: string | Date | null | undefined,
 ): string {
   if (scheduledStart == null || actualLogin == null) return "—";
   const start = new Date(scheduledStart);

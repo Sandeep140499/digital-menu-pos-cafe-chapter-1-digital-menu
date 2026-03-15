@@ -19,13 +19,20 @@ export function StatusBadge({ status, className }: StatusBadgeProps) {
     className: "bg-muted text-muted-foreground",
   };
   const label =
-    status === "ACTIVE" ? "Active" : status === "INACTIVE" ? "Inactive" : status === "LEFT" ? "Left" : status;
+    status === "ACTIVE"
+      ? "Active"
+      : status === "INACTIVE"
+        ? "Inactive"
+        : status === "LEFT"
+          ? "Left"
+          : status;
   return (
     <Badge
       variant={style.variant}
       className={cn(style.className, "text-xs", className)}
     >
-      {status === "ACTIVE" ? "🟢 " : ""}{label}
+      {status === "ACTIVE" ? "🟢 " : ""}
+      {label}
     </Badge>
   );
 }

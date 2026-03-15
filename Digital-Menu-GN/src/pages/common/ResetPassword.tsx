@@ -38,12 +38,25 @@ const ResetPassword = () => {
       const data = await res.json().catch(() => ({}));
       const msg = (data as { message?: string }).message;
       if (res.ok) {
-        toast({ title: "If the email exists, a reset link has been sent.", description: msg });
+        toast({
+          title: "If the email exists, a reset link has been sent.",
+          description: msg,
+        });
       } else {
-        toast({ title: "Could not send reset link", description: msg || "Email may not be configured on the server. Contact the administrator.", variant: "destructive" });
+        toast({
+          title: "Could not send reset link",
+          description:
+            msg ||
+            "Email may not be configured on the server. Contact the administrator.",
+          variant: "destructive",
+        });
       }
     } catch {
-      toast({ title: "Error sending reset link", description: "Please try again later.", variant: "destructive" });
+      toast({
+        title: "Error sending reset link",
+        description: "Please try again later.",
+        variant: "destructive",
+      });
     } finally {
       setSubmitting(false);
     }
@@ -82,7 +95,7 @@ const ResetPassword = () => {
   const hasToken = Boolean(token);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-olive-50 via-olive-100 to-emerald-100 px-4">
+    <div className="min-h-[100dvh] flex items-center justify-center bg-gradient-to-br from-olive-50 via-olive-100 to-emerald-100 px-4">
       <div className="w-full max-w-md rounded-2xl bg-white/95 p-6 shadow-xl border border-emerald-100 space-y-4">
         <h1 className="text-xl sm:text-2xl font-bold text-emerald-900 text-center">
           {hasToken ? "Set a new password" : "Forgot your password?"}

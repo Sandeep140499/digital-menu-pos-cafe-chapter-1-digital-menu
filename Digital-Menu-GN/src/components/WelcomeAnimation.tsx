@@ -3,38 +3,58 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Heart, MapPin } from "lucide-react";
 import cafeLogo from "@/assets/logo.png";
 
-// Sparkle effect
+// Deterministic pseudo-random from index (pure, no Math.random during render)
+const sparkleStyle = (i: number) => {
+  const n = (i * 7 + 11) % 97;
+  const m = (i * 13 + 17) % 97;
+  const p = (i * 19 + 23) % 97;
+  const q = (i * 29 + 31) % 97;
+  return {
+    left: `${(n / 97) * 100}%`,
+    top: `${(m / 97) * 100}%`,
+    duration: 2.5 + (p / 97) * 1.5,
+    delay: (q / 97) * 2,
+  };
+};
+
 const Sparkle = () => (
   <div className="pointer-events-none absolute inset-0 z-0">
-    {[...Array(18)].map((_, i) => (
-      <motion.div
-        key={i}
-        className="absolute"
-        style={{
-          left: `${Math.random() * 100}%`,
-          top: `${Math.random() * 100}%`,
-        }}
-        initial={{ opacity: 0, scale: 0.5 }}
-        animate={{ opacity: [0, 1, 0], scale: [0.5, 1.2, 0.5] }}
-        transition={{
-          duration: 2.5 + Math.random() * 1.5,
-          repeat: Infinity,
-          delay: Math.random() * 2,
-        }}
-      >
+    {[...Array(18)].map((_, i) => {
+      const { left, top, duration, delay } = sparkleStyle(i);
+      return (
+        <motion.div
+          key={i}
+          className="absolute"
+          style={{ left, top }}
+          initial={{ opacity: 0, scale: 0.5 }}
+          animate={{ opacity: [0, 1, 0], scale: [0.5, 1.2, 0.5] }}
+          transition={{
+            duration,
+            repeat: Infinity,
+            delay,
+          }}
+        >
         <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
           <g filter="url(#sparkle-blur)">
             <circle cx="9" cy="9" r="2.5" fill="#b9fbc0" fillOpacity="0.8" />
             <circle cx="9" cy="9" r="1.5" fill="#16a34a" fillOpacity="0.7" />
           </g>
           <defs>
-            <filter id="sparkle-blur" x="0" y="0" width="18" height="18" filterUnits="userSpaceOnUse">
+            <filter
+              id="sparkle-blur"
+              x="0"
+              y="0"
+              width="18"
+              height="18"
+              filterUnits="userSpaceOnUse"
+            >
               <feGaussianBlur stdDeviation="1.5" />
             </filter>
           </defs>
         </svg>
-      </motion.div>
-    ))}
+        </motion.div>
+      );
+    })}
   </div>
 );
 
@@ -122,7 +142,7 @@ const WelcomeAnimation = ({ onComplete }: WelcomeAnimationProps) => {
     };
   }, [onComplete]);
 
-  const { greeting, suggestion, quote } = useMemo(getGreetingAndQuote, []);
+  const { greeting, suggestion, quote } = useMemo(() => getGreetingAndQuote(), []);
 
   return (
     <AnimatePresence>
@@ -135,9 +155,12 @@ const WelcomeAnimation = ({ onComplete }: WelcomeAnimationProps) => {
           transition={{ duration: 0.7, type: "spring" }}
         >
           {/* Green Gradient BG */}
-          <div className="absolute inset-0 bg-[#16a34a] bg-opacity-90 backdrop-blur-md" style={{
-            background: "linear-gradient(120deg, #16a34a 60%, #166534 100%)",
-          }} />
+          <div
+            className="absolute inset-0 bg-[#16a34a] bg-opacity-90 backdrop-blur-md"
+            style={{
+              background: "linear-gradient(120deg, #16a34a 60%, #166534 100%)",
+            }}
+          />
           <Sparkle />
           <motion.div
             className="relative z-10 w-full max-w-2xl text-center text-white space-y-3 overflow-hidden px-2"
@@ -174,7 +197,7 @@ const WelcomeAnimation = ({ onComplete }: WelcomeAnimationProps) => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5 }}
             >
-            Cafe Chapter 1
+              Cafe Chapter 1
             </motion.h2>
             <motion.p
               className="text-sm sm:text-base md:text-lg text-white/90"
@@ -206,7 +229,6 @@ const WelcomeAnimation = ({ onComplete }: WelcomeAnimationProps) => {
                 Our Online Partners
               </h3>
               <div className="flex justify-center gap-4 overflow-x-auto px-1 pb-2">
-
                 {partnerImages.map((partner, idx) => (
                   <motion.div
                     key={partner.alt}
@@ -215,7 +237,9 @@ const WelcomeAnimation = ({ onComplete }: WelcomeAnimationProps) => {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 1 + idx * 0.1 }}
                   >
-                    <span className={`absolute left-1 top-1 text-[10px] sm:text-xs text-white px-2 py-0.5 rounded-full shadow ${partner.badgeColor}`}>
+                    <span
+                      className={`absolute left-1 top-1 text-[10px] sm:text-xs text-white px-2 py-0.5 rounded-full shadow ${partner.badgeColor}`}
+                    >
                       {partner.badge}
                     </span>
                     <img
@@ -224,13 +248,17 @@ const WelcomeAnimation = ({ onComplete }: WelcomeAnimationProps) => {
                       className="w-10 h-10 sm:w-12 sm:h-12 object-contain rounded-md mb-1 group-hover:scale-110 transition"
                       draggable={false}
                     />
-                    <span className="text-xs sm:text-sm font-bold" style={{
-                      color: partner.alt === "Zomato"
-                        ? "#E23744"
-                        : partner.alt === "Swiggy"
-                          ? "#FC8019"
-                          : "#6C47FF"
-                    }}>
+                    <span
+                      className="text-xs sm:text-sm font-bold"
+                      style={{
+                        color:
+                          partner.alt === "Zomato"
+                            ? "#E23744"
+                            : partner.alt === "Swiggy"
+                              ? "#FC8019"
+                              : "#6C47FF",
+                      }}
+                    >
                       {partner.alt}
                     </span>
                   </motion.div>
@@ -251,16 +279,22 @@ const WelcomeAnimation = ({ onComplete }: WelcomeAnimationProps) => {
                   alt="Instagram"
                   className="w-10 h-10 mx-auto mb-2"
                 />
-                <div className="font-bold text-center text-[#E1306C]">@cafe_chapter_1</div>
+                <div className="font-bold text-center text-[#E1306C]">
+                  @cafe_chapter_1
+                </div>
                 <p className="text-xs mt-1 text-center">
                   New items & offers announced first on Instagram!
                   <br />
-                  <span className="font-semibold text-green-700">Follow us for more!</span>
+                  <span className="font-semibold text-green-700">
+                    Follow us for more!
+                  </span>
                 </p>
               </div>
               <div className="bg-white/90 rounded-2xl px-4 py-3 shadow w-full max-w-xs text-sm text-gray-800">
                 <MapPin className="w-6 h-6 mx-auto text-green-700 mb-1" />
-                <div className="font-bold text-center text-green-700">Find our other outlet</div>
+                <div className="font-bold text-center text-green-700">
+                  Find our other outlet
+                </div>
                 <p className="text-xs mt-1 text-center">
                   135/3, Gautam Nagar, Yusuf Sarai, New Delhi
                 </p>

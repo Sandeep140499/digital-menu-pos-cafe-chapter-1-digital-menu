@@ -39,7 +39,10 @@ interface SplashScreenProps {
 
 const SPLASH_DURATION_MS = 2800;
 
-export default function SplashScreen({ onFinish, branchName }: SplashScreenProps) {
+export default function SplashScreen({
+  onFinish,
+  branchName,
+}: SplashScreenProps) {
   const [exiting, setExiting] = useState(false);
   const greeting = getTimeBasedGreeting();
   const displayBranch = normalizeBranchName(branchName);
@@ -62,7 +65,10 @@ export default function SplashScreen({ onFinish, branchName }: SplashScreenProps
           key="splash"
           className="splash-container"
           initial={{ opacity: 1 }}
-          exit={{ opacity: 0, transition: { duration: 0.4, ease: "easeInOut" } }}
+          exit={{
+            opacity: 0,
+            transition: { duration: 0.4, ease: "easeInOut" },
+          }}
         >
           <motion.div
             className="splash-logo-wrap"
@@ -70,7 +76,11 @@ export default function SplashScreen({ onFinish, branchName }: SplashScreenProps
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.6, ease: "easeOut" }}
           >
-            <img src={cafeLogo} alt="Cafe Chapter 1" className="splash-logo-full" />
+            <img
+              src={cafeLogo}
+              alt="Cafe Chapter 1"
+              className="splash-logo-full"
+            />
           </motion.div>
           <motion.div
             className="splash-card"

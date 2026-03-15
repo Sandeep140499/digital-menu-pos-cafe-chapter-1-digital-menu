@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useMemo, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Copy, Download, QrCode } from "lucide-react";
@@ -7,18 +7,17 @@ import { useToast } from "@/hooks/use-toast";
 const CAFE_NAME = "Cafe Chapter 1";
 
 const QRCodeGenerator = () => {
-  const [qrCodeUrl, setQrCodeUrl] = useState("");
   const { toast } = useToast();
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Get current URL for QR code
-  const currentUrl = window.location.origin;
-
-  useEffect(() => {
-    // Generate QR code using a free QR code API
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(currentUrl)}`;
-    setQrCodeUrl(qrUrl);
-  }, [currentUrl]);
+  const currentUrl = typeof window !== "undefined" ? window.location.origin : "";
+  const qrCodeUrl = useMemo(
+    () =>
+      currentUrl
+        ? `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(currentUrl)}`
+        : "",
+    [currentUrl]
+  );
 
   // Draws cafe name + QR code on a canvas for download
   const prepareCanvas = async () => {

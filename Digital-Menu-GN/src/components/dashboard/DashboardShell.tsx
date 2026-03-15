@@ -1,5 +1,23 @@
 import { ReactNode, useState, useEffect, useRef, ComponentType } from "react";
-import { Bell, Menu, LogOut, LucideProps, ShoppingCart, CreditCard, User, AlertCircle, MessageCircle, X, ChevronDown, ChevronRight, LayoutDashboard, UtensilsCrossed, Users, IndianRupee, Settings } from "lucide-react";
+import {
+  Bell,
+  Menu,
+  LogOut,
+  LucideProps,
+  ShoppingCart,
+  CreditCard,
+  User,
+  AlertCircle,
+  MessageCircle,
+  X,
+  ChevronDown,
+  ChevronRight,
+  LayoutDashboard,
+  UtensilsCrossed,
+  Users,
+  IndianRupee,
+  Settings,
+} from "lucide-react";
 import cafeLogo from "@/assets/logo.png";
 import { Button } from "@/components/ui/button";
 import {
@@ -79,7 +97,8 @@ const DashboardShell = ({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sectionsOpen, setSectionsOpen] = useState<Record<string, boolean>>({});
   const lastBreakpoint = useRef(false);
-  const unreadCount = notificationCount ?? notifications.filter((n) => !n.read).length;
+  const unreadCount =
+    notificationCount ?? notifications.filter((n) => !n.read).length;
   const logoUrl = companyLogoUrl || cafeLogo;
 
   // On desktop (sm+): sidebar open by default. On small devices: closed. Only sync when breakpoint actually changes (resize).
@@ -93,7 +112,7 @@ const DashboardShell = ({
       }
     };
     lastBreakpoint.current = mq.matches;
-    setSidebarOpen(mq.matches);
+    queueMicrotask(() => setSidebarOpen(mq.matches));
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
   }, []);
@@ -123,21 +142,40 @@ const DashboardShell = ({
             aria-label={sidebarOpen ? "Close menu" : "Open menu"}
             aria-expanded={sidebarOpen}
           >
-            {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            {sidebarOpen ? (
+              <X className="w-5 h-5" />
+            ) : (
+              <Menu className="w-5 h-5" />
+            )}
           </button>
-          <img src={typeof logoUrl === "string" ? logoUrl : cafeLogo} alt="" className="h-9 w-9 sm:h-11 sm:w-11 object-contain rounded bg-white p-0.5 shrink-0" aria-hidden />
+          <img
+            src={typeof logoUrl === "string" ? logoUrl : cafeLogo}
+            alt=""
+            className="h-9 w-9 sm:h-11 sm:w-11 object-contain rounded bg-white p-0.5 shrink-0"
+            aria-hidden
+          />
           <div className="flex flex-col min-w-0 overflow-hidden">
-            <span className="font-semibold tracking-wide text-sm sm:text-base truncate" title={`Cafe Chapter 1 • ${branchName}`}>
+            <span
+              className="font-semibold tracking-wide text-sm sm:text-base truncate"
+              title={`Cafe Chapter 1 • ${branchName}`}
+            >
               <span className="sm:hidden">Cafe Chapter 1</span>
-              <span className="hidden sm:inline">Cafe Chapter 1 • {branchName}</span>
+              <span className="hidden sm:inline">
+                Cafe Chapter 1 • {branchName}
+              </span>
             </span>
-            <span className="text-[11px] sm:text-xs text-emerald-100/80 truncate" title={role === "ADMIN" ? "Admin Panel" : userName}>
+            <span
+              className="text-[11px] sm:text-xs text-emerald-100/80 truncate"
+              title={role === "ADMIN" ? "Admin Panel" : userName}
+            >
               {role === "ADMIN" ? "Admin Panel" : `Welcome, ${userName}`}
             </span>
           </div>
         </div>
         <div className="flex items-center gap-2 sm:gap-4 shrink-0">
-          <DropdownMenu onOpenChange={(open) => onNotificationsOpenChange?.(open)}>
+          <DropdownMenu
+            onOpenChange={(open) => onNotificationsOpenChange?.(open)}
+          >
             <DropdownMenuTrigger asChild>
               <button
                 className="relative inline-flex items-center justify-center rounded-full bg-white/10 p-2 hover:bg-white/20 min-h-[40px] min-w-[40px] sm:min-h-0 sm:min-w-0 touch-manipulation"
@@ -153,7 +191,9 @@ const DashboardShell = ({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-80 sm:w-96 z-[105]">
               <div className="px-3 py-2 border-b flex items-center justify-between">
-                <span className="font-semibold text-sm text-slate-900">Notifications</span>
+                <span className="font-semibold text-sm text-slate-900">
+                  Notifications
+                </span>
                 {notifications.length > 0 && onClearAllNotifications && (
                   <button
                     type="button"
@@ -166,12 +206,32 @@ const DashboardShell = ({
               </div>
               <ScrollArea className="h-[280px]">
                 {notifications.length === 0 ? (
-                  <div className="py-8 text-center text-sm text-muted-foreground">No notifications yet</div>
+                  <div className="py-8 text-center text-sm text-muted-foreground">
+                    No notifications yet
+                  </div>
                 ) : (
                   <div className="p-2 space-y-2">
                     {notifications.slice(0, 20).map((n) => {
-                      const Icon = n.type === "ORDER" ? ShoppingCart : n.type === "PAYMENT" ? CreditCard : n.type === "SYSTEM" ? AlertCircle : n.type === "QUERY" ? MessageCircle : User;
-                      const typeLabel = n.type === "ORDER" ? "Order" : n.type === "PAYMENT" ? "Payment" : n.type === "SYSTEM" ? "System" : n.type === "QUERY" ? "Query" : "Notification";
+                      const Icon =
+                        n.type === "ORDER"
+                          ? ShoppingCart
+                          : n.type === "PAYMENT"
+                            ? CreditCard
+                            : n.type === "SYSTEM"
+                              ? AlertCircle
+                              : n.type === "QUERY"
+                                ? MessageCircle
+                                : User;
+                      const typeLabel =
+                        n.type === "ORDER"
+                          ? "Order"
+                          : n.type === "PAYMENT"
+                            ? "Payment"
+                            : n.type === "SYSTEM"
+                              ? "System"
+                              : n.type === "QUERY"
+                                ? "Query"
+                                : "Notification";
                       return (
                         <div
                           key={n.id}
@@ -180,8 +240,12 @@ const DashboardShell = ({
                           <div className="flex gap-3">
                             <Icon className="h-4 w-4 shrink-0 text-emerald-600 mt-0.5" />
                             <div className="min-w-0 flex-1">
-                              <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">{typeLabel}</p>
-                              <p className="font-medium text-slate-900 break-words">{n.message}</p>
+                              <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+                                {typeLabel}
+                              </p>
+                              <p className="font-medium text-slate-900 break-words">
+                                {n.message}
+                              </p>
                               {n.createdAt && (
                                 <p className="text-xs text-muted-foreground mt-1">
                                   {new Date(n.createdAt).toLocaleString()}
@@ -237,8 +301,12 @@ const DashboardShell = ({
         >
           {/* On mobile: show user + logout in sidebar so header options aren't hidden */}
           <div className="sm:hidden px-3 pt-4 pb-3 border-b border-slate-800">
-            <p className="font-medium text-white truncate" title={userName}>{userName}</p>
-            <p className="text-xs text-slate-400">{role === "ADMIN" ? "Administrator" : "Employee"}</p>
+            <p className="font-medium text-white truncate" title={userName}>
+              {userName}
+            </p>
+            <p className="text-xs text-slate-400">
+              {role === "ADMIN" ? "Administrator" : "Employee"}
+            </p>
             <Button
               variant="outline"
               size="sm"
@@ -253,9 +321,14 @@ const DashboardShell = ({
             {sidebarSections && sidebarSections.length > 0 ? (
               <ul className="space-y-0 px-3 text-sm">
                 {sidebarSections.map((section) => {
-                  const SectionIcon = section.icon ?? SECTION_ICONS[section.title];
+                  const SectionIcon =
+                    section.icon ?? SECTION_ICONS[section.title];
                   const isOpen = sectionsOpen[section.title] !== false;
-                  const toggleSection = () => setSectionsOpen((prev) => ({ ...prev, [section.title]: !prev[section.title] }));
+                  const toggleSection = () =>
+                    setSectionsOpen((prev) => ({
+                      ...prev,
+                      [section.title]: !prev[section.title],
+                    }));
                   return (
                     <li key={section.title} className="mb-2">
                       <button
@@ -263,27 +336,40 @@ const DashboardShell = ({
                         onClick={toggleSection}
                         className="w-full text-left px-2 py-2 rounded-md flex items-center gap-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 text-[11px] font-semibold uppercase tracking-wider"
                       >
-                        {SectionIcon && <SectionIcon className="w-3.5 h-3.5 shrink-0" />}
+                        {SectionIcon && (
+                          <SectionIcon className="w-3.5 h-3.5 shrink-0" />
+                        )}
                         <span className="flex-1 truncate">{section.title}</span>
-                        {isOpen ? <ChevronDown className="w-3.5 h-3.5 shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 shrink-0" />}
+                        {isOpen ? (
+                          <ChevronDown className="w-3.5 h-3.5 shrink-0" />
+                        ) : (
+                          <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+                        )}
                       </button>
                       {isOpen && (
                         <ul className="space-y-0.5 mt-0.5 border-l border-slate-700/50 ml-2 pl-2">
                           {section.items.map((item) => {
                             const Icon = item.icon;
                             const badge = sidebarBadges[item.key];
-                            const showBadge = typeof badge === "number" && badge > 0;
+                            const showBadge =
+                              typeof badge === "number" && badge > 0;
                             return (
                               <li key={item.key}>
                                 <button
                                   type="button"
                                   className={`w-full text-left px-3 py-2 rounded-md transition-colors flex items-center gap-3 ${
-                                    activeKey === item.key ? "bg-emerald-600 text-white" : "text-slate-200 hover:bg-slate-800"
+                                    activeKey === item.key
+                                      ? "bg-emerald-600 text-white"
+                                      : "text-slate-200 hover:bg-slate-800"
                                   }`}
                                   onClick={() => handleNavSelect(item.key)}
                                 >
-                                  {Icon && <Icon className="h-4 w-4 shrink-0" />}
-                                  <span className="flex-1 truncate">{item.label}</span>
+                                  {Icon && (
+                                    <Icon className="h-4 w-4 shrink-0" />
+                                  )}
+                                  <span className="flex-1 truncate">
+                                    {item.label}
+                                  </span>
                                   {showBadge && (
                                     <span className="min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white shrink-0">
                                       {badge > 99 ? "99+" : badge}
@@ -309,7 +395,9 @@ const DashboardShell = ({
                     <li key={item.key}>
                       <button
                         className={`w-full text-left px-3 py-2.5 rounded-md transition-colors flex items-center gap-3 ${
-                          activeKey === item.key ? "bg-emerald-600 text-white" : "text-slate-200 hover:bg-slate-800"
+                          activeKey === item.key
+                            ? "bg-emerald-600 text-white"
+                            : "text-slate-200 hover:bg-slate-800"
                         }`}
                         onClick={() => handleNavSelect(item.key)}
                       >
@@ -334,16 +422,25 @@ const DashboardShell = ({
         </aside>
 
         {/* Main content - responsive, scrollable on all devices */}
-        <main className="flex-1 min-h-0 min-w-0 overflow-auto overflow-x-hidden px-3 sm:px-4 md:px-6 py-4 bg-slate-50 relative" style={{ overflowAnchor: "auto" }}>
+        <main
+          className="flex-1 min-h-0 min-w-0 overflow-auto overflow-x-hidden px-3 sm:px-4 md:px-6 py-4 bg-slate-50 relative"
+          style={{ overflowAnchor: "auto" }}
+        >
           {/* Admin & Employee: logo watermark on all pages - same logo/colour from assets */}
-          <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden>
+          <div
+            className="absolute inset-0 pointer-events-none overflow-hidden"
+            aria-hidden
+          >
             <img
               src={typeof logoUrl === "string" ? logoUrl : cafeLogo}
               alt=""
               className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(60vw,400px)] h-auto max-h-[min(50vh,400px)] object-contain opacity-[0.08]"
             />
           </div>
-          <div className="relative z-0 min-h-full [overflow-anchor:auto]" style={{ overflowAnchor: "auto" }}>
+          <div
+            className="relative z-0 min-h-full [overflow-anchor:auto]"
+            style={{ overflowAnchor: "auto" }}
+          >
             {children}
           </div>
         </main>
@@ -353,4 +450,3 @@ const DashboardShell = ({
 };
 
 export default DashboardShell;
-

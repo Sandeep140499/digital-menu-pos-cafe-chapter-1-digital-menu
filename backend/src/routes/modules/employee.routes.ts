@@ -310,8 +310,8 @@ employeeRouter.post(
       },
     });
 
-    const baseUrl = (process.env.FRONTEND_DASHBOARD_URL || process.env.FRONTEND_CUSTOMER_URL || "http://localhost:5173").replace(/\/$/, "");
-    const confirmUrl = `${baseUrl}/api/employees/confirm-email?token=${encodeURIComponent(linkToken)}`;
+    const baseUrl = (process.env.FRONTEND_URL || process.env.FRONTEND_DASHBOARD_URL || process.env.FRONTEND_CUSTOMER_URL || "http://localhost:5173").replace(/\/$/, "");
+    const confirmUrl = `${baseUrl}/employee/confirm-email?token=${encodeURIComponent(linkToken)}`;
     const fromName = process.env.EMAIL_FROM_NAME || "Chapter One Cafe";
 
     if (isMailConfigured()) {
@@ -560,8 +560,8 @@ employeeRouter.post(
     }
     const token = randomBytes(16).toString("hex");
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
-    const baseUrl = (process.env.FRONTEND_DASHBOARD_URL || process.env.FRONTEND_CUSTOMER_URL || "http://localhost:5173").replace(/\/$/, "");
-    const verifyLink = `${baseUrl}/api/employees/verify-email-link?token=${encodeURIComponent(token)}`;
+    const baseUrl = (process.env.FRONTEND_URL || process.env.FRONTEND_DASHBOARD_URL || process.env.FRONTEND_CUSTOMER_URL || "http://localhost:5173").replace(/\/$/, "");
+    const verifyLink = `${baseUrl}/employee/verify-email?token=${encodeURIComponent(token)}`;
     const fromName = process.env.EMAIL_FROM_NAME || "Chapter One Cafe";
     if (!isMailConfigured()) {
       return res.status(503).json({ message: "Email is not configured. Set EMAIL_SMTP_* and EMAIL_FROM_ADDRESS in .env." });
@@ -619,8 +619,8 @@ employeeRouter.post(
       where: { id },
       data: { verificationOtp: otp, verificationOtpExpiresAt: otpExpires },
     });
-    const baseUrl = process.env.FRONTEND_DASHBOARD_URL || process.env.FRONTEND_CUSTOMER_URL || "http://localhost:5173";
-    const verifyUrl = `${baseUrl.replace(/\/$/, "")}/login?verify=1&email=${encodeURIComponent(employee.email)}`;
+    const baseUrl = (process.env.FRONTEND_URL || process.env.FRONTEND_DASHBOARD_URL || process.env.FRONTEND_CUSTOMER_URL || "http://localhost:5173").replace(/\/$/, "");
+    const verifyUrl = `${baseUrl}/login?verify=1&email=${encodeURIComponent(employee.email)}`;
     if (!isMailConfigured()) {
       return res.status(503).json({ message: "Email is not configured. Set EMAIL_SMTP_* and EMAIL_FROM_ADDRESS in .env." });
     }
@@ -773,7 +773,7 @@ employeeRouter.get("/confirm-email", async (req, res) => {
       verificationOtpExpiresAt: null,
     },
   });
-  const baseUrl = (process.env.FRONTEND_DASHBOARD_URL || process.env.FRONTEND_CUSTOMER_URL || "http://localhost:5173").replace(/\/$/, "");
+  const baseUrl = (process.env.FRONTEND_URL || process.env.FRONTEND_DASHBOARD_URL || process.env.FRONTEND_CUSTOMER_URL || "http://localhost:5173").replace(/\/$/, "");
   const loginUrl = `${baseUrl}/login`;
   const name = escapeHtml(employee.name);
   const loginLink = escapeHtml(loginUrl);
@@ -812,7 +812,7 @@ employeeRouter.get("/verify-email-link", async (req, res) => {
       verificationOtpExpiresAt: null,
     },
   });
-  const baseUrl = (process.env.FRONTEND_DASHBOARD_URL || process.env.FRONTEND_CUSTOMER_URL || "http://localhost:5173").replace(/\/$/, "");
+  const baseUrl = (process.env.FRONTEND_URL || process.env.FRONTEND_DASHBOARD_URL || process.env.FRONTEND_CUSTOMER_URL || "http://localhost:5173").replace(/\/$/, "");
   const loginUrl = `${baseUrl}/login`;
   const fromName = process.env.EMAIL_FROM_NAME || "Chapter One Cafe";
 

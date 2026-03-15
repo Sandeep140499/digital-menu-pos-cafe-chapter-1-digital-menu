@@ -5,7 +5,8 @@
   height: 100dvh;
   width: 100%;
   min-height: -webkit-fill-available;
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -20,7 +21,11 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse 80% 50% at 50% 40%, rgba(255, 255, 255, 0.06) 0%, transparent 60%);
+  background: radial-gradient(
+    ellipse 80% 50% at 50% 40%,
+    rgba(255, 255, 255, 0.06) 0%,
+    transparent 60%
+  );
   pointer-events: none;
 }
 

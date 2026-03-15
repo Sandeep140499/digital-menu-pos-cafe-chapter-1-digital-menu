@@ -18,7 +18,12 @@ export default function LandingWithSplash() {
   }, []);
 
   if (showSplash) {
-    return <SplashScreen onFinish={() => setShowSplash(false)} branchName={branchName} />;
+    return (
+      <SplashScreen
+        onFinish={() => setShowSplash(false)}
+        branchName={branchName}
+      />
+    );
   }
   return <Index />;
 }

@@ -19,11 +19,7 @@ export function LoaderButton({
   ...props
 }: LoaderButtonProps) {
   return (
-    <Button
-      disabled={disabled || loading}
-      className={cn(className)}
-      {...props}
-    >
+    <Button disabled={disabled || loading} className={cn(className)} {...props}>
       {loading ? (
         <>
           <span

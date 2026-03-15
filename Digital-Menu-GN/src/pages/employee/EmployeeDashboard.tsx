@@ -26,14 +26,31 @@ import {
   FileDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -55,7 +72,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { API_BASE_URL, ORDER_STATUS_COLORS, BREAK_TIME_MINUTES, formatBreakTime } from "@/constants";
+import {
+  API_BASE_URL,
+  fetchWithTimeout,
+  ORDER_STATUS_COLORS,
+  BREAK_TIME_MINUTES,
+  formatBreakTime,
+} from "@/constants";
 
 const apiBase = API_BASE_URL;
 
@@ -86,18 +109,29 @@ function timeAgo(createdAt: string): string {
 
 /** Static time for popups so content doesn't change every second (stops flashing). */
 function formatPopupTime(createdAt: string): string {
-  return new Date(createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+  return new Date(createdAt).toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 /** True if two ISO date strings are the same calendar day (local time). */
 function isSameDay(iso1: string, iso2: string): boolean {
   const d1 = new Date(iso1);
   const d2 = new Date(iso2);
-  return d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
+  return (
+    d1.getFullYear() === d2.getFullYear() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getDate() === d2.getDate()
+  );
 }
 
 /** Elapsed hours between shift start and end (or asOf if no end). */
-function getElapsedHours(shiftStart: string, shiftEnd: string | null | undefined, asOf: Date): number {
+function getElapsedHours(
+  shiftStart: string,
+  shiftEnd: string | null | undefined,
+  asOf: Date,
+): number {
   const start = new Date(shiftStart).getTime();
   const end = shiftEnd ? new Date(shiftEnd).getTime() : asOf.getTime();
   return Math.max(0, (end - start) / 3600000);
@@ -126,7 +160,9 @@ function formatTimeToComplete(acceptedAt: string, completedAt: string): string {
 /** Play a short new-order alert sound (Web Audio beep) */
 function playNewOrderSound() {
   try {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const ctx = new (
+      window.AudioContext || (window as any).webkitAudioContext
+    )();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
@@ -167,7 +203,12 @@ type Order = {
   items: OrderItem[];
   customerName?: string | null;
   customerMobile?: string | null;
-  employee?: { id: number; name: string; employeeCode: string; role?: string | null } | null;
+  employee?: {
+    id: number;
+    name: string;
+    employeeCode: string;
+    role?: string | null;
+  } | null;
   branch?: { id: number; name: string; location?: string | null } | null;
 };
 
@@ -243,28 +284,42 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
       >
         <DialogTitle className="sr-only">Order #{displayOrder.id}</DialogTitle>
         <DialogDescription id="order-popup-desc" className="sr-only">
-          View order details, items, and customer information. Edit customer name and mobile for WhatsApp updates.
+          View order details, items, and customer information. Edit customer
+          name and mobile for WhatsApp updates.
         </DialogDescription>
         <div className="flex items-start justify-between gap-2 mb-4">
           <div>
-            <h2 className="text-xl sm:text-2xl font-bold tracking-tight">Order #{displayOrder.id}</h2>
+            <h2 className="text-xl sm:text-2xl font-bold tracking-tight">
+              Order #{displayOrder.id}
+            </h2>
             <p className="text-lg font-semibold text-muted-foreground mt-0.5">
-              Table {displayOrder.table?.tableNumber || displayOrder.table?.id || "—"}
+              Table{" "}
+              {displayOrder.table?.tableNumber || displayOrder.table?.id || "—"}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              {displayOrder.branch?.name && <span>{displayOrder.branch.name}</span>}
+              {displayOrder.branch?.name && (
+                <span>{displayOrder.branch.name}</span>
+              )}
               {displayOrder.branch?.name && " · "}
               {formatPopupTime(displayOrder.createdAt)}
             </p>
           </div>
-          <Button variant="ghost" size="icon" className="shrink-0 min-h-[44px] min-w-[44px]" onClick={() => onOpenChange(false)} aria-label="Close">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shrink-0 min-h-[44px] min-w-[44px]"
+            onClick={() => onOpenChange(false)}
+            aria-label="Close"
+          >
             <X className="h-5 w-5" />
           </Button>
         </div>
         {displayOrder.employee && (
           <p className="text-xs text-muted-foreground mb-3">
             Accepted by {displayOrder.employee.name}
-            {displayOrder.employee.role ? ` (${displayOrder.employee.role})` : ""}
+            {displayOrder.employee.role
+              ? ` (${displayOrder.employee.role})`
+              : ""}
           </p>
         )}
 
@@ -272,8 +327,14 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
           <h4 className="font-medium text-sm">Customer</h4>
           {isCompletedViewOnly ? (
             <div className="text-sm flex flex-wrap items-center gap-x-4 gap-y-0">
-              <span className="font-medium text-foreground">{displayOrder.customerName ?? "—"}</span>
-              {displayOrder.customerMobile && <span className="text-muted-foreground">📞 {displayOrder.customerMobile}</span>}
+              <span className="font-medium text-foreground">
+                {displayOrder.customerName ?? "—"}
+              </span>
+              {displayOrder.customerMobile && (
+                <span className="text-muted-foreground">
+                  📞 {displayOrder.customerMobile}
+                </span>
+              )}
             </div>
           ) : (
             <>
@@ -295,18 +356,34 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
                     maxLength={10}
                     placeholder="9876543210"
                     value={popupCustomerMobile}
-                    onChange={(e) => setPopupCustomerMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                    onChange={(e) =>
+                      setPopupCustomerMobile(
+                        e.target.value.replace(/\D/g, "").slice(0, 10),
+                      )
+                    }
                     className="mt-1"
                   />
                 </div>
               </div>
-              {(!displayOrder.customerMobile || popupCustomerMobile !== displayOrder.customerMobile || popupCustomerName !== (displayOrder.customerName ?? "")) && (
-                <Button size="sm" disabled={savingCustomer || popupCustomerMobile.replace(/\D/g, "").length !== 10} onClick={saveOrderCustomer}>
+              {(!displayOrder.customerMobile ||
+                popupCustomerMobile !== displayOrder.customerMobile ||
+                popupCustomerName !== (displayOrder.customerName ?? "")) && (
+                <Button
+                  size="sm"
+                  disabled={
+                    savingCustomer ||
+                    popupCustomerMobile.replace(/\D/g, "").length !== 10
+                  }
+                  onClick={saveOrderCustomer}
+                >
                   {savingCustomer ? "Saving..." : "Save customer"}
                 </Button>
               )}
               {!displayOrder.customerMobile && (
-                <p className="text-xs text-amber-600">Save mobile to send order details, payment status & review link via WhatsApp.</p>
+                <p className="text-xs text-amber-600">
+                  Save mobile to send order details, payment status & review
+                  link via WhatsApp.
+                </p>
               )}
             </>
           )}
@@ -317,40 +394,95 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 size="sm"
-                variant={displayOrder.status === "ACCEPTED" ? "default" : "outline"}
-                className={["PREPARING", "SERVED", "ORDER_COMPLETE"].includes(displayOrder.status) ? "bg-green-100 text-green-800 border-green-300 hover:bg-green-100" : ""}
-                onClick={() => selectedOrder && markStatus(selectedOrder.id, "ACCEPTED")}
-                disabled={displayOrder.status === "ORDER_COMPLETE" || (selectedOrder && actionOrderId === selectedOrder.id)}
+                variant={
+                  displayOrder.status === "ACCEPTED" ? "default" : "outline"
+                }
+                className={
+                  ["PREPARING", "SERVED", "ORDER_COMPLETE"].includes(
+                    displayOrder.status,
+                  )
+                    ? "bg-green-100 text-green-800 border-green-300 hover:bg-green-100"
+                    : ""
+                }
+                onClick={() =>
+                  selectedOrder && markStatus(selectedOrder.id, "ACCEPTED")
+                }
+                disabled={
+                  displayOrder.status === "ORDER_COMPLETE" ||
+                  (selectedOrder && actionOrderId === selectedOrder.id)
+                }
               >
-                {selectedOrder && actionOrderId === selectedOrder.id ? <span className="inline-block h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-1" /> : <CheckCircle className="mr-1 h-4 w-4" />}
+                {selectedOrder && actionOrderId === selectedOrder.id ? (
+                  <span className="inline-block h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-1" />
+                ) : (
+                  <CheckCircle className="mr-1 h-4 w-4" />
+                )}
                 Accept
               </Button>
               <Button
                 size="sm"
-                variant={displayOrder.status === "PREPARING" ? "default" : "outline"}
-                className={["SERVED", "ORDER_COMPLETE"].includes(displayOrder.status) ? "bg-green-100 text-green-800 border-green-300 hover:bg-green-100" : ""}
-                onClick={() => selectedOrder && markStatus(selectedOrder.id, "PREPARING")}
-                disabled={displayOrder.status === "ORDER_COMPLETE" || displayOrder.status === "NEW_ORDER" || (selectedOrder && actionOrderId === selectedOrder.id)}
+                variant={
+                  displayOrder.status === "PREPARING" ? "default" : "outline"
+                }
+                className={
+                  ["SERVED", "ORDER_COMPLETE"].includes(displayOrder.status)
+                    ? "bg-green-100 text-green-800 border-green-300 hover:bg-green-100"
+                    : ""
+                }
+                onClick={() =>
+                  selectedOrder && markStatus(selectedOrder.id, "PREPARING")
+                }
+                disabled={
+                  displayOrder.status === "ORDER_COMPLETE" ||
+                  displayOrder.status === "NEW_ORDER" ||
+                  (selectedOrder && actionOrderId === selectedOrder.id)
+                }
               >
                 <ChefHat className="mr-1 h-4 w-4" />
                 Preparing
               </Button>
               <Button
                 size="sm"
-                variant={displayOrder.status === "SERVED" ? "default" : "outline"}
-                className={displayOrder.status === "ORDER_COMPLETE" ? "bg-green-100 text-green-800 border-green-300 hover:bg-green-100" : ""}
-                onClick={() => selectedOrder && markStatus(selectedOrder.id, "SERVED")}
-                disabled={displayOrder.status === "ORDER_COMPLETE" || displayOrder.status === "NEW_ORDER" || displayOrder.status === "ACCEPTED" || (selectedOrder && actionOrderId === selectedOrder.id)}
+                variant={
+                  displayOrder.status === "SERVED" ? "default" : "outline"
+                }
+                className={
+                  displayOrder.status === "ORDER_COMPLETE"
+                    ? "bg-green-100 text-green-800 border-green-300 hover:bg-green-100"
+                    : ""
+                }
+                onClick={() =>
+                  selectedOrder && markStatus(selectedOrder.id, "SERVED")
+                }
+                disabled={
+                  displayOrder.status === "ORDER_COMPLETE" ||
+                  displayOrder.status === "NEW_ORDER" ||
+                  displayOrder.status === "ACCEPTED" ||
+                  (selectedOrder && actionOrderId === selectedOrder.id)
+                }
               >
                 <Utensils className="mr-1 h-4 w-4" />
                 Served
               </Button>
               <Button
                 size="sm"
-                variant={displayOrder.status === "ORDER_COMPLETE" ? "default" : "outline"}
-                className={displayOrder.status === "ORDER_COMPLETE" ? "bg-green-100 text-green-800 border-green-300 hover:bg-green-100" : ""}
-                onClick={() => selectedOrder && markStatus(selectedOrder.id, "ORDER_COMPLETE")}
-                disabled={selectedOrder ? actionOrderId === selectedOrder.id : true}
+                variant={
+                  displayOrder.status === "ORDER_COMPLETE"
+                    ? "default"
+                    : "outline"
+                }
+                className={
+                  displayOrder.status === "ORDER_COMPLETE"
+                    ? "bg-green-100 text-green-800 border-green-300 hover:bg-green-100"
+                    : ""
+                }
+                onClick={() =>
+                  selectedOrder &&
+                  markStatus(selectedOrder.id, "ORDER_COMPLETE")
+                }
+                disabled={
+                  selectedOrder ? actionOrderId === selectedOrder.id : true
+                }
               >
                 <CheckCircle className="mr-1 h-4 w-4" />
                 Complete
@@ -359,8 +491,13 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
               <Button
                 size="sm"
                 variant="destructive"
-                onClick={() => selectedOrder && markStatus(selectedOrder.id, "CANCELLED")}
-                disabled={displayOrder.status === "ORDER_COMPLETE" || (selectedOrder && actionOrderId === selectedOrder.id)}
+                onClick={() =>
+                  selectedOrder && markStatus(selectedOrder.id, "CANCELLED")
+                }
+                disabled={
+                  displayOrder.status === "ORDER_COMPLETE" ||
+                  (selectedOrder && actionOrderId === selectedOrder.id)
+                }
               >
                 <X className="mr-1 h-4 w-4" />
                 Cancel
@@ -373,7 +510,11 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
               <span className="font-medium">Payment</span>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 bg-muted/30 rounded-lg">
                 <Badge
-                  className={displayOrder.paymentStatus === "PAID" ? "bg-green-100 text-green-800 border-green-300 w-fit" : "bg-amber-100 text-amber-800 border-amber-300 w-fit"}
+                  className={
+                    displayOrder.paymentStatus === "PAID"
+                      ? "bg-green-100 text-green-800 border-green-300 w-fit"
+                      : "bg-amber-100 text-amber-800 border-amber-300 w-fit"
+                  }
                 >
                   {displayOrder.paymentStatus === "PAID" ? "Paid" : "Pending"}
                 </Badge>
@@ -383,7 +524,11 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
                     disabled={actionOrderId === selectedOrder.id}
                     onClick={() => confirmPayment(selectedOrder.id)}
                   >
-                    {actionOrderId === selectedOrder.id ? <span className="inline-block h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" /> : <CreditCard className="mr-2 h-5 w-5" />}
+                    {actionOrderId === selectedOrder.id ? (
+                      <span className="inline-block h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                    ) : (
+                      <CreditCard className="mr-2 h-5 w-5" />
+                    )}
                     Mark Paid
                   </Button>
                 )}
@@ -398,7 +543,9 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
                 <div
                   key={item.id}
                   className={`flex items-center justify-between p-3 border rounded-lg ${
-                    !isCompletedViewOnly && removedItemIds.includes(item.id) ? "opacity-50 bg-red-50" : ""
+                    !isCompletedViewOnly && removedItemIds.includes(item.id)
+                      ? "opacity-50 bg-red-50"
+                      : ""
                   }`}
                 >
                   <div className="flex items-center gap-3">
@@ -410,9 +557,15 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
                     )}
                     <div>
                       <p className="font-medium">
-                        {item.quantity} × {formatItemDisplayName(item.name, item.variant)}
+                        {item.quantity} ×{" "}
+                        {formatItemDisplayName(item.name, item.variant)}
                       </p>
-                      {!isCompletedViewOnly && removedItemIds.includes(item.id) && <p className="text-sm text-red-600">Will be removed</p>}
+                      {!isCompletedViewOnly &&
+                        removedItemIds.includes(item.id) && (
+                          <p className="text-sm text-red-600">
+                            Will be removed
+                          </p>
+                        )}
                     </div>
                   </div>
                   <span className="font-medium">{formatINR(item.price)}</span>
@@ -425,7 +578,9 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
             <>
               {removedItemIds.length > 0 && (
                 <div>
-                  <label className="text-sm font-medium mb-2 block">Removal Reason</label>
+                  <label className="text-sm font-medium mb-2 block">
+                    Removal Reason
+                  </label>
                   <Textarea
                     value={modificationReason}
                     onChange={(e) => setModificationReason(e.target.value)}
@@ -438,14 +593,26 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <span>Original Total:</span>
-                    <span className="font-medium">{formatINR(displayOrder.totalAmount)}</span>
+                    <span className="font-medium">
+                      {formatINR(displayOrder.totalAmount)}
+                    </span>
                   </div>
                   {removedItemIds.length > 0 && (
                     <>
                       <div className="flex justify-between text-red-600">
                         <span>Items to Remove:</span>
                         <span className="font-medium">
-                          -{formatINR(displayOrder.items.filter((item) => removedItemIds.includes(item.id)).reduce((sum, item) => sum + item.price * item.quantity, 0))}
+                          -
+                          {formatINR(
+                            displayOrder.items
+                              .filter((item) =>
+                                removedItemIds.includes(item.id),
+                              )
+                              .reduce(
+                                (sum, item) => sum + item.price * item.quantity,
+                                0,
+                              ),
+                          )}
                         </span>
                       </div>
                       <div className="flex justify-between text-lg font-bold">
@@ -463,10 +630,18 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
                 </div>
               </div>
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
+                <Button variant="outline" onClick={() => onOpenChange(false)}>
+                  Close
+                </Button>
                 {removedItemIds.length > 0 && (
-                  <Button onClick={modifyOrder} disabled={isModifying} className="bg-red-600 hover:bg-red-700">
-                    {isModifying ? "Removing..." : `Remove ${removedItemIds.length} Item(s)`}
+                  <Button
+                    onClick={modifyOrder}
+                    disabled={isModifying}
+                    className="bg-red-600 hover:bg-red-700"
+                  >
+                    {isModifying
+                      ? "Removing..."
+                      : `Remove ${removedItemIds.length} Item(s)`}
                   </Button>
                 )}
               </div>
@@ -480,7 +655,9 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
                 <span>{formatINR(displayOrder.totalAmount)}</span>
               </div>
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
+                <Button variant="outline" onClick={() => onOpenChange(false)}>
+                  Close
+                </Button>
               </div>
             </div>
           )}
@@ -494,10 +671,13 @@ const EmployeeDashboard = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   /** Frozen snapshot for modal display – only updated on open or user action, so popup doesn't flash on parent re-renders (clock/poll). */
-  const [popupDisplayOrder, setPopupDisplayOrder] = useState<Order | null>(null);
+  const [popupDisplayOrder, setPopupDisplayOrder] = useState<Order | null>(
+    null,
+  );
   const [isOrderPopupOpen, setIsOrderPopupOpen] = useState(false);
   const [removedItemIds, setRemovedItemIds] = useState<number[]>([]);
-  const [modificationReason, setModificationReason] = useState("Item not available");
+  const [modificationReason, setModificationReason] =
+    useState("Item not available");
   const [isModifying, setIsModifying] = useState(false);
   const [shiftActive, setShiftActive] = useState(false);
   const [shiftLoading, setShiftLoading] = useState(false);
@@ -524,7 +704,13 @@ const EmployeeDashboard = () => {
     ordersCount?: number;
   }>(null);
   const [myShiftHistory, setMyShiftHistory] = useState<
-    { id: number; shiftStart: string; shiftEnd: string | null; totalHours: number | null; totalSales: number | null }[]
+    {
+      id: number;
+      shiftStart: string;
+      shiftEnd: string | null;
+      totalHours: number | null;
+      totalSales: number | null;
+    }[]
   >([]);
   const [myDailyShiftStats, setMyDailyShiftStats] = useState<
     { date: string; totalHours: number; totalSales: number; shifts: number }[]
@@ -573,7 +759,17 @@ const EmployeeDashboard = () => {
     prevNewOrderCountRef.current = n;
   }, [newOrderPopupOrders.length]);
 
-  const [profile, setProfile] = useState<{ name: string; email: string; employeeCode: string; branchId?: number; branch?: { id: number; name: string }; phone?: string; salary?: number; address?: string; pincode?: string } | null>(null);
+  const [profile, setProfile] = useState<{
+    name: string;
+    email: string;
+    employeeCode: string;
+    branchId?: number;
+    branch?: { id: number; name: string };
+    phone?: string;
+    salary?: number;
+    address?: string;
+    pincode?: string;
+  } | null>(null);
 
   useEffect(() => {
     isOrderPopupOpenRef.current = isOrderPopupOpen;
@@ -606,17 +802,26 @@ const EmployeeDashboard = () => {
         const data = await res.json();
         if (isOrderPopupOpenRef.current) return;
         setOrders((prev) => {
-          const canShowPopup = hasCompletedFirstLoad.current && prev.length > 0 && data.length > prev.length && !pauseNewOrderPopup;
+          const canShowPopup =
+            hasCompletedFirstLoad.current &&
+            prev.length > 0 &&
+            data.length > prev.length &&
+            !pauseNewOrderPopup;
           if (canShowPopup) {
             const prevIds = new Set(prev.map((o) => o.id));
             const newOrders = data.filter((d: Order) => !prevIds.has(d.id));
             if (newOrders.length > 0) {
               setNewOrderPopupOrders((popup) => [...newOrders, ...popup]);
-              setTimeout(() => toast.success(`${newOrders.length} new order(s) received.`), 100);
+              setTimeout(
+                () =>
+                  toast.success(`${newOrders.length} new order(s) received.`),
+                100,
+              );
             }
           }
           const next = mergeOrders(prev, data);
-          if (prev.length === 0 && next.length >= 0) hasCompletedFirstLoad.current = true;
+          if (prev.length === 0 && next.length >= 0)
+            hasCompletedFirstLoad.current = true;
           return next;
         });
       } catch {
@@ -636,7 +841,9 @@ const EmployeeDashboard = () => {
 
   useEffect(() => {
     if (!token) return;
-    fetch(`${apiBase}/employees/me`, { headers: { Authorization: `Bearer ${token}` } })
+    fetchWithTimeout(`${apiBase}/employees/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
       .then((res) => {
         if (res.ok) return res.json();
         return null;
@@ -648,14 +855,19 @@ const EmployeeDashboard = () => {
   // Fetch current shift status on load; show Start shift? only once per day when no active shift
   useEffect(() => {
     if (!token) return;
-    fetch(`${apiBase}/shift/current`, { headers: { Authorization: `Bearer ${token}` } })
+    fetchWithTimeout(`${apiBase}/shift/current`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data && data.active) setShiftActive(true);
         if (data?.shift) setCurrentShift(data.shift);
         if (!data?.active) {
-          const todayKey = "dm_shift_prompt_dismissed_" + new Date().toISOString().slice(0, 10);
-          const dismissedToday = window.sessionStorage.getItem(todayKey) === "1";
+          const todayKey =
+            "dm_shift_prompt_dismissed_" +
+            new Date().toISOString().slice(0, 10);
+          const dismissedToday =
+            window.sessionStorage.getItem(todayKey) === "1";
           if (!dismissedToday) setShowStartShiftPrompt(true);
         }
       })
@@ -665,7 +877,9 @@ const EmployeeDashboard = () => {
   // Load employee shift history (daily in/out + hours)
   useEffect(() => {
     if (!token) return;
-    fetch(`${apiBase}/shift/my-history`, { headers: { Authorization: `Bearer ${token}` } })
+    fetchWithTimeout(`${apiBase}/shift/my-history`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!data) return;
@@ -677,14 +891,23 @@ const EmployeeDashboard = () => {
 
   const todayIso = new Date().toISOString();
   const endedShiftToday = myShiftHistory.some(
-    (s) => s.shiftEnd && isSameDay(typeof s.shiftEnd === "string" ? s.shiftEnd : new Date(s.shiftEnd).toISOString(), todayIso)
+    (s) =>
+      s.shiftEnd &&
+      isSameDay(
+        typeof s.shiftEnd === "string"
+          ? s.shiftEnd
+          : new Date(s.shiftEnd).toISOString(),
+        todayIso,
+      ),
   );
 
   const startShift = async () => {
     if (!token) return;
     // One shift per day: cannot start again after ending a shift the same day
     if (endedShiftToday) {
-      toast.error("You already completed a shift today. You can start again tomorrow.");
+      toast.error(
+        "You already completed a shift today. You can start again tomorrow.",
+      );
       return;
     }
     if (shiftActive && currentShift) {
@@ -694,9 +917,13 @@ const EmployeeDashboard = () => {
     const openShift = myShiftHistory.find((s) => !s.shiftEnd);
     if (openShift) {
       if (isSameDay(openShift.shiftStart, todayIso)) {
-        toast.error("You already started a shift today. End it first or contact admin.");
+        toast.error(
+          "You already started a shift today. End it first or contact admin.",
+        );
       } else {
-        toast.error("Please end your previous shift first. Contact admin if you need help.");
+        toast.error(
+          "Please end your previous shift first. Contact admin if you need help.",
+        );
       }
       return;
     }
@@ -718,18 +945,28 @@ const EmployeeDashboard = () => {
         toast.success("Your shift has begun");
         setShowStartShiftPrompt(false);
         // Refetch history in background without blocking UI (reduces card flash)
-        fetch(`${apiBase}/shift/my-history`, { headers: { Authorization: `Bearer ${token}` } })
+        fetch(`${apiBase}/shift/my-history`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
           .then((r) => (r.ok ? r.json() : null))
-          .then((d) => { if (d) { setMyShiftHistory(d.shifts ?? []); setMyDailyShiftStats(d.dailyStats ?? []); } })
+          .then((d) => {
+            if (d) {
+              setMyShiftHistory(d.shifts ?? []);
+              setMyDailyShiftStats(d.dailyStats ?? []);
+            }
+          })
           .catch(() => {});
       } else {
         const data = await res.json().catch(() => ({}));
-        const alreadyActive = res.status === 400 && data.message === "Shift already active";
+        const alreadyActive =
+          res.status === 400 && data.message === "Shift already active";
         if (alreadyActive) {
           setShiftActive(true);
           toast.success("You're already on an active shift.");
           // refresh shift info
-          fetch(`${apiBase}/shift/current`, { headers: { Authorization: `Bearer ${token}` } })
+          fetch(`${apiBase}/shift/current`, {
+            headers: { Authorization: `Bearer ${token}` },
+          })
             .then((r) => (r.ok ? r.json() : null))
             .then((d) => d?.shift && setCurrentShift(d.shift))
             .catch(() => {});
@@ -757,9 +994,16 @@ const EmployeeDashboard = () => {
         if (data) setCurrentShift(data);
         setShiftActive(false);
         toast.success("Your shift has ended");
-        fetch(`${apiBase}/shift/my-history`, { headers: { Authorization: `Bearer ${token}` } })
+        fetch(`${apiBase}/shift/my-history`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
           .then((r) => (r.ok ? r.json() : null))
-          .then((d) => { if (d) { setMyShiftHistory(d.shifts ?? []); setMyDailyShiftStats(d.dailyStats ?? []); } })
+          .then((d) => {
+            if (d) {
+              setMyShiftHistory(d.shifts ?? []);
+              setMyDailyShiftStats(d.dailyStats ?? []);
+            }
+          })
           .catch(() => {});
       } else {
         const data = await res.json().catch(() => ({}));
@@ -784,14 +1028,28 @@ const EmployeeDashboard = () => {
         const data = await res.json();
         const updated = data.order ?? data;
         setOrders((prev) =>
-          prev.map((o) => (o.id === orderId ? { ...o, ...updated, employeeId: updated.employeeId ?? updated.employee?.id, employee: updated.employee, acceptedAt: updated.acceptedAt ?? o.acceptedAt } : o)),
+          prev.map((o) =>
+            o.id === orderId
+              ? {
+                  ...o,
+                  ...updated,
+                  employeeId: updated.employeeId ?? updated.employee?.id,
+                  employee: updated.employee,
+                  acceptedAt: updated.acceptedAt ?? o.acceptedAt,
+                }
+              : o,
+          ),
         );
-        setSelectedOrder((prev) => (prev && prev.id === orderId ? { ...prev, ...updated } : prev));
+        setSelectedOrder((prev) =>
+          prev && prev.id === orderId ? { ...prev, ...updated } : prev,
+        );
         toast.success(data.message || "You are now handling this order.");
         if (data.statusWaMeLink) window.open(data.statusWaMeLink, "_blank");
       } else {
         const err = await res.json().catch(() => ({}));
-        toast.error(err.message || "Order may already be accepted by someone else");
+        toast.error(
+          err.message || "Order may already be accepted by someone else",
+        );
       }
     } catch {
       toast.error("Failed to accept order");
@@ -800,104 +1058,168 @@ const EmployeeDashboard = () => {
     }
   };
 
-  const markStatus = useCallback(async (orderId: number, status: string) => {
-    if (!token) return;
-    setActionOrderId(orderId);
-    try {
-      const res = await fetch(`${apiBase}/orders/${orderId}/status`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ status }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const updated = data.order ?? data;
-        setOrders((prev) =>
-          prev.map((o) => (o.id === updated.id ? { ...o, status: updated.status, completedAt: updated.completedAt ?? o.completedAt } : o)),
-        );
-        setSelectedOrder((prev) => (prev && prev.id === orderId ? { ...prev, status: updated.status, completedAt: updated.completedAt ?? prev.completedAt } : prev));
-        setPopupDisplayOrder((prev) => (prev && prev.id === orderId ? { ...prev, status: updated.status, completedAt: updated.completedAt ?? prev.completedAt } : prev));
-        if (data.statusWaMeLink) {
-          window.open(data.statusWaMeLink, "_blank");
-          toast.success("Opening WhatsApp to send status update to customer. Allow popups if the window did not open.", { duration: 6000 });
+  const markStatus = useCallback(
+    async (orderId: number, status: string) => {
+      if (!token) return;
+      setActionOrderId(orderId);
+      try {
+        const res = await fetch(`${apiBase}/orders/${orderId}/status`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ status }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const updated = data.order ?? data;
+          setOrders((prev) =>
+            prev.map((o) =>
+              o.id === updated.id
+                ? {
+                    ...o,
+                    status: updated.status,
+                    completedAt: updated.completedAt ?? o.completedAt,
+                  }
+                : o,
+            ),
+          );
+          setSelectedOrder((prev) =>
+            prev && prev.id === orderId
+              ? {
+                  ...prev,
+                  status: updated.status,
+                  completedAt: updated.completedAt ?? prev.completedAt,
+                }
+              : prev,
+          );
+          setPopupDisplayOrder((prev) =>
+            prev && prev.id === orderId
+              ? {
+                  ...prev,
+                  status: updated.status,
+                  completedAt: updated.completedAt ?? prev.completedAt,
+                }
+              : prev,
+          );
+          if (data.statusWaMeLink) {
+            window.open(data.statusWaMeLink, "_blank");
+            toast.success(
+              "Opening WhatsApp to send status update to customer. Allow popups if the window did not open.",
+              { duration: 6000 },
+            );
+          } else {
+            toast.success(
+              data.message ||
+                `Order marked as ${status.replace("_", " ").toLowerCase()}`,
+            );
+          }
         } else {
-          toast.success(data.message || `Order marked as ${status.replace("_", " ").toLowerCase()}`);
+          const data = await res.json().catch(() => ({}));
+          toast.error(data.message || "Failed to update status");
         }
-      } else {
-        const data = await res.json().catch(() => ({}));
-        toast.error(data.message || "Failed to update status");
+      } catch {
+        toast.error("Failed to update status");
+      } finally {
+        setActionOrderId(null);
       }
-    } catch {
-      toast.error("Failed to update status");
-    } finally {
-      setActionOrderId(null);
-    }
-  }, [token]);
+    },
+    [token],
+  );
 
-  const confirmPayment = useCallback(async (orderId: number) => {
-    if (!token) return;
-    const order = orders.find((o) => o.id === orderId);
-    if (!order) return;
-    setActionOrderId(orderId);
-    try {
-      const res = await fetch(`${apiBase}/payments/${orderId}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          paymentStatus: "PAID",
-          paidAmount: order.totalAmount,
-          remainingAmount: 0,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const order = data.order ?? {};
-        setOrders((prev) =>
-          prev.map((o) => (o.id === orderId ? { ...o, paymentStatus: order.paymentStatus ?? "PAID" } : o)),
-        );
-        setSelectedOrder((prev) => (prev && prev.id === orderId ? { ...prev, paymentStatus: order.paymentStatus ?? "PAID" } : prev));
-        setPopupDisplayOrder(null);
-        setIsOrderPopupOpen(false);
-        setSelectedOrder(null);
-        fetch(`${apiBase}/shift/current`, { headers: { Authorization: `Bearer ${token}` } })
-          .then((r) => (r.ok ? r.json() : null))
-          .then((d) => d?.shift && setCurrentShift(d.shift))
-          .catch(() => {});
-        if (data.paymentWaMeLink) {
-          const win = window.open(data.paymentWaMeLink, "_blank", "noopener,noreferrer");
-          if (!win || win.closed === undefined) {
-            toast.error("Popup blocked. Allow popups for this site to open WhatsApp and send receipt to customer.", { duration: 8000 });
-            toast.info("You can copy the receipt link from the address bar after allowing popups and retry Mark Paid.", { duration: 6000 });
+  const confirmPayment = useCallback(
+    async (orderId: number) => {
+      if (!token) return;
+      const order = orders.find((o) => o.id === orderId);
+      if (!order) return;
+      setActionOrderId(orderId);
+      try {
+        const res = await fetch(`${apiBase}/payments/${orderId}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            paymentStatus: "PAID",
+            paidAmount: order.totalAmount,
+            remainingAmount: 0,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const order = data.order ?? {};
+          setOrders((prev) =>
+            prev.map((o) =>
+              o.id === orderId
+                ? { ...o, paymentStatus: order.paymentStatus ?? "PAID" }
+                : o,
+            ),
+          );
+          setSelectedOrder((prev) =>
+            prev && prev.id === orderId
+              ? { ...prev, paymentStatus: order.paymentStatus ?? "PAID" }
+              : prev,
+          );
+          setPopupDisplayOrder(null);
+          setIsOrderPopupOpen(false);
+          setSelectedOrder(null);
+          fetch(`${apiBase}/shift/current`, {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((d) => d?.shift && setCurrentShift(d.shift))
+            .catch(() => {});
+          if (data.paymentWaMeLink) {
+            const win = window.open(
+              data.paymentWaMeLink,
+              "_blank",
+              "noopener,noreferrer",
+            );
+            if (!win || win.closed === undefined) {
+              toast.error(
+                "Popup blocked. Allow popups for this site to open WhatsApp and send receipt to customer.",
+                { duration: 8000 },
+              );
+              toast.info(
+                "You can copy the receipt link from the address bar after allowing popups and retry Mark Paid.",
+                { duration: 6000 },
+              );
+            } else {
+              toast.success(
+                "WhatsApp opened – send the receipt to the customer.",
+              );
+            }
           } else {
-            toast.success("WhatsApp opened – send the receipt to the customer.");
+            if (!order.customerMobile || !order.customerName) {
+              toast.success(
+                "Payment marked as received. Save customer name & mobile before marking paid to send WhatsApp receipt next time.",
+              );
+            } else {
+              toast.success(data.message || "Payment marked as received");
+            }
           }
         } else {
-          if (!order.customerMobile || !order.customerName) {
-            toast.success("Payment marked as received. Save customer name & mobile before marking paid to send WhatsApp receipt next time.");
-          } else {
-            toast.success(data.message || "Payment marked as received");
-          }
+          const data = await res.json().catch(() => ({}));
+          toast.error(data.message || "Failed to confirm payment");
         }
-      } else {
-        const data = await res.json().catch(() => ({}));
-        toast.error(data.message || "Failed to confirm payment");
+      } catch {
+        toast.error("Failed to confirm payment");
+      } finally {
+        setActionOrderId(null);
       }
-    } catch {
-      toast.error("Failed to confirm payment");
-    } finally {
-      setActionOrderId(null);
-    }
-  }, [token, orders]);
+    },
+    [token, orders],
+  );
 
   const openOrderPopup = useCallback((order: Order) => {
     setSelectedOrder(order);
-    setPopupDisplayOrder(typeof structuredClone === "function" ? structuredClone(order) : JSON.parse(JSON.stringify(order)));
+    setPopupDisplayOrder(
+      typeof structuredClone === "function"
+        ? structuredClone(order)
+        : JSON.parse(JSON.stringify(order)),
+    );
     setRemovedItemIds([]);
     setModificationReason("Item not available");
     setPopupCustomerName(order.customerName ?? "");
@@ -914,20 +1236,55 @@ const EmployeeDashboard = () => {
     }
     setSavingCustomer(true);
     try {
-      const res = await fetch(`${apiBase}/orders/${selectedOrder.id}/customer`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          customerMobile: mobile,
-          customerName: popupCustomerName.trim() || undefined,
-        }),
-      });
+      const res = await fetch(
+        `${apiBase}/orders/${selectedOrder.id}/customer`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            customerMobile: mobile,
+            customerName: popupCustomerName.trim() || undefined,
+          }),
+        },
+      );
       if (res.ok) {
         const updated = await res.json();
-        setOrders((prev) => prev.map((o) => (o.id === selectedOrder.id ? { ...o, customerName: updated.customerName, customerMobile: updated.customerMobile } : o)));
-        setSelectedOrder((prev) => (prev && prev.id === selectedOrder.id ? { ...prev, customerName: updated.customerName, customerMobile: updated.customerMobile } : prev));
-        setPopupDisplayOrder((prev) => (prev && prev.id === selectedOrder.id ? { ...prev, customerName: updated.customerName, customerMobile: updated.customerMobile } : prev));
-        toast.success((updated as { message?: string }).message || "Customer mobile saved. WhatsApp updates will be sent to this number.");
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === selectedOrder.id
+              ? {
+                  ...o,
+                  customerName: updated.customerName,
+                  customerMobile: updated.customerMobile,
+                }
+              : o,
+          ),
+        );
+        setSelectedOrder((prev) =>
+          prev && prev.id === selectedOrder.id
+            ? {
+                ...prev,
+                customerName: updated.customerName,
+                customerMobile: updated.customerMobile,
+              }
+            : prev,
+        );
+        setPopupDisplayOrder((prev) =>
+          prev && prev.id === selectedOrder.id
+            ? {
+                ...prev,
+                customerName: updated.customerName,
+                customerMobile: updated.customerMobile,
+              }
+            : prev,
+        );
+        toast.success(
+          (updated as { message?: string }).message ||
+            "Customer mobile saved. WhatsApp updates will be sent to this number.",
+        );
       } else {
         const data = await res.json().catch(() => ({}));
         toast.error(data.message || "Failed to save");
@@ -943,7 +1300,7 @@ const EmployeeDashboard = () => {
     setRemovedItemIds((prev) =>
       prev.includes(itemId)
         ? prev.filter((id) => id !== itemId)
-        : [...prev, itemId]
+        : [...prev, itemId],
     );
   }, []);
 
@@ -965,9 +1322,12 @@ const EmployeeDashboard = () => {
       if (res.ok) {
         const data = await res.json();
         setOrders((prev) =>
-          prev.map((o) => (o.id === selectedOrder.id ? data.order : o))
+          prev.map((o) => (o.id === selectedOrder.id ? data.order : o)),
         );
-        toast.success(data.message || `Removed ${data.removedItems?.length ?? 0} item(s). New total: ${formatINR(data.newAmount ?? 0)}`);
+        toast.success(
+          data.message ||
+            `Removed ${data.removedItems?.length ?? 0} item(s). New total: ${formatINR(data.newAmount ?? 0)}`,
+        );
         setPopupDisplayOrder(null);
         setIsOrderPopupOpen(false);
         setSelectedOrder(null);
@@ -985,7 +1345,9 @@ const EmployeeDashboard = () => {
     const paidOrdersList = orders.filter((o) => o.paymentStatus === "PAID");
     const paid = new Set(paidOrdersList.map((o) => o.id)).size; // Unique paid order count
     const completed = paid; // Completed = paid orders only
-    const pendingPayments = orders.filter((o) => o.status === "ORDER_COMPLETE" && o.paymentStatus !== "PAID").length;
+    const pendingPayments = orders.filter(
+      (o) => o.status === "ORDER_COMPLETE" && o.paymentStatus !== "PAID",
+    ).length;
     const salesToday = currentShift?.totalSales ?? 0;
     return { ordersToday, completed, paid, pendingPayments, salesToday };
   }, [orders, currentShift]);
@@ -993,30 +1355,59 @@ const EmployeeDashboard = () => {
   // Live = all unpaid orders. Sort: ready for payment (ORDER_COMPLETE) first, then in-progress.
   const liveOrdersRaw = orders.filter((o) => o.paymentStatus !== "PAID");
   const liveOrders = useMemo(
-    () => [...liveOrdersRaw].sort((a, b) => (a.status === "ORDER_COMPLETE" && b.status !== "ORDER_COMPLETE" ? -1 : b.status === "ORDER_COMPLETE" && a.status !== "ORDER_COMPLETE" ? 1 : 0)),
+    () =>
+      [...liveOrdersRaw].sort((a, b) =>
+        a.status === "ORDER_COMPLETE" && b.status !== "ORDER_COMPLETE"
+          ? -1
+          : b.status === "ORDER_COMPLETE" && a.status !== "ORDER_COMPLETE"
+            ? 1
+            : 0,
+      ),
     [liveOrdersRaw],
   );
-  const completedOrders = useMemo(() => orders.filter((o) => o.paymentStatus === "PAID"), [orders]);
-  const pendingPayments = useMemo(() => orders.filter((o) => o.status === "ORDER_COMPLETE" && o.paymentStatus !== "PAID"), [orders]);
-  const paidOrders = useMemo(() => orders.filter((o) => o.paymentStatus === "PAID"), [orders]);
+  const completedOrders = useMemo(
+    () => orders.filter((o) => o.paymentStatus === "PAID"),
+    [orders],
+  );
+  const pendingPayments = useMemo(
+    () =>
+      orders.filter(
+        (o) => o.status === "ORDER_COMPLETE" && o.paymentStatus !== "PAID",
+      ),
+    [orders],
+  );
+  const paidOrders = useMemo(
+    () => orders.filter((o) => o.paymentStatus === "PAID"),
+    [orders],
+  );
 
-  const getStatusColor = useCallback((status: string) =>
-    ORDER_STATUS_COLORS[status] ?? "bg-slate-100 text-slate-800", []);
+  const getStatusColor = useCallback(
+    (status: string) =>
+      ORDER_STATUS_COLORS[status] ?? "bg-slate-100 text-slate-800",
+    [],
+  );
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case "NEW_ORDER": return <Bell className="h-3 w-3" />;
-      case "ACCEPTED": return <CheckCircle className="h-3 w-3" />;
-      case "PREPARING": return <ChefHat className="h-3 w-3" />;
-      case "SERVED": return <Utensils className="h-3 w-3" />;
-      case "ORDER_COMPLETE": return <CheckCircle className="h-3 w-3" />;
-      default: return null;
+      case "NEW_ORDER":
+        return <Bell className="h-3 w-3" />;
+      case "ACCEPTED":
+        return <CheckCircle className="h-3 w-3" />;
+      case "PREPARING":
+        return <ChefHat className="h-3 w-3" />;
+      case "SERVED":
+        return <Utensils className="h-3 w-3" />;
+      case "ORDER_COMPLETE":
+        return <CheckCircle className="h-3 w-3" />;
+      default:
+        return null;
     }
   };
 
   /** Order is delayed if NEW_ORDER/ACCEPTED and older than 2 minutes */
   const isOrderDelayed = (order: Order) => {
-    if (order.status !== "NEW_ORDER" && order.status !== "ACCEPTED") return false;
+    if (order.status !== "NEW_ORDER" && order.status !== "ACCEPTED")
+      return false;
     return Date.now() - new Date(order.createdAt).getTime() > DELAYED_ORDER_MS;
   };
 
@@ -1024,31 +1415,44 @@ const EmployeeDashboard = () => {
   const getPriorityLabel = (order: Order): string => {
     if (isOrderDelayed(order)) return "Delayed";
     switch (order.status) {
-      case "NEW_ORDER": return "New Order";
+      case "NEW_ORDER":
+        return "New Order";
       case "ACCEPTED":
       case "PREPARING":
-      case "SERVED": return "Preparing";
-      case "ORDER_COMPLETE": return "Completed";
-      default: return order.status.replace("_", " ");
+      case "SERVED":
+        return "Preparing";
+      case "ORDER_COMPLETE":
+        return "Completed";
+      default:
+        return order.status.replace("_", " ");
     }
   };
 
   /** Badge style: green New, yellow Preparing, red Delayed, green Completed */
   const getPriorityBadgeClass = (order: Order): string => {
-    if (isOrderDelayed(order)) return "bg-red-100 text-red-800 border border-red-300";
+    if (isOrderDelayed(order))
+      return "bg-red-100 text-red-800 border border-red-300";
     switch (order.status) {
-      case "NEW_ORDER": return "bg-emerald-100 text-emerald-800 border border-emerald-300";
+      case "NEW_ORDER":
+        return "bg-emerald-100 text-emerald-800 border border-emerald-300";
       case "ACCEPTED":
       case "PREPARING":
-      case "SERVED": return "bg-amber-100 text-amber-800 border border-amber-300";
-      case "ORDER_COMPLETE": return "bg-green-100 text-green-800 border border-green-300";
-      default: return getStatusColor(order.status);
+      case "SERVED":
+        return "bg-amber-100 text-amber-800 border border-amber-300";
+      case "ORDER_COMPLETE":
+        return "bg-green-100 text-green-800 border border-green-300";
+      default:
+        return getStatusColor(order.status);
     }
   };
 
-  const renderOrderCard = (order: Order, options?: { isCompletedSection?: boolean; isLiveSection?: boolean }) => {
+  const renderOrderCard = (
+    order: Order,
+    options?: { isCompletedSection?: boolean; isLiveSection?: boolean },
+  ) => {
     const delayed = isOrderDelayed(order);
-    const isReadyForPayment = options?.isLiveSection && order.status === "ORDER_COMPLETE";
+    const isReadyForPayment =
+      options?.isLiveSection && order.status === "ORDER_COMPLETE";
     // Live: red = delayed, yellow/amber = completed but unpaid, green = completed paid (or preparing)
     const liveCardStyle = options?.isLiveSection
       ? delayed
@@ -1059,19 +1463,35 @@ const EmployeeDashboard = () => {
             : "border-l-4 border-l-green-600 bg-green-50/50"
           : "border-l-4 border-l-amber-500 bg-amber-50/40"
       : "";
-    const completedCardStyle = options?.isCompletedSection ? "border-l-4 border-l-green-600 bg-green-50/50" : "";
-    const defaultCardStyle = !options?.isLiveSection && !options?.isCompletedSection ? "border-l-4 border-l-emerald-500" : "";
+    const completedCardStyle = options?.isCompletedSection
+      ? "border-l-4 border-l-green-600 bg-green-50/50"
+      : "";
+    const defaultCardStyle =
+      !options?.isLiveSection && !options?.isCompletedSection
+        ? "border-l-4 border-l-emerald-500"
+        : "";
     const isAcceptingThis = acceptingOrderId === order.id;
     const isActionThis = actionOrderId === order.id;
 
     // Completed (ready for payment): Order # + Table + Payment Status (prominent), View Order, Confirm Payment.
     const compactCompletedBlock = isReadyForPayment && (
       <div className="flex flex-col gap-2 p-3 min-h-0">
-        <div className="font-bold text-base text-slate-900">Order #{order.id}</div>
-        <div className="font-semibold text-sm truncate text-slate-700">Table {order.table?.tableNumber || order.table?.id || "?"}</div>
-        {options?.isLiveSection && <p className="font-bold text-emerald-700">{formatINR(order.totalAmount)}</p>}
+        <div className="font-bold text-base text-slate-900">
+          Order #{order.id}
+        </div>
+        <div className="font-semibold text-sm truncate text-slate-700">
+          Table {order.table?.tableNumber || order.table?.id || "?"}
+        </div>
+        {options?.isLiveSection && (
+          <p className="font-bold text-emerald-700">
+            {formatINR(order.totalAmount)}
+          </p>
+        )}
         {order.acceptedAt && order.completedAt && (
-          <p className="text-xs text-slate-600">Time to complete: {formatTimeToComplete(order.acceptedAt, order.completedAt)}</p>
+          <p className="text-xs text-slate-600">
+            Time to complete:{" "}
+            {formatTimeToComplete(order.acceptedAt, order.completedAt)}
+          </p>
         )}
         <Badge
           variant={order.paymentStatus === "PAID" ? "default" : "secondary"}
@@ -1080,17 +1500,33 @@ const EmployeeDashboard = () => {
           {order.paymentStatus === "PAID" ? "Paid" : "Not Paid"}
         </Badge>
         <div className="flex flex-col gap-2 mt-auto w-full">
-          <Button size="sm" variant="outline" className="w-full min-h-[44px] text-xs" onClick={(e) => { e.stopPropagation(); openOrderPopup(order); }}>
-            <Eye className="mr-1 h-3 w-3 shrink-0" /><span className="truncate">View Order</span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="w-full min-h-[44px] text-xs"
+            onClick={(e) => {
+              e.stopPropagation();
+              openOrderPopup(order);
+            }}
+          >
+            <Eye className="mr-1 h-3 w-3 shrink-0" />
+            <span className="truncate">View Order</span>
           </Button>
           {order.paymentStatus !== "PAID" && (
             <Button
               size="sm"
               className="w-full min-h-[44px] text-xs rounded-lg"
               disabled={isActionThis || order.status !== "ORDER_COMPLETE"}
-              onClick={(e) => { e.stopPropagation(); confirmPayment(order.id); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                confirmPayment(order.id);
+              }}
             >
-              {isActionThis ? <span className="inline-block h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0" /> : <CreditCard className="mr-1 h-4 w-4 shrink-0" />}
+              {isActionThis ? (
+                <span className="inline-block h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0" />
+              ) : (
+                <CreditCard className="mr-1 h-4 w-4 shrink-0" />
+              )}
               <span className="truncate">Confirm Payment</span>
             </Button>
           )}
@@ -1099,180 +1535,309 @@ const EmployeeDashboard = () => {
     );
 
     return (
-    <Card
-      key={order.id}
-      className={`flex flex-col min-w-0 card-gpu cursor-pointer ${liveCardStyle || completedCardStyle || defaultCardStyle} ${isReadyForPayment ? "max-w-full" : ""}`}
-      onClick={() => !isReadyForPayment && openOrderPopup(order)}
-    >
-      <CardContent className={`flex-1 flex flex-col min-h-0 ${isReadyForPayment ? "p-2 sm:p-3" : "p-2 sm:p-4"}`}>
-        {compactCompletedBlock}
-        {!isReadyForPayment && (
-        <div className="flex flex-col flex-1" onClick={(e) => e.stopPropagation()}>
-        {/* Priority badge + Order # + Time ago (POS-style) */}
-        <div className="flex items-center gap-2 flex-wrap mb-1.5">
-          <Badge className={`shrink-0 text-[10px] sm:text-xs font-semibold ${getPriorityBadgeClass(order)}`}>
-            {getPriorityLabel(order)}
-          </Badge>
-          <span className="text-xs text-muted-foreground">
-            #{order.id} · {timeAgo(order.createdAt)}
-          </span>
-        </div>
-        <div className="flex items-start justify-between gap-2">
-          <div className="space-y-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-semibold text-base sm:text-lg truncate">
-                Table {order.table?.tableNumber || order.table?.id || "?"}
-              </span>
-              {order.customerMobile && (
-                <span className="text-xs text-muted-foreground truncate max-w-[100px] sm:max-w-[120px]" title={order.customerMobile}>
-                  {order.customerMobile.slice(-4).padStart(10, "•")}
+      <Card
+        key={order.id}
+        className={`flex flex-col min-w-0 card-gpu cursor-pointer ${liveCardStyle || completedCardStyle || defaultCardStyle} ${isReadyForPayment ? "max-w-full" : ""}`}
+        onClick={() => !isReadyForPayment && openOrderPopup(order)}
+      >
+        <CardContent
+          className={`flex-1 flex flex-col min-h-0 ${isReadyForPayment ? "p-2 sm:p-3" : "p-2 sm:p-4"}`}
+        >
+          {compactCompletedBlock}
+          {!isReadyForPayment && (
+            <div
+              className="flex flex-col flex-1"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Priority badge + Order # + Time ago (POS-style) */}
+              <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                <Badge
+                  className={`shrink-0 text-[10px] sm:text-xs font-semibold ${getPriorityBadgeClass(order)}`}
+                >
+                  {getPriorityLabel(order)}
+                </Badge>
+                <span className="text-xs text-muted-foreground">
+                  #{order.id} · {timeAgo(order.createdAt)}
                 </span>
-              )}
-              <Badge className={`shrink-0 ${getStatusColor(order.status)}`}>
-                <span className="flex items-center gap-1">
-                  {getStatusIcon(order.status)}
-                  <span className="hidden sm:inline">{order.status}</span>
-                </span>
-              </Badge>
-            </div>
-            <p className="text-xs sm:text-sm text-muted-foreground">
-              {new Date(order.createdAt).toLocaleTimeString()}
-            </p>
-            {order.employee && (
-              <p className="text-xs text-emerald-700 font-medium">Accepted by {order.employee.name}</p>
-            )}
-            {order.status === "ORDER_COMPLETE" && order.acceptedAt && order.completedAt && (
-              <p className="text-xs text-slate-600 font-medium">Time to complete: {formatTimeToComplete(order.acceptedAt, order.completedAt)}</p>
-            )}
-            <div className="mt-2 space-y-1 hidden sm:block">
-              {order.items.map((item) => (
-                <p key={item.id} className="text-sm">
-                  {item.quantity} × {formatItemDisplayName(item.name, item.variant)}
-                  {!(options?.isLiveSection && order.status !== "ORDER_COMPLETE") && (
-                    <span className="font-medium ml-2">{formatINR(item.price)}</span>
+              </div>
+              <div className="flex items-start justify-between gap-2">
+                <div className="space-y-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-base sm:text-lg truncate">
+                      Table {order.table?.tableNumber || order.table?.id || "?"}
+                    </span>
+                    {order.customerMobile && (
+                      <span
+                        className="text-xs text-muted-foreground truncate max-w-[100px] sm:max-w-[120px]"
+                        title={order.customerMobile}
+                      >
+                        {order.customerMobile.slice(-4).padStart(10, "•")}
+                      </span>
+                    )}
+                    <Badge
+                      className={`shrink-0 ${getStatusColor(order.status)}`}
+                    >
+                      <span className="flex items-center gap-1">
+                        {getStatusIcon(order.status)}
+                        <span className="hidden sm:inline">{order.status}</span>
+                      </span>
+                    </Badge>
+                  </div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">
+                    {new Date(order.createdAt).toLocaleTimeString()}
+                  </p>
+                  {order.employee && (
+                    <p className="text-xs text-emerald-700 font-medium">
+                      Accepted by {order.employee.name}
+                    </p>
                   )}
-                </p>
-              ))}
+                  {order.status === "ORDER_COMPLETE" &&
+                    order.acceptedAt &&
+                    order.completedAt && (
+                      <p className="text-xs text-slate-600 font-medium">
+                        Time to complete:{" "}
+                        {formatTimeToComplete(
+                          order.acceptedAt,
+                          order.completedAt,
+                        )}
+                      </p>
+                    )}
+                  <div className="mt-2 space-y-1 hidden sm:block">
+                    {order.items.map((item) => (
+                      <p key={item.id} className="text-sm">
+                        {item.quantity} ×{" "}
+                        {formatItemDisplayName(item.name, item.variant)}
+                        {!(
+                          options?.isLiveSection &&
+                          order.status !== "ORDER_COMPLETE"
+                        ) && (
+                          <span className="font-medium ml-2">
+                            {formatINR(item.price)}
+                          </span>
+                        )}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+                {/* Total and payment: only after order is completed (payment flow is after Complete) */}
+                {(!(
+                  options?.isLiveSection && order.status !== "ORDER_COMPLETE"
+                ) ||
+                  order.status === "ORDER_COMPLETE") && (
+                  <div className="text-right space-y-2 shrink-0">
+                    <p className="font-bold text-base sm:text-lg">
+                      {formatINR(order.totalAmount)}
+                    </p>
+                    {order.status === "ORDER_COMPLETE" && (
+                      <Badge
+                        variant={
+                          order.paymentStatus === "PAID"
+                            ? "default"
+                            : "secondary"
+                        }
+                        className={
+                          order.paymentStatus === "PAID"
+                            ? "bg-green-100 text-green-800 border-green-300"
+                            : "bg-amber-100 text-amber-800 border-amber-300"
+                        }
+                      >
+                        {order.paymentStatus === "PAID" ? "Paid" : "Pending"}
+                      </Badge>
+                    )}
+                  </div>
+                )}
+              </div>
+              <Separator className="my-2 sm:my-3" />
+              <div className="flex flex-wrap gap-2 mt-auto">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openOrderPopup(order);
+                  }}
+                  className="text-xs sm:text-sm"
+                >
+                  <Eye className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
+                  View
+                </Button>
+                {order.status !== "ORDER_COMPLETE" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openOrderPopup(order);
+                    }}
+                    className="text-xs sm:text-sm"
+                  >
+                    Modify
+                  </Button>
+                )}
+                {!order.employeeId && order.status === "NEW_ORDER" && (
+                  <>
+                    <Button
+                      size="sm"
+                      className="bg-green-600 hover:bg-green-700 text-white text-xs sm:text-sm"
+                      disabled={isAcceptingThis || isActionThis}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        acceptOrder(order.id);
+                      }}
+                    >
+                      {isAcceptingThis ? (
+                        <>
+                          <span className="inline-block h-3 w-3 sm:h-4 sm:w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-1" />
+                          Accepting...
+                        </>
+                      ) : (
+                        <>Accept</>
+                      )}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-red-600 border-red-300 hover:bg-red-50 text-xs sm:text-sm"
+                      disabled={isActionThis}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        markStatus(order.id, "CANCELLED");
+                      }}
+                    >
+                      <XCircle className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
+                      Reject
+                    </Button>
+                  </>
+                )}
+                {order.employeeId && order.status !== "ORDER_COMPLETE" && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isActionThis}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        markStatus(
+                          order.id,
+                          order.status === "PREPARING" ? "SERVED" : "PREPARING",
+                        );
+                      }}
+                      className="text-xs sm:text-sm"
+                    >
+                      {isActionThis ? (
+                        <>
+                          <span className="inline-block h-3 w-3 sm:h-4 sm:w-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-1" />
+                          Updating...
+                        </>
+                      ) : (
+                        <>
+                          <ChefHat className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
+                          {order.status === "PREPARING"
+                            ? "Mark Served"
+                            : "Mark Preparing"}
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isActionThis}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        markStatus(order.id, "ORDER_COMPLETE");
+                      }}
+                      className="text-xs sm:text-sm"
+                    >
+                      {isActionThis ? (
+                        <span className="inline-block h-3 w-3 sm:h-4 sm:w-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-1" />
+                      ) : (
+                        <CheckCircle className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
+                      )}
+                      Complete
+                    </Button>
+                  </>
+                )}
+                {order.status === "ORDER_COMPLETE" && (
+                  <Button
+                    size="sm"
+                    variant={
+                      order.paymentStatus === "PAID" ? "secondary" : "default"
+                    }
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      confirmPayment(order.id);
+                    }}
+                    disabled={order.paymentStatus === "PAID" || isActionThis}
+                    title={
+                      order.status !== "ORDER_COMPLETE"
+                        ? "Mark order complete first"
+                        : undefined
+                    }
+                    className="text-xs sm:text-sm"
+                  >
+                    {isActionThis ? (
+                      <span className="inline-block h-3 w-3 sm:h-4 sm:w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-1" />
+                    ) : (
+                      <CreditCard className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
+                    )}
+                    {order.paymentStatus === "PAID"
+                      ? "Paid"
+                      : "Confirm Payment"}
+                  </Button>
+                )}
+              </div>
             </div>
-          </div>
-          {/* Total and payment: only after order is completed (payment flow is after Complete) */}
-          {(!(options?.isLiveSection && order.status !== "ORDER_COMPLETE") || order.status === "ORDER_COMPLETE") && (
-          <div className="text-right space-y-2 shrink-0">
-            <p className="font-bold text-base sm:text-lg">{formatINR(order.totalAmount)}</p>
-            {order.status === "ORDER_COMPLETE" && (
-            <Badge
-              variant={order.paymentStatus === "PAID" ? "default" : "secondary"}
-              className={order.paymentStatus === "PAID" ? "bg-green-100 text-green-800 border-green-300" : "bg-amber-100 text-amber-800 border-amber-300"}
-            >
-              {order.paymentStatus === "PAID" ? "Paid" : "Pending"}
-            </Badge>
-            )}
-          </div>
           )}
-        </div>
-        <Separator className="my-2 sm:my-3" />
-        <div className="flex flex-wrap gap-2 mt-auto">
-          <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); openOrderPopup(order); }} className="text-xs sm:text-sm">
-            <Eye className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
-            View
-          </Button>
-          {order.status !== "ORDER_COMPLETE" && (
-            <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); openOrderPopup(order); }} className="text-xs sm:text-sm">
-              Modify
-            </Button>
-          )}
-          {!order.employeeId && order.status === "NEW_ORDER" && (
-            <>
-              <Button
-                size="sm"
-                className="bg-green-600 hover:bg-green-700 text-white text-xs sm:text-sm"
-                disabled={isAcceptingThis || isActionThis}
-                onClick={(e) => { e.stopPropagation(); acceptOrder(order.id); }}
-              >
-                {isAcceptingThis ? (
-                  <><span className="inline-block h-3 w-3 sm:h-4 sm:w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-1" />Accepting...</>
-                ) : (
-                  <>Accept</>
-                )}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="text-red-600 border-red-300 hover:bg-red-50 text-xs sm:text-sm"
-                disabled={isActionThis}
-                onClick={(e) => { e.stopPropagation(); markStatus(order.id, "CANCELLED"); }}
-              >
-                <XCircle className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
-                Reject
-              </Button>
-            </>
-          )}
-          {order.employeeId && order.status !== "ORDER_COMPLETE" && (
-            <>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={isActionThis}
-                onClick={(e) => { e.stopPropagation(); markStatus(order.id, order.status === "PREPARING" ? "SERVED" : "PREPARING"); }}
-                className="text-xs sm:text-sm"
-              >
-                {isActionThis ? (
-                  <><span className="inline-block h-3 w-3 sm:h-4 sm:w-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-1" />Updating...</>
-                ) : (
-                  <><ChefHat className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />{order.status === "PREPARING" ? "Mark Served" : "Mark Preparing"}</>
-                )}
-              </Button>
-              <Button size="sm" variant="outline" disabled={isActionThis} onClick={(e) => { e.stopPropagation(); markStatus(order.id, "ORDER_COMPLETE"); }} className="text-xs sm:text-sm">
-                {isActionThis ? <span className="inline-block h-3 w-3 sm:h-4 sm:w-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-1" /> : <CheckCircle className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />}
-                Complete
-              </Button>
-            </>
-          )}
-          {order.status === "ORDER_COMPLETE" && (
-            <Button
-              size="sm"
-              variant={order.paymentStatus === "PAID" ? "secondary" : "default"}
-              onClick={(e) => { e.stopPropagation(); confirmPayment(order.id); }}
-              disabled={order.paymentStatus === "PAID" || isActionThis}
-              title={order.status !== "ORDER_COMPLETE" ? "Mark order complete first" : undefined}
-              className="text-xs sm:text-sm"
-            >
-              {isActionThis ? <span className="inline-block h-3 w-3 sm:h-4 sm:w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-1" /> : <CreditCard className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />}
-              {order.paymentStatus === "PAID" ? "Paid" : "Confirm Payment"}
-            </Button>
-          )}
-        </div>
-        </div>
-        )}
-      </CardContent>
-    </Card>
-  );
+        </CardContent>
+      </Card>
+    );
   };
 
   const renderOrderList = (data: Order[], title: string) => {
     const isLiveOrders = title === "Live Orders";
     const isCompletedSection = title === "Completed Orders";
-    const emptyState = (
+    const emptyState = isLiveOrders ? (
+      <div className="text-center py-6 sm:py-8 text-muted-foreground">
+        <ShoppingCart className="h-10 w-10 sm:h-12 sm:w-12 mx-auto mb-3 opacity-20" />
+        <p className="text-sm sm:text-base font-medium">No Active Orders</p>
+        <p className="text-xs sm:text-sm mt-1">New orders will appear here</p>
+      </div>
+    ) : (
       <div className="text-center py-4 sm:py-6 text-muted-foreground">
         <ShoppingCart className="h-8 w-8 sm:h-12 sm:w-12 mx-auto mb-2 sm:mb-3 opacity-20" />
-        <p className="text-sm sm:text-base">No orders in this section right now.</p>
+        <p className="text-sm sm:text-base">
+          No orders in this section right now.
+        </p>
       </div>
     );
     return (
-      <Card className={isCompletedSection ? "border-green-200 bg-green-50/30" : ""}>
+      <Card
+        className={isCompletedSection ? "border-green-200 bg-green-50/30" : ""}
+      >
         <CardHeader className="pb-3 pt-4 px-4 sm:px-6 sm:pb-4 sm:pt-6">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <CardTitle className={`text-base sm:text-lg flex items-center gap-2 ${isCompletedSection ? "text-green-800" : ""}`}>
-                  <ShoppingCart className={`h-4 w-4 sm:h-5 sm:w-5 shrink-0 ${isCompletedSection ? "text-green-600" : ""}`} />
+                <CardTitle
+                  className={`text-base sm:text-lg flex items-center gap-2 ${isCompletedSection ? "text-green-800" : ""}`}
+                >
+                  <ShoppingCart
+                    className={`h-4 w-4 sm:h-5 sm:w-5 shrink-0 ${isCompletedSection ? "text-green-600" : ""}`}
+                  />
                   <span className="truncate">{title}</span>
                 </CardTitle>
-                <Badge variant="outline" className={isCompletedSection ? "border-green-300 text-green-800" : ""}>
+                <Badge
+                  variant="outline"
+                  className={
+                    isCompletedSection ? "border-green-300 text-green-800" : ""
+                  }
+                >
                   {data.length}
                 </Badge>
               </div>
-              <CardDescription className="text-xs sm:text-sm">{data.length} orders in this section</CardDescription>
+              <CardDescription className="text-xs sm:text-sm">
+                {data.length} orders in this section
+              </CardDescription>
             </div>
             {isLiveOrders && shiftActive && (
               <div className="flex justify-end sm:justify-end sm:ml-auto shrink-0">
@@ -1282,20 +1847,31 @@ const EmployeeDashboard = () => {
                   disabled={shiftLoading}
                   onClick={async () => {
                     if (!token) return;
-                    const endpoint = currentShift?.status === "PAUSED" ? "resume" : "pause";
+                    const endpoint =
+                      currentShift?.status === "PAUSED" ? "resume" : "pause";
                     const res = await fetch(`${apiBase}/shift/${endpoint}`, {
                       method: "POST",
                       headers: { Authorization: `Bearer ${token}` },
                     });
                     if (res.ok) {
                       const data = await res.json().catch(() => null);
-                      if (data) setCurrentShift((prev) => (prev ? { ...prev, ...data } : prev));
-                      toast.success(data?.message || (endpoint === "pause" ? "Orders paused. Other staff can receive new orders." : "You are Active again for new orders."));
+                      if (data)
+                        setCurrentShift((prev) =>
+                          prev ? { ...prev, ...data } : prev,
+                        );
+                      toast.success(
+                        data?.message ||
+                          (endpoint === "pause"
+                            ? "Orders paused. Other staff can receive new orders."
+                            : "You are Active again for new orders."),
+                      );
                     }
                   }}
                   className="text-xs sm:text-sm"
                 >
-                  {currentShift?.status === "PAUSED" ? "Resume Orders" : "Pause Orders"}
+                  {currentShift?.status === "PAUSED"
+                    ? "Resume Orders"
+                    : "Pause Orders"}
                 </Button>
               </div>
             )}
@@ -1304,10 +1880,15 @@ const EmployeeDashboard = () => {
         <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
           {isLiveOrders ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-              {data.length === 0 && <div className="col-span-full">{emptyState}</div>}
+              {data.length === 0 && (
+                <div className="col-span-full">{emptyState}</div>
+              )}
               {data.map((order) => (
                 <div key={order.id} className="min-w-0">
-                  {renderOrderCard(order, { isCompletedSection: false, isLiveSection: true })}
+                  {renderOrderCard(order, {
+                    isCompletedSection: false,
+                    isLiveSection: true,
+                  })}
                 </div>
               ))}
             </div>
@@ -1316,7 +1897,9 @@ const EmployeeDashboard = () => {
               <ScrollArea className="h-[480px] sm:h-[560px] w-full [&>[data-radix-scroll-area-viewport]]:pr-3">
                 <div className="space-y-4 py-1">
                   {data.length === 0 && emptyState}
-                  {data.map((order) => renderOrderCard(order, { isCompletedSection }))}
+                  {data.map((order) =>
+                    renderOrderCard(order, { isCompletedSection }),
+                  )}
                 </div>
               </ScrollArea>
             </div>
@@ -1336,7 +1919,7 @@ const EmployeeDashboard = () => {
       currentShift?.status,
       shiftActive,
       shiftLoading,
-    ]
+    ],
   );
 
   const PAGE_SIZE = 10;
@@ -1366,15 +1949,23 @@ const EmployeeDashboard = () => {
     formatTimeToComplete: (a: string, b: string) => string;
   }) => {
     const [search, setSearch] = useState("");
-    const [dateFilter, setDateFilter] = useState<"today" | "last7" | "all">("today");
-    const [paymentFilter, setPaymentFilter] = useState<"all" | "paid" | "unpaid">("all");
+    const [dateFilter, setDateFilter] = useState<"today" | "last7" | "all">(
+      "today",
+    );
+    const [paymentFilter, setPaymentFilter] = useState<
+      "all" | "paid" | "unpaid"
+    >("all");
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(PAGE_SIZE);
 
     const filtered = useMemo(() => {
       let list = rawOrders;
       const now = new Date();
-      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const todayStart = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+      );
       const last7Start = new Date(todayStart);
       last7Start.setDate(last7Start.getDate() - 7);
       if (dateFilter === "today") {
@@ -1382,15 +1973,17 @@ const EmployeeDashboard = () => {
       } else if (dateFilter === "last7") {
         list = list.filter((o) => new Date(o.createdAt) >= last7Start);
       }
-      if (paymentFilter === "paid") list = list.filter((o) => o.paymentStatus === "PAID");
-      else if (paymentFilter === "unpaid") list = list.filter((o) => o.paymentStatus !== "PAID");
+      if (paymentFilter === "paid")
+        list = list.filter((o) => o.paymentStatus === "PAID");
+      else if (paymentFilter === "unpaid")
+        list = list.filter((o) => o.paymentStatus !== "PAID");
       const q = search.trim().toLowerCase();
       if (q) {
         list = list.filter(
           (o) =>
             String(o.id).includes(q) ||
             (o.table?.tableNumber ?? "").toLowerCase().includes(q) ||
-            (o.employee?.name ?? "").toLowerCase().includes(q)
+            (o.employee?.name ?? "").toLowerCase().includes(q),
         );
       }
       return list;
@@ -1400,13 +1993,31 @@ const EmployeeDashboard = () => {
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
     const currentPage = Math.min(page, totalPages);
     const start = (currentPage - 1) * pageSize;
-    const pageOrders = useMemo(() => filtered.slice(start, start + pageSize), [filtered, start, pageSize]);
+    const pageOrders = useMemo(
+      () => filtered.slice(start, start + pageSize),
+      [filtered, start, pageSize],
+    );
 
     const exportCSV = () => {
-      const headers = ["Order ID", "Table", "Items", "Amount", "Status", "Payment", "Accepted By", "Time", "Time to Complete"];
+      const headers = [
+        "Order ID",
+        "Table",
+        "Items",
+        "Amount",
+        "Status",
+        "Payment",
+        "Accepted By",
+        "Time",
+        "Time to Complete",
+      ];
       const rows = filtered.map((o) => {
-        const itemsStr = o.items.map((i) => `${i.name} ×${i.quantity}`).join("; ");
-        const timeToComplete = o.acceptedAt && o.completedAt ? formatTimeToComplete(o.acceptedAt, o.completedAt) : "";
+        const itemsStr = o.items
+          .map((i) => `${i.name} ×${i.quantity}`)
+          .join("; ");
+        const timeToComplete =
+          o.acceptedAt && o.completedAt
+            ? formatTimeToComplete(o.acceptedAt, o.completedAt)
+            : "";
         return [
           o.id,
           o.table?.tableNumber ?? "",
@@ -1415,11 +2026,19 @@ const EmployeeDashboard = () => {
           o.status,
           o.paymentStatus,
           o.employee?.name ?? "",
-          new Date(o.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
+          new Date(o.createdAt).toLocaleTimeString("en-IN", {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
           timeToComplete,
         ];
       });
-      const csv = [headers.join(","), ...rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))].join("\n");
+      const csv = [
+        headers.join(","),
+        ...rows.map((r) =>
+          r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","),
+        ),
+      ].join("\n");
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -1430,27 +2049,49 @@ const EmployeeDashboard = () => {
     };
 
     const itemsSummary = (order: Order) => {
-      const parts = order.items.slice(0, 2).map((i) => `${i.name} ×${i.quantity}`);
+      const parts = order.items
+        .slice(0, 2)
+        .map((i) => `${i.name} ×${i.quantity}`);
       if (order.items.length > 2) parts.push(`+${order.items.length - 2} more`);
       return parts.join(", ");
     };
 
     const paymentBadgeClass = (paymentStatus: string) =>
-      paymentStatus === "PAID" ? "bg-green-100 text-green-800 border-green-300" : "bg-amber-100 text-amber-800 border-amber-300";
+      paymentStatus === "PAID"
+        ? "bg-green-100 text-green-800 border-green-300"
+        : "bg-amber-100 text-amber-800 border-amber-300";
 
-    const isCompleted = title.toLowerCase().includes("completed") || title.toLowerCase().includes("paid");
+    const isCompleted =
+      title.toLowerCase().includes("completed") ||
+      title.toLowerCase().includes("paid");
 
     return (
-      <Card className={isCompleted ? "border-green-200 bg-green-50/30" : "border-amber-200/60 bg-amber-50/20"}>
+      <Card
+        className={
+          isCompleted
+            ? "border-green-200 bg-green-50/30"
+            : "border-amber-200/60 bg-amber-50/20"
+        }
+      >
         <CardHeader className="pb-3 pt-4 px-4 sm:px-6">
           <div className="flex flex-col gap-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <CardTitle className={`text-base sm:text-lg flex items-center gap-2 ${isCompleted ? "text-green-800" : "text-amber-800"}`}>
-                <ShoppingCart className={`h-4 w-4 sm:h-5 sm:w-5 shrink-0 ${isCompleted ? "text-green-600" : "text-amber-600"}`} />
+              <CardTitle
+                className={`text-base sm:text-lg flex items-center gap-2 ${isCompleted ? "text-green-800" : "text-amber-800"}`}
+              >
+                <ShoppingCart
+                  className={`h-4 w-4 sm:h-5 sm:w-5 shrink-0 ${isCompleted ? "text-green-600" : "text-amber-600"}`}
+                />
                 {title}
               </CardTitle>
               <div className="flex items-center gap-2 flex-wrap">
-                <Button variant="outline" size="sm" className="gap-1" onClick={exportCSV} disabled={filtered.length === 0}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1"
+                  onClick={exportCSV}
+                  disabled={filtered.length === 0}
+                >
                   <FileDown className="h-4 w-4" />
                   Export CSV
                 </Button>
@@ -1462,11 +2103,20 @@ const EmployeeDashboard = () => {
                 <Input
                   placeholder="Search by Order ID, Table, Employee..."
                   value={search}
-                  onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setPage(1);
+                  }}
                   className="pl-9 h-10"
                 />
               </div>
-              <Select value={dateFilter} onValueChange={(v: "today" | "last7" | "all") => { setDateFilter(v); setPage(1); }}>
+              <Select
+                value={dateFilter}
+                onValueChange={(v: "today" | "last7" | "all") => {
+                  setDateFilter(v);
+                  setPage(1);
+                }}
+              >
                 <SelectTrigger className="w-[140px] h-10">
                   <SelectValue />
                 </SelectTrigger>
@@ -1477,7 +2127,13 @@ const EmployeeDashboard = () => {
                 </SelectContent>
               </Select>
               {isCompleted && (
-                <Select value={paymentFilter} onValueChange={(v: "all" | "paid" | "unpaid") => { setPaymentFilter(v); setPage(1); }}>
+                <Select
+                  value={paymentFilter}
+                  onValueChange={(v: "all" | "paid" | "unpaid") => {
+                    setPaymentFilter(v);
+                    setPage(1);
+                  }}
+                >
                   <SelectTrigger className="w-[120px] h-10">
                     <SelectValue />
                   </SelectTrigger>
@@ -1488,13 +2144,21 @@ const EmployeeDashboard = () => {
                   </SelectContent>
                 </Select>
               )}
-              <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(1); }}>
+              <Select
+                value={String(pageSize)}
+                onValueChange={(v) => {
+                  setPageSize(Number(v));
+                  setPage(1);
+                }}
+              >
                 <SelectTrigger className="w-[100px] h-10">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {PAGE_SIZE_OPTIONS.map((n) => (
-                    <SelectItem key={n} value={String(n)}>Show {n}</SelectItem>
+                    <SelectItem key={n} value={String(n)}>
+                      Show {n}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -1513,7 +2177,9 @@ const EmployeeDashboard = () => {
                     <TableHead>Amount</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Payment</TableHead>
-                    <TableHead className="hidden sm:table-cell">Accepted By</TableHead>
+                    <TableHead className="hidden sm:table-cell">
+                      Accepted By
+                    </TableHead>
                     <TableHead className="hidden md:table-cell">Time</TableHead>
                     <TableHead className="text-right">Action</TableHead>
                   </TableRow>
@@ -1521,15 +2187,33 @@ const EmployeeDashboard = () => {
                 <TableBody>
                   {Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
-                      <TableCell><Skeleton className="h-5 w-16" /></TableCell>
-                      <TableCell><Skeleton className="h-5 w-12" /></TableCell>
-                      <TableCell><Skeleton className="h-5 w-24" /></TableCell>
-                      <TableCell><Skeleton className="h-5 w-14" /></TableCell>
-                      <TableCell><Skeleton className="h-5 w-20" /></TableCell>
-                      <TableCell><Skeleton className="h-5 w-14" /></TableCell>
-                      <TableCell className="hidden sm:table-cell"><Skeleton className="h-5 w-20" /></TableCell>
-                      <TableCell className="hidden md:table-cell"><Skeleton className="h-5 w-16" /></TableCell>
-                      <TableCell className="text-right"><Skeleton className="h-8 w-14 ml-auto" /></TableCell>
+                      <TableCell>
+                        <Skeleton className="h-5 w-16" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-5 w-12" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-5 w-24" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-5 w-14" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-5 w-20" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-5 w-14" />
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell">
+                        <Skeleton className="h-5 w-20" />
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        <Skeleton className="h-5 w-16" />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Skeleton className="h-8 w-14 ml-auto" />
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -1559,45 +2243,100 @@ const EmployeeDashboard = () => {
                   </TableHeader>
                   <TableBody>
                     {pageOrders.map((order) => (
-                      <TableRow key={order.id} className="cursor-pointer hover:bg-muted/50" onClick={() => onViewOrder(order)}>
-                        <TableCell className="font-medium">#{order.id}</TableCell>
-                        <TableCell>{order.table?.tableNumber ?? order.table?.id ?? "—"}</TableCell>
-                        <TableCell className="max-w-[180px] truncate" title={itemsSummary(order)}>{itemsSummary(order)}</TableCell>
-                        <TableCell className="font-semibold">{formatINR(order.totalAmount)}</TableCell>
+                      <TableRow
+                        key={order.id}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => onViewOrder(order)}
+                      >
+                        <TableCell className="font-medium">
+                          #{order.id}
+                        </TableCell>
                         <TableCell>
-                          <Badge className={getStatusColor(order.status)} variant="secondary">
-                            {order.status === "ORDER_COMPLETE" ? "Completed" : order.status.replace("_", " ")}
+                          {order.table?.tableNumber ?? order.table?.id ?? "—"}
+                        </TableCell>
+                        <TableCell
+                          className="max-w-[180px] truncate"
+                          title={itemsSummary(order)}
+                        >
+                          {itemsSummary(order)}
+                        </TableCell>
+                        <TableCell className="font-semibold">
+                          {formatINR(order.totalAmount)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            className={getStatusColor(order.status)}
+                            variant="secondary"
+                          >
+                            {order.status === "ORDER_COMPLETE"
+                              ? "Completed"
+                              : order.status.replace("_", " ")}
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline" className={paymentBadgeClass(order.paymentStatus)}>
-                            {order.paymentStatus === "PAID" ? "Paid" : "Pending"}
+                          <Badge
+                            variant="outline"
+                            className={paymentBadgeClass(order.paymentStatus)}
+                          >
+                            {order.paymentStatus === "PAID"
+                              ? "Paid"
+                              : "Pending"}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-emerald-700">{order.employee?.name ?? "—"}</TableCell>
+                        <TableCell className="text-emerald-700">
+                          {order.employee?.name ?? "—"}
+                        </TableCell>
                         <TableCell className="text-muted-foreground">
-                          {new Date(order.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                          {new Date(order.createdAt).toLocaleTimeString(
+                            "en-IN",
+                            { hour: "2-digit", minute: "2-digit" },
+                          )}
                           {order.acceptedAt && order.completedAt && (
-                            <span className="block text-xs text-slate-500">Done in {formatTimeToComplete(order.acceptedAt, order.completedAt)}</span>
+                            <span className="block text-xs text-slate-500">
+                              Done in{" "}
+                              {formatTimeToComplete(
+                                order.acceptedAt,
+                                order.completedAt,
+                              )}
+                            </span>
                           )}
                         </TableCell>
-                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                          <Button size="sm" variant="outline" className="mr-1" onClick={() => onViewOrder(order)}>
-                            <Eye className="h-3 w-3 sm:mr-1" /><span className="hidden sm:inline">View</span>
+                        <TableCell
+                          className="text-right"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="mr-1"
+                            onClick={() => onViewOrder(order)}
+                          >
+                            <Eye className="h-3 w-3 sm:mr-1" />
+                            <span className="hidden sm:inline">View</span>
                           </Button>
-                          {showConfirmPayment && order.paymentStatus !== "PAID" && order.status === "ORDER_COMPLETE" && (
-                            <Button
-                              size="sm"
-                              disabled={actionOrderId === order.id}
-                              onClick={(e) => { e.stopPropagation(); onConfirmPayment(order.id); }}
-                            >
-                              {actionOrderId === order.id ? (
-                                <span className="inline-block h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                              ) : (
-                                <><CreditCard className="h-3 w-3 sm:mr-1" /><span className="hidden sm:inline">Pay</span></>
-                              )}
-                            </Button>
-                          )}
+                          {showConfirmPayment &&
+                            order.paymentStatus !== "PAID" &&
+                            order.status === "ORDER_COMPLETE" && (
+                              <Button
+                                size="sm"
+                                disabled={actionOrderId === order.id}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onConfirmPayment(order.id);
+                                }}
+                              >
+                                {actionOrderId === order.id ? (
+                                  <span className="inline-block h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                  <>
+                                    <CreditCard className="h-3 w-3 sm:mr-1" />
+                                    <span className="hidden sm:inline">
+                                      Pay
+                                    </span>
+                                  </>
+                                )}
+                              </Button>
+                            )}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1606,27 +2345,70 @@ const EmployeeDashboard = () => {
               </div>
               <div className="md:hidden space-y-3">
                 {pageOrders.map((order) => (
-                  <Card key={order.id} className="border bg-white cursor-pointer hover:shadow-md transition-shadow" onClick={() => onViewOrder(order)}>
+                  <Card
+                    key={order.id}
+                    className="border bg-white cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => onViewOrder(order)}
+                  >
                     <CardContent className="p-4 space-y-2">
                       <div className="flex justify-between items-start">
                         <span className="font-semibold">Order #{order.id}</span>
-                        <Badge className={paymentBadgeClass(order.paymentStatus)} variant="outline">{order.paymentStatus === "PAID" ? "Paid" : "Pending"}</Badge>
+                        <Badge
+                          className={paymentBadgeClass(order.paymentStatus)}
+                          variant="outline"
+                        >
+                          {order.paymentStatus === "PAID" ? "Paid" : "Pending"}
+                        </Badge>
                       </div>
-                      <p className="text-sm text-muted-foreground">Table {order.table?.tableNumber ?? order.table?.id ?? "—"}</p>
-                      <p className="text-sm">Items: {itemsSummary(order)}</p>
-                      <p className="font-semibold">{formatINR(order.totalAmount)}</p>
-                      <p className="text-xs text-emerald-700">{order.employee?.name && `Accepted by ${order.employee.name}`}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(order.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
-                        {order.acceptedAt && order.completedAt && ` · Done in ${formatTimeToComplete(order.acceptedAt, order.completedAt)}`}
+                      <p className="text-sm text-muted-foreground">
+                        Table{" "}
+                        {order.table?.tableNumber ?? order.table?.id ?? "—"}
                       </p>
-                      <div className="flex gap-2 pt-2" onClick={(e) => e.stopPropagation()}>
-                        <Button size="sm" variant="outline" className="flex-1" onClick={() => onViewOrder(order)}><Eye className="h-3 w-3 mr-1" />View</Button>
-                        {showConfirmPayment && order.paymentStatus !== "PAID" && order.status === "ORDER_COMPLETE" && (
-                          <Button size="sm" disabled={actionOrderId === order.id} onClick={() => onConfirmPayment(order.id)}>
-                            {actionOrderId === order.id ? <span className="inline-block h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> : "Confirm Payment"}
-                          </Button>
-                        )}
+                      <p className="text-sm">Items: {itemsSummary(order)}</p>
+                      <p className="font-semibold">
+                        {formatINR(order.totalAmount)}
+                      </p>
+                      <p className="text-xs text-emerald-700">
+                        {order.employee?.name &&
+                          `Accepted by ${order.employee.name}`}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(order.createdAt).toLocaleTimeString("en-IN", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                        {order.acceptedAt &&
+                          order.completedAt &&
+                          ` · Done in ${formatTimeToComplete(order.acceptedAt, order.completedAt)}`}
+                      </p>
+                      <div
+                        className="flex gap-2 pt-2"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => onViewOrder(order)}
+                        >
+                          <Eye className="h-3 w-3 mr-1" />
+                          View
+                        </Button>
+                        {showConfirmPayment &&
+                          order.paymentStatus !== "PAID" &&
+                          order.status === "ORDER_COMPLETE" && (
+                            <Button
+                              size="sm"
+                              disabled={actionOrderId === order.id}
+                              onClick={() => onConfirmPayment(order.id)}
+                            >
+                              {actionOrderId === order.id ? (
+                                <span className="inline-block h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              ) : (
+                                "Confirm Payment"
+                              )}
+                            </Button>
+                          )}
                       </div>
                     </CardContent>
                   </Card>
@@ -1634,16 +2416,27 @@ const EmployeeDashboard = () => {
               </div>
               <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4 pt-4 border-t">
                 <p className="text-sm text-muted-foreground">
-                  Showing {total === 0 ? 0 : start + 1}–{Math.min(start + pageSize, total)} of {total} orders
+                  Showing {total === 0 ? 0 : start + 1}–
+                  {Math.min(start + pageSize, total)} of {total} orders
                 </p>
                 <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setPage((p) => p - 1)}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage <= 1}
+                    onClick={() => setPage((p) => p - 1)}
+                  >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
                   <span className="text-sm font-medium min-w-[80px] text-center">
                     Page {currentPage} of {totalPages}
                   </span>
-                  <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setPage((p) => p + 1)}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setPage((p) => p + 1)}
+                  >
                     <ChevronRight className="h-4 w-4" />
                   </Button>
                 </div>
@@ -1660,13 +2453,24 @@ const EmployeeDashboard = () => {
       <div className="space-y-4 sm:space-y-6">
         {/* Header - same as admin */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-        <div className="min-w-0">
-          <h2 className="text-lg font-bold sm:text-xl">Today&apos;s Dashboard</h2>
-          <p className="text-xs sm:text-sm text-muted-foreground truncate max-w-full">
-            {currentTime.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
-            {" · "}{currentTime.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
-          </p>
-        </div>
+          <div className="min-w-0">
+            <h2 className="text-lg font-bold sm:text-xl">
+              Today&apos;s Dashboard
+            </h2>
+            <p className="text-xs sm:text-sm text-muted-foreground truncate max-w-full">
+              {currentTime.toLocaleDateString("en-IN", {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              })}
+              {" · "}
+              {currentTime.toLocaleTimeString("en-IN", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </p>
+          </div>
           <div className="flex items-center gap-2 flex-wrap">
             {shiftActive && (
               <Button
@@ -1675,19 +2479,30 @@ const EmployeeDashboard = () => {
                 disabled={shiftLoading}
                 onClick={async () => {
                   if (!token) return;
-                  const endpoint = currentShift?.status === "PAUSED" ? "resume" : "pause";
+                  const endpoint =
+                    currentShift?.status === "PAUSED" ? "resume" : "pause";
                   const res = await fetch(`${apiBase}/shift/${endpoint}`, {
                     method: "POST",
                     headers: { Authorization: `Bearer ${token}` },
                   });
                   if (res.ok) {
                     const data = await res.json().catch(() => null);
-                    if (data) setCurrentShift((prev) => (prev ? { ...prev, ...data } : prev));
-                    toast.success(data?.message || (endpoint === "pause" ? "Orders paused. Other staff can receive new orders." : "You are Active again for new orders."));
+                    if (data)
+                      setCurrentShift((prev) =>
+                        prev ? { ...prev, ...data } : prev,
+                      );
+                    toast.success(
+                      data?.message ||
+                        (endpoint === "pause"
+                          ? "Orders paused. Other staff can receive new orders."
+                          : "You are Active again for new orders."),
+                    );
                   }
                 }}
               >
-                {currentShift?.status === "PAUSED" ? "Resume Orders" : "Pause Orders"}
+                {currentShift?.status === "PAUSED"
+                  ? "Resume Orders"
+                  : "Pause Orders"}
               </Button>
             )}
             <Button
@@ -1704,45 +2519,90 @@ const EmployeeDashboard = () => {
               ) : (
                 <Play className="h-4 w-4" />
               )}
-              {shiftLoading ? "Please wait..." : shiftActive ? "End Shift" : endedShiftToday ? "Start tomorrow" : "Start Shift"}
+              {shiftLoading
+                ? "Please wait..."
+                : shiftActive
+                  ? "End Shift"
+                  : endedShiftToday
+                    ? "Start tomorrow"
+                    : "Start Shift"}
             </Button>
           </div>
         </div>
 
         {/* KPI Cards - same structure and font as admin dashboard */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
-          <Card className={`min-w-0 ${shiftActive ? "bg-gradient-to-br from-emerald-50 to-white border-emerald-200 border-2" : "bg-gradient-to-br from-emerald-50 to-white border-emerald-100"}`}>
+          <Card
+            className={`min-w-0 ${shiftActive ? "bg-gradient-to-br from-emerald-50 to-white border-emerald-200 border-2" : "bg-gradient-to-br from-emerald-50 to-white border-emerald-100"}`}
+          >
             <CardContent className="p-2 sm:p-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-xs text-muted-foreground">Shift Status</p>
-                  <p className={`text-base sm:text-lg font-bold truncate ${shiftActive ? "text-emerald-700" : "text-slate-700"}`}>
-                    {currentShift?.status === "PAUSED" ? "Paused" : shiftActive ? "Active" : "Inactive"}
+                  <p
+                    className={`text-base sm:text-lg font-bold truncate ${shiftActive ? "text-emerald-700" : "text-slate-700"}`}
+                  >
+                    {currentShift?.status === "PAUSED"
+                      ? "Paused"
+                      : shiftActive
+                        ? "Active"
+                        : "Inactive"}
                   </p>
                   {currentShift?.shiftStart && (
                     <p className="text-xs mt-0.5">
-                      <span className="text-muted-foreground">Start: {new Date(currentShift.shiftStart).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</span>
+                      <span className="text-muted-foreground">
+                        Start:{" "}
+                        {new Date(currentShift.shiftStart).toLocaleTimeString(
+                          "en-IN",
+                          { hour: "2-digit", minute: "2-digit" },
+                        )}
+                      </span>
                       {" · "}
-                      <span className={shiftActive ? "text-emerald-700 font-semibold" : "text-muted-foreground"}>
+                      <span
+                        className={
+                          shiftActive
+                            ? "text-emerald-700 font-semibold"
+                            : "text-muted-foreground"
+                        }
+                      >
                         {currentShift?.shiftStart
                           ? (() => {
-                              const end = currentShift.shiftEnd && currentShift.status === "ENDED" ? new Date(currentShift.shiftEnd) : currentTime;
-                              const ms = end.getTime() - new Date(currentShift.shiftStart).getTime();
-                              const totalMins = Math.max(0, Math.floor(ms / 60000));
+                              const end =
+                                currentShift.shiftEnd &&
+                                currentShift.status === "ENDED"
+                                  ? new Date(currentShift.shiftEnd)
+                                  : currentTime;
+                              const ms =
+                                end.getTime() -
+                                new Date(currentShift.shiftStart).getTime();
+                              const totalMins = Math.max(
+                                0,
+                                Math.floor(ms / 60000),
+                              );
                               const h = Math.floor(totalMins / 60);
                               const m = totalMins % 60;
-                              const pad = (n: number) => n.toString().padStart(2, "0");
+                              const pad = (n: number) =>
+                                n.toString().padStart(2, "0");
                               return `${pad(h)}:${pad(m)} hrs`;
                             })()
                           : "--:-- hrs"}
                       </span>
                     </p>
                   )}
-                  {shiftActive && currentShift?.shiftStart && (() => {
-                    const ms = currentTime.getTime() - new Date(currentShift.shiftStart).getTime();
-                    if (ms / (1000 * 60 * 60) > 10) return <p className="text-xs font-medium text-amber-600 mt-0.5">Overtime</p>;
-                    return null;
-                  })()}
+                  {shiftActive &&
+                    currentShift?.shiftStart &&
+                    (() => {
+                      const ms =
+                        currentTime.getTime() -
+                        new Date(currentShift.shiftStart).getTime();
+                      if (ms / (1000 * 60 * 60) > 10)
+                        return (
+                          <p className="text-xs font-medium text-amber-600 mt-0.5">
+                            Overtime
+                          </p>
+                        );
+                      return null;
+                    })()}
                 </div>
                 <div className="p-1.5 bg-emerald-100 rounded-md shrink-0">
                   <Clock className="h-4 w-4 text-emerald-600" />
@@ -1756,8 +2616,12 @@ const EmployeeDashboard = () => {
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-xs text-muted-foreground">Total Orders</p>
-                  <p className="text-base sm:text-lg font-bold text-blue-700 truncate">{todayStats.ordersToday}</p>
-                  <p className="text-xs text-muted-foreground">Today&apos;s orders</p>
+                  <p className="text-base sm:text-lg font-bold text-blue-700 truncate">
+                    {todayStats.ordersToday}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Today&apos;s orders
+                  </p>
                 </div>
                 <div className="p-1.5 bg-blue-100 rounded-md shrink-0">
                   <ShoppingCart className="h-4 w-4 text-blue-600" />
@@ -1771,8 +2635,12 @@ const EmployeeDashboard = () => {
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-xs text-muted-foreground">Paid</p>
-                  <p className="text-base sm:text-lg font-bold text-green-700 truncate">{todayStats.completed}</p>
-                  <p className="text-xs text-muted-foreground">Paid orders today</p>
+                  <p className="text-base sm:text-lg font-bold text-green-700 truncate">
+                    {todayStats.completed}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Paid orders today
+                  </p>
                 </div>
                 <div className="p-1.5 bg-green-100 rounded-md shrink-0">
                   <CheckCircle className="h-4 w-4 text-green-600" />
@@ -1785,9 +2653,15 @@ const EmployeeDashboard = () => {
             <CardContent className="p-2 sm:p-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="text-xs text-muted-foreground">Pending Payment</p>
-                  <p className="text-base sm:text-lg font-bold text-amber-700 truncate">{todayStats.pendingPayments}</p>
-                  <p className="text-xs text-muted-foreground">Awaiting payment</p>
+                  <p className="text-xs text-muted-foreground">
+                    Pending Payment
+                  </p>
+                  <p className="text-base sm:text-lg font-bold text-amber-700 truncate">
+                    {todayStats.pendingPayments}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Awaiting payment
+                  </p>
                 </div>
                 <div className="p-1.5 bg-amber-100 rounded-md shrink-0">
                   <CreditCard className="h-4 w-4 text-amber-600" />
@@ -1801,8 +2675,12 @@ const EmployeeDashboard = () => {
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-xs text-muted-foreground">Sales</p>
-                  <p className="text-base sm:text-lg font-bold text-emerald-700 truncate">{formatINR(todayStats.salesToday)}</p>
-                  <p className="text-xs text-muted-foreground">Total collected</p>
+                  <p className="text-base sm:text-lg font-bold text-emerald-700 truncate">
+                    {formatINR(todayStats.salesToday)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Total collected
+                  </p>
                 </div>
                 <div className="p-1.5 bg-emerald-100 rounded-md shrink-0">
                   <IndianRupee className="h-4 w-4 text-emerald-600" />
@@ -1814,11 +2692,16 @@ const EmployeeDashboard = () => {
 
         {/* Quick Actions - same card style as admin */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3">
-          <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100 min-w-0 hover:border-blue-200 cursor-pointer transition-colors" onClick={() => setActiveSection("live")}>
+          <Card
+            className="bg-gradient-to-br from-blue-50 to-white border-blue-100 min-w-0 hover:border-blue-200 cursor-pointer transition-colors"
+            onClick={() => setActiveSection("live")}
+          >
             <CardContent className="p-2 sm:p-3 flex items-center justify-between gap-2">
               <div className="min-w-0">
                 <p className="text-xs text-muted-foreground">Live Orders</p>
-                <p className="text-base sm:text-lg font-bold text-blue-700">{liveOrders.length} active</p>
+                <p className="text-base sm:text-lg font-bold text-blue-700">
+                  {liveOrders.length} active
+                </p>
               </div>
               <div className="p-1.5 bg-blue-100 rounded-md shrink-0">
                 <ShoppingCart className="h-4 w-4 text-blue-600" />
@@ -1827,11 +2710,18 @@ const EmployeeDashboard = () => {
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-amber-50 to-white border-amber-100 min-w-0 hover:border-amber-200 cursor-pointer transition-colors" onClick={() => setActiveSection("pending")}>
+          <Card
+            className="bg-gradient-to-br from-amber-50 to-white border-amber-100 min-w-0 hover:border-amber-200 cursor-pointer transition-colors"
+            onClick={() => setActiveSection("pending")}
+          >
             <CardContent className="p-2 sm:p-3 flex items-center justify-between gap-2">
               <div className="min-w-0">
-                <p className="text-xs text-muted-foreground">Pending Payments</p>
-                <p className="text-base sm:text-lg font-bold text-amber-700">{pendingPayments.length} to collect</p>
+                <p className="text-xs text-muted-foreground">
+                  Pending Payments
+                </p>
+                <p className="text-base sm:text-lg font-bold text-amber-700">
+                  {pendingPayments.length} to collect
+                </p>
               </div>
               <div className="p-1.5 bg-amber-100 rounded-md shrink-0">
                 <CreditCard className="h-4 w-4 text-amber-600" />
@@ -1840,11 +2730,16 @@ const EmployeeDashboard = () => {
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-emerald-50 to-white border-emerald-100 min-w-0 hover:border-emerald-200 cursor-pointer transition-colors" onClick={() => setActiveSection("shift")}>
+          <Card
+            className="bg-gradient-to-br from-emerald-50 to-white border-emerald-100 min-w-0 hover:border-emerald-200 cursor-pointer transition-colors"
+            onClick={() => setActiveSection("shift")}
+          >
             <CardContent className="p-2 sm:p-3 flex items-center justify-between gap-2">
               <div className="min-w-0">
                 <p className="text-xs text-muted-foreground">My Shift</p>
-                <p className="text-base sm:text-lg font-bold text-emerald-700">View details</p>
+                <p className="text-base sm:text-lg font-bold text-emerald-700">
+                  View details
+                </p>
               </div>
               <div className="p-1.5 bg-emerald-100 rounded-md shrink-0">
                 <Clock className="h-4 w-4 text-emerald-600" />
@@ -1858,7 +2753,9 @@ const EmployeeDashboard = () => {
         <Card className="overflow-hidden">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg">Recent Orders</CardTitle>
-            <CardDescription className="text-muted-foreground">Latest 5 orders · Tap to open</CardDescription>
+            <CardDescription className="text-muted-foreground">
+              Latest 5 orders · Tap to open
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
@@ -1877,32 +2774,57 @@ const EmployeeDashboard = () => {
                     </div>
                     <div className="min-w-0">
                       <p className="font-semibold text-slate-900">
-                        Table {order.table?.tableNumber ?? order.table?.id ?? "—"}
+                        Table{" "}
+                        {order.table?.tableNumber ?? order.table?.id ?? "—"}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {order.items.length} {order.items.length === 1 ? "item" : "items"} · {timeAgo(order.createdAt)}
+                        {order.items.length}{" "}
+                        {order.items.length === 1 ? "item" : "items"} ·{" "}
+                        {timeAgo(order.createdAt)}
                         {order.acceptedAt && order.completedAt && (
-                          <span className="block text-xs text-slate-600 mt-0.5">Time to complete: {formatTimeToComplete(order.acceptedAt, order.completedAt)}</span>
+                          <span className="block text-xs text-slate-600 mt-0.5">
+                            Time to complete:{" "}
+                            {formatTimeToComplete(
+                              order.acceptedAt,
+                              order.completedAt,
+                            )}
+                          </span>
                         )}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 sm:gap-3 shrink-0 flex-wrap">
-                    <Badge className={getStatusColor(order.status)} variant="secondary">
-                      {order.status === "ORDER_COMPLETE" ? "Complete" : order.status.replace("_", " ")}
+                    <Badge
+                      className={getStatusColor(order.status)}
+                      variant="secondary"
+                    >
+                      {order.status === "ORDER_COMPLETE"
+                        ? "Complete"
+                        : order.status.replace("_", " ")}
                     </Badge>
                     <Badge
-                      className={order.paymentStatus === "PAID" ? "bg-green-100 text-green-800 border-green-300" : "bg-amber-100 text-amber-800 border-amber-300"}
+                      className={
+                        order.paymentStatus === "PAID"
+                          ? "bg-green-100 text-green-800 border-green-300"
+                          : "bg-amber-100 text-amber-800 border-amber-300"
+                      }
                       variant="outline"
                     >
                       {order.paymentStatus === "PAID" ? "Paid" : "Pending"}
                     </Badge>
-                    <span className="font-bold text-emerald-700 whitespace-nowrap">{formatINR(order.totalAmount)}</span>
+                    <span className="font-bold text-emerald-700 whitespace-nowrap">
+                      {formatINR(order.totalAmount)}
+                    </span>
                   </div>
                 </div>
               ))}
               {orders.length === 0 && (
-                <p className="text-center text-muted-foreground py-8">No orders yet</p>
+                <div className="text-center py-8 text-muted-foreground">
+                  <p className="font-medium">No orders yet</p>
+                  <p className="text-sm mt-1">
+                    Orders will appear here when you have an active shift
+                  </p>
+                </div>
               )}
             </div>
           </CardContent>
@@ -1926,223 +2848,330 @@ const EmployeeDashboard = () => {
       formatTimeToComplete,
       timeAgo,
       openOrderPopup,
-    ]
+    ],
   );
 
   const shiftSectionContent = useMemo(
     () => (
       <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h2 className="text-lg font-bold sm:text-xl">My Shift</h2>
-          <p className="text-xs sm:text-sm text-muted-foreground">Track your shift and earnings</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h2 className="text-lg font-bold sm:text-xl">My Shift</h2>
+            <p className="text-xs sm:text-sm text-muted-foreground">
+              Track your shift and earnings
+            </p>
+          </div>
+          <Button
+            variant={shiftActive ? "destructive" : "default"}
+            size="lg"
+            disabled={shiftLoading}
+            onClick={shiftActive ? endShift : startShift}
+            className={`gap-2 shrink-0 w-full sm:w-auto ${!shiftActive && !shiftLoading ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""}`}
+          >
+            {shiftLoading ? (
+              <span className="inline-block h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            ) : shiftActive ? (
+              <Square className="h-4 w-4" />
+            ) : (
+              <Play className="h-4 w-4" />
+            )}
+            {shiftLoading
+              ? "Please wait..."
+              : shiftActive
+                ? "End Shift"
+                : "Start Shift"}
+          </Button>
         </div>
-        <Button
-          variant={shiftActive ? "destructive" : "default"}
-          size="lg"
-          disabled={shiftLoading}
-          onClick={shiftActive ? endShift : startShift}
-          className={`gap-2 shrink-0 w-full sm:w-auto ${!shiftActive && !shiftLoading ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""}`}
-        >
-          {shiftLoading ? <span className="inline-block h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : shiftActive ? <Square className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-          {shiftLoading ? "Please wait..." : shiftActive ? "End Shift" : "Start Shift"}
-        </Button>
-      </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3">
-        <Card className="bg-gradient-to-br from-emerald-50 to-white border-emerald-100 min-w-0">
-          <CardContent className="p-2 sm:p-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-xs text-muted-foreground">Shift Status</p>
-                <p className={`text-base sm:text-lg font-bold truncate ${shiftActive ? "text-emerald-700" : "text-slate-700"}`}>
-                  {currentShift?.status === "PAUSED" ? "Paused" : shiftActive ? "Active" : "Inactive"}
-                </p>
-                {currentShift?.shiftStart && (
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Start: {new Date(currentShift.shiftStart).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3">
+          <Card className="bg-gradient-to-br from-emerald-50 to-white border-emerald-100 min-w-0">
+            <CardContent className="p-2 sm:p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">Shift Status</p>
+                  <p
+                    className={`text-base sm:text-lg font-bold truncate ${shiftActive ? "text-emerald-700" : "text-slate-700"}`}
+                  >
+                    {currentShift?.status === "PAUSED"
+                      ? "Paused"
+                      : shiftActive
+                        ? "Active"
+                        : "Inactive"}
                   </p>
-                )}
-                {shiftActive && currentShift?.shiftStart && (
-                  <>
-                    <p className="text-xs mt-1">
-                      <span className="inline-block font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2 py-0.5">
-                        Live: {(() => {
-                          const ms = currentTime.getTime() - new Date(currentShift.shiftStart).getTime();
-                          const totalMins = Math.max(0, Math.floor(ms / 60000));
-                          const h = Math.floor(totalMins / 60);
-                          const m = totalMins % 60;
-                          return `${h}h ${m}m`;
-                        })()}
-                      </span>
+                  {currentShift?.shiftStart && (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Start:{" "}
+                      {new Date(currentShift.shiftStart).toLocaleTimeString(
+                        "en-IN",
+                        { hour: "2-digit", minute: "2-digit" },
+                      )}
                     </p>
-                    {(() => {
-                      const ms = currentTime.getTime() - new Date(currentShift.shiftStart).getTime();
-                      if (ms / (1000 * 60 * 60) > 10) return <p className="text-xs font-medium text-amber-600">Overtime</p>;
-                      return null;
-                    })()}
-                  </>
-                )}
-                {shiftActive && (
-                  <div className="mt-2 flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={async () => {
-                        if (!token) return;
-                        const endpoint = currentShift?.status === "PAUSED" ? "resume" : "pause";
-                        const res = await fetch(`${apiBase}/shift/${endpoint}`, {
-                          method: "POST",
-                          headers: { Authorization: `Bearer ${token}` },
-                        });
-                        if (res.ok) {
-                          const data = await res.json().catch(() => null);
-                          if (data) setCurrentShift((prev) => (prev ? { ...prev, ...data } : prev));
-                          toast.success(data?.message || (endpoint === "pause" ? "Status set to Paused." : "Back to Active."));
-                        } else {
-                          const err = await res.json().catch(() => ({}));
-                          toast.error(err.message || "Failed");
-                        }
-                      }}
-                    >
-                      {currentShift?.status === "PAUSED" ? "Resume" : "Pause"}
-                    </Button>
-                  </div>
-                )}
+                  )}
+                  {shiftActive && currentShift?.shiftStart && (
+                    <>
+                      <p className="text-xs mt-1">
+                        <span className="inline-block font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2 py-0.5">
+                          Live:{" "}
+                          {(() => {
+                            const ms =
+                              currentTime.getTime() -
+                              new Date(currentShift.shiftStart).getTime();
+                            const totalMins = Math.max(
+                              0,
+                              Math.floor(ms / 60000),
+                            );
+                            const h = Math.floor(totalMins / 60);
+                            const m = totalMins % 60;
+                            return `${h}h ${m}m`;
+                          })()}
+                        </span>
+                      </p>
+                      {(() => {
+                        const ms =
+                          currentTime.getTime() -
+                          new Date(currentShift.shiftStart).getTime();
+                        if (ms / (1000 * 60 * 60) > 10)
+                          return (
+                            <p className="text-xs font-medium text-amber-600">
+                              Overtime
+                            </p>
+                          );
+                        return null;
+                      })()}
+                    </>
+                  )}
+                  {shiftActive && (
+                    <div className="mt-2 flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={async () => {
+                          if (!token) return;
+                          const endpoint =
+                            currentShift?.status === "PAUSED"
+                              ? "resume"
+                              : "pause";
+                          const res = await fetch(
+                            `${apiBase}/shift/${endpoint}`,
+                            {
+                              method: "POST",
+                              headers: { Authorization: `Bearer ${token}` },
+                            },
+                          );
+                          if (res.ok) {
+                            const data = await res.json().catch(() => null);
+                            if (data)
+                              setCurrentShift((prev) =>
+                                prev ? { ...prev, ...data } : prev,
+                              );
+                            toast.success(
+                              data?.message ||
+                                (endpoint === "pause"
+                                  ? "Status set to Paused."
+                                  : "Back to Active."),
+                            );
+                          } else {
+                            const err = await res.json().catch(() => ({}));
+                            toast.error(err.message || "Failed");
+                          }
+                        }}
+                      >
+                        {currentShift?.status === "PAUSED" ? "Resume" : "Pause"}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                <div className="p-1.5 bg-emerald-100 rounded-md shrink-0">
+                  <Clock className="h-4 w-4 text-emerald-600" />
+                </div>
               </div>
-              <div className="p-1.5 bg-emerald-100 rounded-md shrink-0">
-                <Clock className="h-4 w-4 text-emerald-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100 min-w-0">
-          <CardContent className="p-2 sm:p-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-xs text-muted-foreground">Orders Handled</p>
-                <p className="text-base sm:text-lg font-bold text-blue-700 truncate">{currentShift?.ordersCount ?? 0}</p>
+          <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100 min-w-0">
+            <CardContent className="p-2 sm:p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">
+                    Orders Handled
+                  </p>
+                  <p className="text-base sm:text-lg font-bold text-blue-700 truncate">
+                    {currentShift?.ordersCount ?? 0}
+                  </p>
+                </div>
+                <div className="p-1.5 bg-blue-100 rounded-md shrink-0">
+                  <ShoppingCart className="h-4 w-4 text-blue-600" />
+                </div>
               </div>
-              <div className="p-1.5 bg-blue-100 rounded-md shrink-0">
-                <ShoppingCart className="h-4 w-4 text-blue-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        <Card className="bg-gradient-to-br from-green-50 to-white border-green-100 min-w-0">
-          <CardContent className="p-2 sm:p-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-xs text-muted-foreground">Sales Collected</p>
-                <p className="text-base sm:text-lg font-bold text-green-700 truncate">{formatINR(todayStats.salesToday)}</p>
+          <Card className="bg-gradient-to-br from-green-50 to-white border-green-100 min-w-0">
+            <CardContent className="p-2 sm:p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">
+                    Sales Collected
+                  </p>
+                  <p className="text-base sm:text-lg font-bold text-green-700 truncate">
+                    {formatINR(todayStats.salesToday)}
+                  </p>
+                </div>
+                <div className="p-1.5 bg-green-100 rounded-md shrink-0">
+                  <IndianRupee className="h-4 w-4 text-green-600" />
+                </div>
               </div>
-              <div className="p-1.5 bg-green-100 rounded-md shrink-0">
-                <IndianRupee className="h-4 w-4 text-green-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
+        </div>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg">Shift History</CardTitle>
-          <CardDescription className="text-muted-foreground">Your recent shifts and hours</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {myDailyShiftStats.length > 0 && (
-            <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-3">
-              {myDailyShiftStats.slice(0, 6).map((d) => {
-                const isToday = isSameDay(d.date, new Date().toISOString());
-                const activeShiftToday = isToday && currentShift && !currentShift.shiftEnd && isSameDay(currentShift.shiftStart, new Date().toISOString());
-                const displayHours = activeShiftToday
-                  ? getElapsedHours(currentShift!.shiftStart, currentShift!.shiftEnd, currentTime)
-                  : d.totalHours;
-                return (
-                  <div key={d.date} className="rounded-lg border bg-white p-3 text-sm">
-                    <p className="font-medium">{new Date(d.date).toLocaleDateString("en-IN")}</p>
-                    <p className="text-muted-foreground">
-                      Hours: {formatHours(displayHours, activeShiftToday)}
-                    </p>
-                    <p className="text-muted-foreground">Shifts: {d.shifts}</p>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          {myShiftHistory.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">No shift history yet</p>
-          ) : (
-            <>
-              {/* Mobile: card list */}
-              <div className="space-y-2 md:hidden">
-                {myShiftHistory.slice(0, 20).map((s) => {
-                  const isActive = !s.shiftEnd;
-                  const hours = isActive
-                    ? getElapsedHours(s.shiftStart, s.shiftEnd, currentTime)
-                    : (s.totalHours ?? 0);
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">Shift History</CardTitle>
+            <CardDescription className="text-muted-foreground">
+              Your recent shifts and hours
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {myDailyShiftStats.length > 0 && (
+              <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+                {myDailyShiftStats.slice(0, 6).map((d) => {
+                  const isToday = isSameDay(d.date, new Date().toISOString());
+                  const activeShiftToday =
+                    isToday &&
+                    currentShift &&
+                    !currentShift.shiftEnd &&
+                    isSameDay(
+                      currentShift.shiftStart,
+                      new Date().toISOString(),
+                    );
+                  const displayHours = activeShiftToday
+                    ? getElapsedHours(
+                        currentShift!.shiftStart,
+                        currentShift!.shiftEnd,
+                        currentTime,
+                      )
+                    : d.totalHours;
                   return (
                     <div
-                      key={s.id}
-                      className="rounded-lg border bg-slate-50/50 p-3 text-sm grid grid-cols-2 gap-x-3 gap-y-1"
+                      key={d.date}
+                      className="rounded-lg border bg-white p-3 text-sm"
                     >
-                      <span className="text-muted-foreground">Date</span>
-                      <span className="font-medium">{new Date(s.shiftStart).toLocaleDateString("en-IN")}</span>
-                      <span className="text-muted-foreground">In</span>
-                      <span>{new Date(s.shiftStart).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</span>
-                      <span className="text-muted-foreground">Out</span>
-                      <span>
-                        {s.shiftEnd
-                          ? new Date(s.shiftEnd).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
-                          : "—"}
-                      </span>
-                      <span className="text-muted-foreground">Hours</span>
-                      <span className="font-medium">{formatHours(hours, isActive)}</span>
+                      <p className="font-medium">
+                        {new Date(d.date).toLocaleDateString("en-IN")}
+                      </p>
+                      <p className="text-muted-foreground">
+                        Hours: {formatHours(displayHours, activeShiftToday)}
+                      </p>
+                      <p className="text-muted-foreground">
+                        Shifts: {d.shifts}
+                      </p>
                     </div>
                   );
                 })}
               </div>
-              {/* Desktop: table */}
-              <div className="hidden md:block overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-slate-50 text-left">
-                      <th className="p-2 font-medium">Date</th>
-                      <th className="p-2 font-medium">In</th>
-                      <th className="p-2 font-medium">Out</th>
-                      <th className="p-2 font-medium text-right">Hours</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {myShiftHistory.slice(0, 20).map((s) => {
-                      const isActive = !s.shiftEnd;
-                      const hours = isActive
-                        ? getElapsedHours(s.shiftStart, s.shiftEnd, currentTime)
-                        : (s.totalHours ?? 0);
-                      return (
-                        <tr key={s.id} className="border-b last:border-b-0">
-                          <td className="p-2">{new Date(s.shiftStart).toLocaleDateString("en-IN")}</td>
-                          <td className="p-2">{new Date(s.shiftStart).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</td>
-                          <td className="p-2">
-                            {s.shiftEnd
-                              ? new Date(s.shiftEnd).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
-                              : "—"}
-                          </td>
-                          <td className="p-2 text-right font-medium">
-                            {formatHours(hours, isActive)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
+            )}
+            {myShiftHistory.length === 0 ? (
+              <p className="text-muted-foreground text-center py-8">
+                No shift history yet
+              </p>
+            ) : (
+              <>
+                {/* Mobile: card list */}
+                <div className="space-y-2 md:hidden">
+                  {myShiftHistory.slice(0, 20).map((s) => {
+                    const isActive = !s.shiftEnd;
+                    const hours = isActive
+                      ? getElapsedHours(s.shiftStart, s.shiftEnd, currentTime)
+                      : (s.totalHours ?? 0);
+                    return (
+                      <div
+                        key={s.id}
+                        className="rounded-lg border bg-slate-50/50 p-3 text-sm grid grid-cols-2 gap-x-3 gap-y-1"
+                      >
+                        <span className="text-muted-foreground">Date</span>
+                        <span className="font-medium">
+                          {new Date(s.shiftStart).toLocaleDateString("en-IN")}
+                        </span>
+                        <span className="text-muted-foreground">In</span>
+                        <span>
+                          {new Date(s.shiftStart).toLocaleTimeString("en-IN", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                        <span className="text-muted-foreground">Out</span>
+                        <span>
+                          {s.shiftEnd
+                            ? new Date(s.shiftEnd).toLocaleTimeString("en-IN", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "—"}
+                        </span>
+                        <span className="text-muted-foreground">Hours</span>
+                        <span className="font-medium">
+                          {formatHours(hours, isActive)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Desktop: table */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 text-left">
+                        <th className="p-2 font-medium">Date</th>
+                        <th className="p-2 font-medium">In</th>
+                        <th className="p-2 font-medium">Out</th>
+                        <th className="p-2 font-medium text-right">Hours</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {myShiftHistory.slice(0, 20).map((s) => {
+                        const isActive = !s.shiftEnd;
+                        const hours = isActive
+                          ? getElapsedHours(
+                              s.shiftStart,
+                              s.shiftEnd,
+                              currentTime,
+                            )
+                          : (s.totalHours ?? 0);
+                        return (
+                          <tr key={s.id} className="border-b last:border-b-0">
+                            <td className="p-2">
+                              {new Date(s.shiftStart).toLocaleDateString(
+                                "en-IN",
+                              )}
+                            </td>
+                            <td className="p-2">
+                              {new Date(s.shiftStart).toLocaleTimeString(
+                                "en-IN",
+                                { hour: "2-digit", minute: "2-digit" },
+                              )}
+                            </td>
+                            <td className="p-2">
+                              {s.shiftEnd
+                                ? new Date(s.shiftEnd).toLocaleTimeString(
+                                    "en-IN",
+                                    { hour: "2-digit", minute: "2-digit" },
+                                  )
+                                : "—"}
+                            </td>
+                            <td className="p-2 text-right font-medium">
+                              {formatHours(hours, isActive)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
       </div>
     ),
     [
@@ -2158,7 +3187,7 @@ const EmployeeDashboard = () => {
       myDailyShiftStats,
       myShiftHistory,
       formatINR,
-    ]
+    ],
   );
 
   const profileSectionContent = useMemo(
@@ -2166,7 +3195,9 @@ const EmployeeDashboard = () => {
       <div className="space-y-4">
         <div className="min-w-0">
           <h2 className="text-lg font-bold sm:text-xl">My Profile</h2>
-          <p className="text-xs sm:text-sm text-muted-foreground">Your account details</p>
+          <p className="text-xs sm:text-sm text-muted-foreground">
+            Your account details
+          </p>
         </div>
         <Card>
           <CardHeader className="pb-3">
@@ -2177,8 +3208,12 @@ const EmployeeDashboard = () => {
                 </AvatarFallback>
               </Avatar>
               <div className="min-w-0">
-                <CardTitle className="text-lg">{profile?.name ?? "Employee"}</CardTitle>
-                <CardDescription>{profile?.employeeCode ?? "—"}</CardDescription>
+                <CardTitle className="text-lg">
+                  {profile?.name ?? "Employee"}
+                </CardTitle>
+                <CardDescription>
+                  {profile?.employeeCode ?? "—"}
+                </CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -2191,11 +3226,15 @@ const EmployeeDashboard = () => {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Employee Code</p>
-                <p className="text-sm font-medium">{profile?.employeeCode ?? "—"}</p>
+                <p className="text-sm font-medium">
+                  {profile?.employeeCode ?? "—"}
+                </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Branch</p>
-                <p className="text-sm font-medium">{profile?.branch?.name ?? "—"}</p>
+                <p className="text-sm font-medium">
+                  {profile?.branch?.name ?? "—"}
+                </p>
               </div>
               {profile?.phone && (
                 <div>
@@ -2206,7 +3245,10 @@ const EmployeeDashboard = () => {
               {profile?.address && (
                 <div className="sm:col-span-2">
                   <p className="text-xs text-muted-foreground">Address</p>
-                  <p className="text-sm font-medium">{profile.address}{profile.pincode ? ` - ${profile.pincode}` : ""}</p>
+                  <p className="text-sm font-medium">
+                    {profile.address}
+                    {profile.pincode ? ` - ${profile.pincode}` : ""}
+                  </p>
                 </div>
               )}
             </div>
@@ -2214,7 +3256,7 @@ const EmployeeDashboard = () => {
         </Card>
       </div>
     ),
-    [profile]
+    [profile],
   );
 
   const StartShiftPromptDialog = () => (
@@ -2222,10 +3264,19 @@ const EmployeeDashboard = () => {
       open={showStartShiftPrompt}
       onOpenChange={(open) => {
         setShowStartShiftPrompt(open);
-        if (!open) window.sessionStorage.setItem("dm_shift_prompt_dismissed_" + new Date().toISOString().slice(0, 10), "1");
+        if (!open)
+          window.sessionStorage.setItem(
+            "dm_shift_prompt_dismissed_" +
+              new Date().toISOString().slice(0, 10),
+            "1",
+          );
       }}
     >
-      <DialogContent className="max-w-md" aria-describedby="start-shift-desc" aria-label="Start shift">
+      <DialogContent
+        className="max-w-md"
+        aria-describedby="start-shift-desc"
+        aria-label="Start shift"
+      >
         <DialogHeader>
           <DialogTitle id="start-shift-title">Start shift?</DialogTitle>
           <DialogDescription id="start-shift-desc">
@@ -2238,7 +3289,11 @@ const EmployeeDashboard = () => {
           <Button
             variant="outline"
             onClick={() => {
-              window.sessionStorage.setItem("dm_shift_prompt_dismissed_" + new Date().toISOString().slice(0, 10), "1");
+              window.sessionStorage.setItem(
+                "dm_shift_prompt_dismissed_" +
+                  new Date().toISOString().slice(0, 10),
+                "1",
+              );
               setShowStartShiftPrompt(false);
             }}
           >
@@ -2264,10 +3319,17 @@ const EmployeeDashboard = () => {
   const newOrderPopupCards = useMemo(
     () =>
       newOrderPopupOrders.map((order) => (
-        <div key={order.id} className="rounded-lg border-2 border-emerald-200 bg-emerald-50/50 p-3 text-sm">
+        <div
+          key={order.id}
+          className="rounded-lg border-2 border-emerald-200 bg-emerald-50/50 p-3 text-sm"
+        >
           <div className="flex items-center justify-between gap-2">
-            <span className="font-semibold">Table {order.table?.tableNumber || order.table?.id || "?"}</span>
-            <Badge className={getPriorityBadgeClass(order)}>{getPriorityLabel(order)}</Badge>
+            <span className="font-semibold">
+              Table {order.table?.tableNumber || order.table?.id || "?"}
+            </span>
+            <Badge className={getPriorityBadgeClass(order)}>
+              {getPriorityLabel(order)}
+            </Badge>
           </div>
           <p className="text-muted-foreground mt-0.5">
             Order #{order.id} · {formatPopupTime(order.createdAt)}
@@ -2275,14 +3337,17 @@ const EmployeeDashboard = () => {
           <ul className="mt-2 space-y-0.5 font-medium text-slate-800">
             {order.items.map((item) => (
               <li key={item.id}>
-                {item.quantity}× {formatItemDisplayName(item.name, item.variant)}
+                {item.quantity}×{" "}
+                {formatItemDisplayName(item.name, item.variant)}
               </li>
             ))}
           </ul>
-          <p className="font-bold mt-2 text-emerald-700">{formatINR(order.totalAmount)}</p>
+          <p className="font-bold mt-2 text-emerald-700">
+            {formatINR(order.totalAmount)}
+          </p>
         </div>
       )),
-    [newOrderPopupOrders]
+    [newOrderPopupOrders],
   );
 
   const NewOrderPopupDialog = () => {
@@ -2294,21 +3359,28 @@ const EmployeeDashboard = () => {
           if (!open) setNewOrderPopupOrders([]);
         }}
       >
-        <DialogContent className="max-w-md" aria-describedby="new-order-popup-desc">
+        <DialogContent
+          className="max-w-md"
+          aria-describedby="new-order-popup-desc"
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Bell className="h-5 w-5 text-blue-600" />
               New order(s) received
             </DialogTitle>
             <DialogDescription id="new-order-popup-desc">
-              {newOrderPopupOrders.length} new order{newOrderPopupOrders.length !== 1 ? "s" : ""} need your attention.
+              {newOrderPopupOrders.length} new order
+              {newOrderPopupOrders.length !== 1 ? "s" : ""} need your attention.
             </DialogDescription>
           </DialogHeader>
           <ScrollArea className="max-h-[280px] pr-2">
             <div className="space-y-3">{newOrderPopupCards}</div>
           </ScrollArea>
           <div className="flex gap-2 justify-end pt-2">
-            <Button variant="outline" onClick={() => setNewOrderPopupOrders([])}>
+            <Button
+              variant="outline"
+              onClick={() => setNewOrderPopupOrders([])}
+            >
               Dismiss
             </Button>
             <Button
@@ -2329,7 +3401,7 @@ const EmployeeDashboard = () => {
   // Frozen snapshot for dialog – same reference while popup is open so memoized OrderPopupDialogView doesn't re-render on poll
   const orderPopupDisplayOrder = useMemo(
     () => popupDisplayOrder ?? selectedOrder ?? null,
-    [popupDisplayOrder, selectedOrder]
+    [popupDisplayOrder, selectedOrder],
   );
 
   const handleOrderPopupOpenChange = useCallback((open: boolean) => {
@@ -2356,7 +3428,16 @@ const EmployeeDashboard = () => {
         formatTimeToComplete={formatTimeToComplete}
       />
     ),
-    [completedOrders, loading, actionOrderId, openOrderPopup, confirmPayment, formatINR, getStatusColor, formatTimeToComplete]
+    [
+      completedOrders,
+      loading,
+      actionOrderId,
+      openOrderPopup,
+      confirmPayment,
+      formatINR,
+      getStatusColor,
+      formatTimeToComplete,
+    ],
   );
   const pendingSectionContent = useMemo(
     () => (
@@ -2373,7 +3454,16 @@ const EmployeeDashboard = () => {
         formatTimeToComplete={formatTimeToComplete}
       />
     ),
-    [pendingPayments, loading, actionOrderId, openOrderPopup, confirmPayment, formatINR, getStatusColor, formatTimeToComplete]
+    [
+      pendingPayments,
+      loading,
+      actionOrderId,
+      openOrderPopup,
+      confirmPayment,
+      formatINR,
+      getStatusColor,
+      formatTimeToComplete,
+    ],
   );
   const paidSectionContent = useMemo(
     () => (
@@ -2390,7 +3480,16 @@ const EmployeeDashboard = () => {
         formatTimeToComplete={formatTimeToComplete}
       />
     ),
-    [paidOrders, loading, actionOrderId, openOrderPopup, confirmPayment, formatINR, getStatusColor, formatTimeToComplete]
+    [
+      paidOrders,
+      loading,
+      actionOrderId,
+      openOrderPopup,
+      confirmPayment,
+      formatINR,
+      getStatusColor,
+      formatTimeToComplete,
+    ],
   );
 
   // Memoize entire content tree so cards do NOT re-render when only clock/other unrelated state updates
@@ -2415,10 +3514,13 @@ const EmployeeDashboard = () => {
       paidSectionContent,
       shiftSectionContent,
       profileSectionContent,
-    ]
+    ],
   );
 
-  const companyLogoUrl = typeof window !== "undefined" ? window.localStorage.getItem("branch_logo_url") : null;
+  const companyLogoUrl =
+    typeof window !== "undefined"
+      ? window.localStorage.getItem("branch_logo_url")
+      : null;
 
   // Skeleton layout so UI feels fast – no blank full-page spinner
   if (loading) {
@@ -2431,7 +3533,10 @@ const EmployeeDashboard = () => {
             <div className="h-8 w-48 rounded bg-slate-200/60 animate-pulse" />
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-24 rounded-xl bg-slate-200/60 animate-pulse" />
+                <div
+                  key={i}
+                  className="h-24 rounded-xl bg-slate-200/60 animate-pulse"
+                />
               ))}
             </div>
             <div className="h-64 rounded-xl bg-slate-200/60 animate-pulse" />
@@ -2445,11 +3550,18 @@ const EmployeeDashboard = () => {
     <DashboardShell
       role="EMPLOYEE"
       userName={profile?.name ?? "Employee"}
-      branchName={profile?.branch?.name && !/^main(\s+branch)?$/i.test(profile.branch.name.trim()) ? profile.branch.name.trim() : "Gautam Nagar"}
+      branchName={
+        profile?.branch?.name &&
+        !/^main(\s+branch)?$/i.test(profile.branch.name.trim())
+          ? profile.branch.name.trim()
+          : "Gautam Nagar"
+      }
       sidebarItems={sidebarItems}
       activeKey={activeSection}
       onSelect={setActiveSection}
-      sidebarBadges={liveOrders.length > 0 ? { live: liveOrders.length } : undefined}
+      sidebarBadges={
+        liveOrders.length > 0 ? { live: liveOrders.length } : undefined
+      }
       companyLogoUrl={companyLogoUrl || undefined}
     >
       {content}
@@ -2481,4 +3593,3 @@ const EmployeeDashboard = () => {
 };
 
 export default EmployeeDashboard;
-

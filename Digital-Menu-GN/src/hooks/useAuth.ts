@@ -7,26 +7,31 @@ export type AuthRole = "ADMIN" | "EMPLOYEE";
 
 export function useAuth() {
   const [token, setTokenState] = useState<string | null>(() =>
-    typeof window !== "undefined" ? window.sessionStorage.getItem(TOKEN_KEY) : null
+    typeof window !== "undefined"
+      ? window.sessionStorage.getItem(TOKEN_KEY)
+      : null,
   );
   const [role, setRoleState] = useState<AuthRole | null>(() =>
     typeof window !== "undefined"
       ? (window.sessionStorage.getItem(ROLE_KEY) as AuthRole | null)
-      : null
+      : null,
   );
 
-  const setAuth = useCallback((newToken: string | null, newRole: AuthRole | null) => {
-    if (typeof window === "undefined") return;
-    if (newToken) {
-      window.sessionStorage.setItem(TOKEN_KEY, newToken);
-      if (newRole) window.sessionStorage.setItem(ROLE_KEY, newRole);
-    } else {
-      window.sessionStorage.removeItem(TOKEN_KEY);
-      window.sessionStorage.removeItem(ROLE_KEY);
-    }
-    setTokenState(newToken);
-    setRoleState(newRole);
-  }, []);
+  const setAuth = useCallback(
+    (newToken: string | null, newRole: AuthRole | null) => {
+      if (typeof window === "undefined") return;
+      if (newToken) {
+        window.sessionStorage.setItem(TOKEN_KEY, newToken);
+        if (newRole) window.sessionStorage.setItem(ROLE_KEY, newRole);
+      } else {
+        window.sessionStorage.removeItem(TOKEN_KEY);
+        window.sessionStorage.removeItem(ROLE_KEY);
+      }
+      setTokenState(newToken);
+      setRoleState(newRole);
+    },
+    [],
+  );
 
   const logout = useCallback(() => {
     setAuth(null, null);
@@ -46,6 +51,6 @@ export function useAuth() {
       isEmployee,
       isAuthenticated: !!token,
     }),
-    [token, role, setAuth, logout, isAdmin, isEmployee]
+    [token, role, setAuth, logout, isAdmin, isEmployee],
   );
 }

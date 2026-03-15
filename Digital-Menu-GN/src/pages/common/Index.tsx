@@ -1,13 +1,34 @@
 import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
 import { useNavigate } from "react-router-dom";
-import { MapPin, Phone, QrCode, Search, Utensils, X, Minus, Plus, Trash2, ShoppingBag, MessageCircle, AlertCircle, HelpCircle, Loader2 } from "lucide-react";
+import {
+  MapPin,
+  Phone,
+  QrCode,
+  Search,
+  Utensils,
+  X,
+  Minus,
+  Plus,
+  Trash2,
+  ShoppingBag,
+  MessageCircle,
+  AlertCircle,
+  HelpCircle,
+  Loader2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogTrigger,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { AnimatePresence, motion } from "framer-motion";
 import QRCodeGenerator from "@/components/QRCodeGenerator";
 import LocationMap from "@/components/LocationMap";
 import { useToast } from "@/hooks/use-toast";
-import { API_BASE_URL } from "@/constants";
+import { API_BASE_URL, fetchWithTimeout } from "@/constants";
 import cafeLogo from "@/assets/logo.png";
 
 type CartItem = {
@@ -38,7 +59,12 @@ function OrderCartDialog({
   incrementCartItem: (id: string) => void;
   decrementCartItem: (id: string) => void;
   removeCartItem: (id: string) => void;
-  onCheckout: (formData: { customerName: string; customerMobile: string; tableNumber: string; packaging: boolean }) => Promise<void>; // customerMobile optional – for WhatsApp invoice
+  onCheckout: (formData: {
+    customerName: string;
+    customerMobile: string;
+    tableNumber: string;
+    packaging: boolean;
+  }) => Promise<void>; // customerMobile optional – for WhatsApp invoice
   isSubmittingOrder: boolean;
   lastCustomerName: string;
   lastCustomerMobile: string;
@@ -57,7 +83,7 @@ function OrderCartDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} key="order-cart-dialog">
-      <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
+      <DialogContent className="sm:max-w-lg max-h-[80dvh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>Your Order</DialogTitle>
         </DialogHeader>
@@ -121,7 +147,9 @@ function OrderCartDialog({
         <div className="border-t pt-3 mt-2 space-y-2">
           <div className="flex flex-col gap-2 text-xs sm:text-sm">
             <label className="flex flex-col gap-1">
-              <span className="font-semibold text-olive-900">Your name <span className="text-red-500">*</span></span>
+              <span className="font-semibold text-olive-900">
+                Your name <span className="text-red-500">*</span>
+              </span>
               <input
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
@@ -130,26 +158,46 @@ function OrderCartDialog({
               />
             </label>
             <label className="flex flex-col gap-1">
-              <span className="font-semibold text-olive-900">Mobile number <span className="font-normal text-muted-foreground">(optional)</span></span>
+              <span className="font-semibold text-olive-900">
+                Mobile number{" "}
+                <span className="font-normal text-muted-foreground">
+                  (optional)
+                </span>
+              </span>
               <input
                 type="tel"
                 inputMode="numeric"
                 maxLength={10}
                 value={customerMobile}
-                onChange={(e) => setCustomerMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                onChange={(e) =>
+                  setCustomerMobile(
+                    e.target.value.replace(/\D/g, "").slice(0, 10),
+                  )
+                }
                 placeholder="10-digit for invoice on WhatsApp"
                 className="w-full rounded-md border px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600"
               />
-              <span className="text-[10px] text-muted-foreground">Add number to receive order confirmation & invoice on WhatsApp</span>
+              <span className="text-[10px] text-muted-foreground">
+                Add number to receive order confirmation & invoice on WhatsApp
+              </span>
             </label>
             <label className="flex flex-col gap-1">
               <span className="font-semibold text-olive-900">
-                Table number {packaging && <span className="font-normal text-muted-foreground">(optional for takeaway)</span>}
+                Table number{" "}
+                {packaging && (
+                  <span className="font-normal text-muted-foreground">
+                    (optional for takeaway)
+                  </span>
+                )}
               </span>
               <input
                 value={tableNumber}
                 onChange={(e) => setTableNumber(e.target.value)}
-                placeholder={packaging ? "Optional (e.g., T1, 5)" : "Enter your table number (e.g., T1, 5)"}
+                placeholder={
+                  packaging
+                    ? "Optional (e.g., T1, 5)"
+                    : "Enter your table number (e.g., T1, 5)"
+                }
                 className="w-full rounded-md border px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600"
               />
             </label>
@@ -175,12 +223,20 @@ function OrderCartDialog({
               !customerName.trim() ||
               (!packaging && !tableNumber.trim())
             }
-            onClick={() => onCheckout({ customerName, customerMobile, tableNumber, packaging })}
+            onClick={() =>
+              onCheckout({
+                customerName,
+                customerMobile,
+                tableNumber,
+                packaging,
+              })
+            }
           >
             {isSubmittingOrder ? "Placing Order..." : "Place Order"}
           </Button>
           <p className="text-[10px] text-muted-foreground text-center">
-            Show this screen to staff if there is any issue with order confirmation.
+            Show this screen to staff if there is any issue with order
+            confirmation.
           </p>
         </div>
       </DialogContent>
@@ -188,7 +244,8 @@ function OrderCartDialog({
   );
 }
 
-const DEFAULT_CATEGORY_IMAGE = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800&auto=format&fit=crop";
+const DEFAULT_CATEGORY_IMAGE =
+  "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800&auto=format&fit=crop";
 
 /** Lazy-render children when scrolled into view (with rootMargin). Keeps placeholder until in view for fast initial load on mobile. */
 function LazyInView({
@@ -207,7 +264,7 @@ function LazyInView({
     if (!el) return;
     const observer = new IntersectionObserver(
       ([entry]) => setInView((prev) => (entry.isIntersecting ? true : prev)),
-      { rootMargin, threshold: 0 }
+      { rootMargin, threshold: 0 },
     );
     observer.observe(el);
     return () => observer.disconnect();
@@ -238,23 +295,31 @@ const MenuCategoriesSection = memo(function MenuCategoriesSection({
   openCategoryKeys: string[];
   setOpenCategoryKeys: React.Dispatch<React.SetStateAction<string[]>>;
   bestSellerItemIds: number[];
-  addToCart: (itemName: string, price: number, variant?: "HALF" | "FULL") => void;
+  addToCart: (
+    itemName: string,
+    price: number,
+    variant?: "HALF" | "FULL",
+  ) => void;
   isLoadingMenu: boolean;
   menuLoadError: string | null;
   fetchMenu: () => void;
   lastToggledKeyRef: React.MutableRefObject<string | null>;
 }) {
   const displayCategories = useMemo(() => {
-    return menuCategories.map(cat => ({
+    return menuCategories.map((cat) => ({
       key: String(cat.id),
       title: cat.name || "Category",
-      image: cat.imageUrl && cat.imageUrl.trim() ? cat.imageUrl : DEFAULT_CATEGORY_IMAGE,
+      image:
+        cat.imageUrl && cat.imageUrl.trim()
+          ? cat.imageUrl
+          : DEFAULT_CATEGORY_IMAGE,
       items: Array.isArray(cat.items)
         ? cat.items.map((item: any) => ({
             name: item.name,
-            price: item.hasHalf && item.halfPrice
-              ? `₹${item.halfPrice} / ₹${item.basePrice}`
-              : `₹${item.basePrice}`,
+            price:
+              item.hasHalf && item.halfPrice
+                ? `₹${item.halfPrice} / ₹${item.basePrice}`
+                : `₹${item.basePrice}`,
             basePrice: item.basePrice,
             halfPrice: item.halfPrice,
             hasHalf: item.hasHalf,
@@ -269,20 +334,27 @@ const MenuCategoriesSection = memo(function MenuCategoriesSection({
       (cat) =>
         cat.title.toLowerCase().includes(categoryQuery.toLowerCase()) ||
         cat.items.some((item: any) =>
-          item.name.toLowerCase().includes(categoryQuery.toLowerCase())
-        )
+          item.name.toLowerCase().includes(categoryQuery.toLowerCase()),
+        ),
     );
-    const hasBestSeller = (s: typeof filtered[0]) =>
+    const hasBestSeller = (s: (typeof filtered)[0]) =>
       s.items.some((item: any) => bestSellerItemIds.includes(item.menuItemId));
-    return [...filtered].sort((a, b) => (hasBestSeller(b) ? 1 : 0) - (hasBestSeller(a) ? 1 : 0));
+    return [...filtered].sort(
+      (a, b) => (hasBestSeller(b) ? 1 : 0) - (hasBestSeller(a) ? 1 : 0),
+    );
   }, [displayCategories, categoryQuery, bestSellerItemIds]);
 
-  const openKeySet = useMemo(() => new Set(openCategoryKeys), [openCategoryKeys]);
+  const openKeySet = useMemo(
+    () => new Set(openCategoryKeys),
+    [openCategoryKeys],
+  );
 
   return (
     <>
       <div className="text-center">
-        <h2 className="text-2xl font-bold text-olive-900 sm:text-3xl">Menu Categories</h2>
+        <h2 className="text-2xl font-bold text-olive-900 sm:text-3xl">
+          Menu Categories
+        </h2>
         <p className="mt-2 text-sm text-olive-900/70 sm:text-base">
           Tap a category to open it.
         </p>
@@ -301,11 +373,14 @@ const MenuCategoriesSection = memo(function MenuCategoriesSection({
         </div>
       </div>
 
-      <div className="grid gap-3 sm:gap-4 lg:gap-6 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+      <div className="grid gap-3 sm:gap-4 lg:gap-6 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 w-full max-w-full min-w-0">
         {isLoadingMenu && (
           <>
             {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div key={i} className="rounded-xl border border-olive-200/60 bg-olive-50/50 overflow-hidden animate-pulse">
+              <div
+                key={i}
+                className="rounded-xl border border-olive-200/60 bg-olive-50/50 overflow-hidden animate-pulse"
+              >
                 <div className="h-28 sm:h-32 bg-olive-200/50" />
                 <div className="p-3 space-y-2">
                   <div className="h-4 w-3/4 rounded bg-olive-200/50" />
@@ -320,7 +395,12 @@ const MenuCategoriesSection = memo(function MenuCategoriesSection({
             <AlertCircle className="h-16 w-16 mx-auto mb-4 opacity-60 text-amber-500" />
             <p className="text-lg font-medium">Could not load menu</p>
             <p className="text-sm mt-1">{menuLoadError}</p>
-            <Button className="mt-4" variant="outline" size="sm" onClick={() => fetchMenu()}>
+            <Button
+              className="mt-4"
+              variant="outline"
+              size="sm"
+              onClick={() => fetchMenu()}
+            >
               Retry
             </Button>
           </div>
@@ -329,23 +409,32 @@ const MenuCategoriesSection = memo(function MenuCategoriesSection({
           <div className="col-span-full text-center py-16 text-muted-foreground">
             <Utensils className="h-16 w-16 mx-auto mb-4 opacity-40" />
             <p className="text-lg font-medium">Menu is being prepared.</p>
-            <p className="text-sm mt-1">Please check back shortly or ask staff.</p>
+            <p className="text-sm mt-1">
+              Please check back shortly or ask staff.
+            </p>
           </div>
         )}
-        {!isLoadingMenu && menuCategories.length > 0 && filteredCategories.length === 0 && (
-          <div className="col-span-full text-center py-8 text-muted-foreground">
-            No categories match your search.
-          </div>
-        )}
+        {!isLoadingMenu &&
+          menuCategories.length > 0 &&
+          filteredCategories.length === 0 && (
+            <div className="col-span-full text-center py-8 text-muted-foreground">
+              No categories match your search.
+            </div>
+          )}
         {filteredCategories.map((section) => {
           const categoryKey = section.key;
           const isOpen = openKeySet.has(categoryKey);
-          const isBestSeller = section.items.some((it: any) => bestSellerItemIds.includes(it.menuItemId));
+          const isBestSeller = section.items.some((it: any) =>
+            bestSellerItemIds.includes(it.menuItemId),
+          );
           return (
             <div key={categoryKey} className="contents">
               <LazyInView
                 placeholder={
-                  <div className="min-h-[120px] aspect-[4/5] w-full min-w-0 rounded-2xl bg-olive-100/50 animate-pulse ring-1 ring-black/5" aria-hidden />
+                  <div
+                    className="min-h-[120px] aspect-[4/5] w-full min-w-0 rounded-2xl bg-olive-100/50 animate-pulse ring-1 ring-black/5"
+                    aria-hidden
+                  />
                 }
                 rootMargin="400px"
               >
@@ -399,7 +488,9 @@ function MenuCategoryCard({
       onClick={() => {
         lastToggledKeyRef.current = categoryKey;
         setOpenCategoryKeys((prev) =>
-          prev.includes(categoryKey) ? prev.filter((k) => k !== categoryKey) : [...prev, categoryKey]
+          prev.includes(categoryKey)
+            ? prev.filter((k) => k !== categoryKey)
+            : [...prev, categoryKey],
         );
       }}
       className={[
@@ -408,7 +499,11 @@ function MenuCategoryCard({
         isBestSeller
           ? "ring-2 ring-amber-400 focus-visible:ring-amber-500 shadow-amber-200/50 shadow-lg"
           : "focus-visible:ring-emerald-700 focus-visible:ring-offset-emerald-50",
-        isSelected ? (isBestSeller ? "ring-2 ring-amber-500 -translate-y-0.5" : "ring-2 ring-emerald-600 -translate-y-0.5") : "ring-1 ring-black/5 hover:-translate-y-0.5",
+        isSelected
+          ? isBestSeller
+            ? "ring-2 ring-amber-500 -translate-y-0.5"
+            : "ring-2 ring-emerald-600 -translate-y-0.5"
+          : "ring-1 ring-black/5 hover:-translate-y-0.5",
       ].join(" ")}
       aria-pressed={isSelected}
     >
@@ -426,7 +521,8 @@ function MenuCategoryCard({
             loading="lazy"
             onError={(e) => {
               const el = e.currentTarget;
-              if (el.src !== DEFAULT_CATEGORY_IMAGE) el.src = DEFAULT_CATEGORY_IMAGE;
+              if (el.src !== DEFAULT_CATEGORY_IMAGE)
+                el.src = DEFAULT_CATEGORY_IMAGE;
             }}
           />
           <div className="absolute inset-x-0 bottom-0 h-[20%] bg-gradient-to-t from-black/65 via-black/20 to-transparent pointer-events-none" />
@@ -436,7 +532,9 @@ function MenuCategoryCard({
             </span>
           </div>
         </div>
-        <div className={`flex-shrink-0 min-h-[52px] max-h-[52px] px-3 py-2 flex items-center justify-start ${isBestSeller ? "bg-gradient-to-r from-amber-600 to-amber-700" : "bg-[#2E8B57]"}`}>
+        <div
+          className={`flex-shrink-0 min-h-[52px] max-h-[52px] px-3 py-2 flex items-center justify-start ${isBestSeller ? "bg-gradient-to-r from-amber-600 to-amber-700" : "bg-[#2E8B57]"}`}
+        >
           <h2 className="whitespace-normal break-words text-left text-sm font-extrabold leading-snug text-white sm:text-base line-clamp-2 min-w-0 flex-1">
             {section.title || categoryKey}
           </h2>
@@ -455,7 +553,11 @@ function MenuCategoryItemsPanel({
   section: { key: string; title: string; image: string; items: any[] };
   categoryKey: string;
   setOpenCategoryKeys: React.Dispatch<React.SetStateAction<string[]>>;
-  addToCart: (itemName: string, price: number, variant?: "HALF" | "FULL") => void;
+  addToCart: (
+    itemName: string,
+    price: number,
+    variant?: "HALF" | "FULL",
+  ) => void;
 }) {
   return (
     <motion.section
@@ -464,13 +566,13 @@ function MenuCategoryItemsPanel({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 8 }}
       transition={{ duration: 0.18, ease: "easeOut" }}
-      className="overflow-hidden rounded-2xl bg-white/95 shadow-sm ring-1 ring-black/5"
+      className="w-full max-w-full min-w-0 overflow-hidden rounded-2xl bg-white/95 shadow-sm ring-1 ring-black/5"
       aria-label={`${section.title} items`}
     >
-      <div className="border-b border-black/5 bg-gradient-to-r from-olive-50 to-white px-4 py-4 sm:px-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
+      <div className="border-b border-black/5 bg-gradient-to-r from-olive-50 to-white px-4 py-4 sm:px-5 min-w-0">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 min-w-0">
               <div className="min-w-0">
                 <div className="truncate text-base font-bold text-olive-950 sm:text-lg">
                   {section.title || categoryKey}
@@ -485,15 +587,20 @@ function MenuCategoryItemsPanel({
             type="button"
             variant="secondary"
             className="shrink-0 bg-white hover:bg-olive-50"
-            onClick={() => setOpenCategoryKeys((prev) => prev.filter((k) => k !== categoryKey))}
+            onClick={() =>
+              setOpenCategoryKeys((prev) =>
+                prev.filter((k) => k !== categoryKey),
+              )
+            }
           >
             <X className="mr-2 h-4 w-4" />
             Close
           </Button>
         </div>
       </div>
-      <div className="px-4 py-3 sm:px-5 sm:py-4 min-w-0">
-        <ul className="divide-y divide-black/5 rounded-xl bg-white ring-1 ring-black/5 min-w-0 w-full">
+      {/* QA: max-h-[80dvh] + overflow-y-auto so category list scrolls inside on iPhone; avoids viewport/scroll issues with Safari dynamic UI. */}
+      <div className="px-4 py-3 sm:px-5 sm:py-4 min-w-0 w-full max-w-full overflow-x-hidden max-h-[80dvh] overflow-y-auto">
+        <ul className="divide-y divide-black/5 rounded-xl bg-white ring-1 ring-black/5 min-w-0 w-full max-w-full">
           {section.items.map((item: any, idx: number) => {
             const isAddon = item.name.toLowerCase().startsWith("add-on");
             const priceText = String(item.price);
@@ -501,34 +608,71 @@ function MenuCategoryItemsPanel({
             let fullPrice = 0;
             let halfPrice: number | undefined;
             if (hasHalfFull) {
-              const [half, full] = priceText.replace(/₹/g, "").split("/").map((p: string) => Number(p.trim()));
+              const [half, full] = priceText
+                .replace(/₹/g, "")
+                .split("/")
+                .map((p: string) => Number(p.trim()));
               halfPrice = half;
               fullPrice = full;
             } else {
               fullPrice = Number(priceText.replace("₹", "").trim());
             }
-            const priceDisplay = priceText.startsWith("₹") ? priceText : `₹${priceText}`;
-            const priceBadgeClass = ["shrink-0 rounded-full px-3 py-1 text-sm font-extrabold", isAddon ? "bg-amber-100 text-amber-900" : "bg-olive-100 text-olive-900"].join(" ");
+            const priceDisplay = priceText.startsWith("₹")
+              ? priceText
+              : `₹${priceText}`;
+            const priceBadgeClass = [
+              "shrink-0 rounded-full px-3 py-1 text-sm font-extrabold",
+              isAddon
+                ? "bg-amber-100 text-amber-900"
+                : "bg-olive-100 text-olive-900",
+            ].join(" ");
 
             if (hasHalfFull && halfPrice != null) {
               return (
                 <li
                   key={idx}
-                  className={["flex items-center gap-4 w-full min-w-0 px-4 py-3 transition", isAddon ? "bg-amber-50/70" : "hover:bg-olive-50/60"].join(" ")}
+                  className={[
+                    "flex flex-wrap items-center gap-2 sm:gap-4 w-full min-w-0 overflow-hidden px-4 py-3 transition",
+                    isAddon ? "bg-amber-50/70" : "hover:bg-olive-50/60",
+                  ].join(" ")}
                 >
-                  <div className="flex flex-col gap-1.5 min-w-0 flex-1">
-                    <div className={["text-sm font-semibold sm:text-base break-words", isAddon ? "text-amber-900" : "text-emerald-900"].join(" ")}>
+                  <div className="flex flex-col gap-1.5 min-w-0 flex-1 basis-full sm:basis-0">
+                    <div
+                      className={[
+                        "text-sm font-semibold sm:text-base break-words truncate min-w-0",
+                        isAddon ? "text-amber-900" : "text-emerald-900",
+                      ].join(" ")}
+                      title={item.name}
+                    >
                       {item.name}
                     </div>
-                    <span className={["w-fit rounded-full px-3 py-1 text-sm font-extrabold", isAddon ? "bg-amber-100 text-amber-900" : "bg-olive-100 text-olive-900"].join(" ")}>
+                    <span
+                      className={[
+                        "w-fit rounded-full px-3 py-1 text-sm font-extrabold shrink-0",
+                        isAddon
+                          ? "bg-amber-100 text-amber-900"
+                          : "bg-olive-100 text-olive-900",
+                      ].join(" ")}
+                    >
                       {priceDisplay}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Button variant="outline" size="sm" className="min-h-[44px] min-w-[72px] touch-manipulation border-emerald-600 text-emerald-700 hover:bg-emerald-50" onClick={() => addToCart(item.name, halfPrice!, "HALF")}>
+                  {/* QA: Flexible width on small devices so buttons don't force overflow; fixed min only from sm up. */}
+                  <div className="flex items-center gap-2 shrink-0 min-w-0">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="min-h-[44px] min-w-0 flex-1 sm:flex-initial sm:min-w-[72px] px-3 touch-manipulation border-emerald-600 text-emerald-700 hover:bg-emerald-50"
+                      onClick={() => addToCart(item.name, halfPrice!, "HALF")}
+                    >
                       Half
                     </Button>
-                    <Button variant="outline" size="sm" className="min-h-[44px] min-w-[72px] touch-manipulation border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => addToCart(item.name, fullPrice, "FULL")}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="min-h-[44px] min-w-0 flex-1 sm:flex-initial sm:min-w-[72px] px-3 touch-manipulation border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-700"
+                      onClick={() => addToCart(item.name, fullPrice, "FULL")}
+                    >
                       Full
                     </Button>
                   </div>
@@ -539,14 +683,28 @@ function MenuCategoryItemsPanel({
             return (
               <li
                 key={idx}
-                className={["flex w-full min-w-0 px-4 py-3 items-center justify-between gap-3 transition", isAddon ? "bg-amber-50/70" : "hover:bg-olive-50/60"].join(" ")}
+                className={[
+                  "flex w-full min-w-0 overflow-hidden px-4 py-3 items-center justify-between gap-2 sm:gap-3 transition",
+                  isAddon ? "bg-amber-50/70" : "hover:bg-olive-50/60",
+                ].join(" ")}
               >
-                <span className={["min-w-0 flex-1 line-clamp-2 break-words text-sm font-semibold sm:text-base", isAddon ? "text-amber-900" : "text-emerald-900"].join(" ")}>
+                <span
+                  className={[
+                    "min-w-0 flex-1 line-clamp-2 break-words text-sm font-semibold sm:text-base",
+                    isAddon ? "text-amber-900" : "text-emerald-900",
+                  ].join(" ")}
+                  title={item.name}
+                >
                   {item.name}
                 </span>
                 <div className="flex items-center gap-2 shrink-0">
                   <span className={priceBadgeClass}>{priceDisplay}</span>
-                  <Button variant="outline" size="sm" className="min-h-[44px] touch-manipulation border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => addToCart(item.name, fullPrice, "FULL")}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="min-h-[44px] min-w-0 px-3 sm:min-w-0 touch-manipulation border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-700"
+                    onClick={() => addToCart(item.name, fullPrice, "FULL")}
+                  >
                     Add
                   </Button>
                 </div>
@@ -569,14 +727,29 @@ const Index = () => {
   const [bestSellerItemIds, setBestSellerItemIds] = useState<number[]>([]);
   const [isLoadingMenu, setIsLoadingMenu] = useState(true);
   const [orderSuccess, setOrderSuccess] = useState(false);
-  const [lastOrderWaMeLink, setLastOrderWaMeLink] = useState<string | null>(null);
+  const [lastOrderWaMeLink, setLastOrderWaMeLink] = useState<string | null>(
+    null,
+  );
   const [lastOrderId, setLastOrderId] = useState<number | null>(null);
   const [lastCustomerMobile, setLastCustomerMobile] = useState<string>("");
   const [lastCustomerName, setLastCustomerName] = useState<string>("");
-  const [branchContact, setBranchContact] = useState<{ id: number | null; name: string; phone: string | null; location: string | null; googleReviewUrl: string | null; logoUrl: string | null } | null>(null);
+  const [branchContact, setBranchContact] = useState<{
+    id: number | null;
+    name: string;
+    phone: string | null;
+    location: string | null;
+    googleReviewUrl: string | null;
+    logoUrl: string | null;
+  } | null>(null);
   const [contactDialogOpen, setContactDialogOpen] = useState(false);
   const [issueDialogOpen, setIssueDialogOpen] = useState(false);
-  const [issueForm, setIssueForm] = useState({ name: "", mobile: "", orderId: "", issueType: "OTHER" as string, message: "" });
+  const [issueForm, setIssueForm] = useState({
+    name: "",
+    mobile: "",
+    orderId: "",
+    issueType: "OTHER" as string,
+    message: "",
+  });
   const [issueSubmitting, setIssueSubmitting] = useState(false);
   const reviewSectionRef = useRef<HTMLDivElement>(null);
   const lastToggledKeyRef = useRef<string | null>(null);
@@ -609,10 +782,12 @@ const Index = () => {
     setMenuLoadError(null);
     setIsLoadingMenu(true);
     try {
-      const res = await fetch(`${apiBase}/menu`);
+      const res = await fetchWithTimeout(`${apiBase}/menu`);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setMenuLoadError(data?.message || `Failed to load menu (${res.status})`);
+        setMenuLoadError(
+          data?.message || `Failed to load menu (${res.status})`,
+        );
         setMenuCategories([]);
         setBestSellerItemIds([]);
         return;
@@ -623,8 +798,11 @@ const Index = () => {
       setBestSellerItemIds(ids);
     } catch (error) {
       console.error("Failed to load menu:", error);
+      const isTimeout = error instanceof Error && error.name === "AbortError";
       setMenuLoadError(
-        `Could not reach the server at ${apiBase}. Make sure the backend is running (e.g. npm run dev in the backend folder) and the URL is correct.`
+        isTimeout
+          ? "Request timed out. Please try again."
+          : `Could not reach the server at ${apiBase}. Make sure the backend is running (e.g. npm run dev in the backend folder) and the URL is correct.`,
       );
       setMenuCategories([]);
       setBestSellerItemIds([]);
@@ -650,14 +828,15 @@ const Index = () => {
       }
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+    return () =>
+      document.removeEventListener("visibilitychange", onVisibilityChange);
   }, [fetchMenu]);
 
   // Fetch branch contact for Call / WhatsApp on menu
   useEffect(() => {
     const fetchContact = async () => {
       try {
-        const res = await fetch(`${apiBase}/config/branch-contact`);
+        const res = await fetchWithTimeout(`${apiBase}/config/branch-contact`);
         if (res.ok) {
           const data = await res.json();
           setBranchContact({
@@ -685,30 +864,33 @@ const Index = () => {
 
   // No welcome/visiting page — splash only, then straight to menu
 
-  const addToCart = useCallback((itemName: string, price: number, variant?: "HALF" | "FULL") => {
-    const id = `${itemName}-${variant ?? "FULL"}`;
-    setCart((prev) => {
-      const existing = prev.find((i) => i.id === id);
-      if (existing) {
-        return prev.map((i) =>
-          i.id === id ? { ...i, quantity: i.quantity + 1 } : i,
-        );
-      }
-      return [
-        ...prev,
-        {
-          id,
-          name: itemName,
-          price,
-          quantity: 1,
-          variant,
-        },
-      ];
-    });
-    // Don't open cart on add – customer stays on menu; cart opens only on "View & Checkout"
-    const result = toast({ title: "Added" });
-    if (result?.dismiss) setTimeout(result.dismiss, 2000);
-  }, [toast]);
+  const addToCart = useCallback(
+    (itemName: string, price: number, variant?: "HALF" | "FULL") => {
+      const id = `${itemName}-${variant ?? "FULL"}`;
+      setCart((prev) => {
+        const existing = prev.find((i) => i.id === id);
+        if (existing) {
+          return prev.map((i) =>
+            i.id === id ? { ...i, quantity: i.quantity + 1 } : i,
+          );
+        }
+        return [
+          ...prev,
+          {
+            id,
+            name: itemName,
+            price,
+            quantity: 1,
+            variant,
+          },
+        ];
+      });
+      // Don't open cart on add – customer stays on menu; cart opens only on "View & Checkout"
+      const result = toast({ title: "Added" });
+      if (result?.dismiss) setTimeout(result.dismiss, 2000);
+    },
+    [toast],
+  );
 
   const incrementCartItem = (id: string) => {
     setCart((prev) =>
@@ -733,22 +915,37 @@ const Index = () => {
   };
 
   const handleCheckout = useCallback(
-    async (formData: { customerName: string; customerMobile: string; tableNumber: string; packaging: boolean }) => {
+    async (formData: {
+      customerName: string;
+      customerMobile: string;
+      tableNumber: string;
+      packaging: boolean;
+    }) => {
       if (!cart.length) {
-        toast({ title: "Your order is empty", description: "Please add some items first." });
+        toast({
+          title: "Your order is empty",
+          description: "Please add some items first.",
+        });
         return;
       }
       const nameTrim = formData.customerName.trim();
       if (!nameTrim) {
-        toast({ title: "Name required", description: "Please enter your name." });
+        toast({
+          title: "Name required",
+          description: "Please enter your name.",
+        });
         return;
       }
-      const mobileTrim = formData.customerMobile.replace(/\D/g, "").slice(0, 10);
-      const validMobile = mobileTrim.length === 10 && /^[6-9]/.test(mobileTrim) ? mobileTrim : "";
+      const mobileTrim = formData.customerMobile
+        .replace(/\D/g, "")
+        .slice(0, 10);
+      const validMobile =
+        mobileTrim.length === 10 && /^[6-9]/.test(mobileTrim) ? mobileTrim : "";
       if (!formData.packaging && !formData.tableNumber.trim()) {
         toast({
           title: "Table number required",
-          description: "Please enter your table number, or check packaging for takeaway.",
+          description:
+            "Please enter your table number, or check packaging for takeaway.",
         });
         return;
       }
@@ -769,7 +966,9 @@ const Index = () => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            tableNumber: formData.packaging ? (formData.tableNumber.trim() || "Takeaway") : formData.tableNumber.trim(),
+            tableNumber: formData.packaging
+              ? formData.tableNumber.trim() || "Takeaway"
+              : formData.tableNumber.trim(),
             branchId,
             sessionToken,
             packaging: formData.packaging,
@@ -807,21 +1006,29 @@ const Index = () => {
             : "Your order has been sent to the kitchen. Add your mobile next time to receive the invoice on WhatsApp.",
         });
         setTimeout(() => {
-          reviewSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+          reviewSectionRef.current?.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
         }, 800);
       } catch (error) {
         console.error(error);
-        const message = error instanceof Error ? error.message : "Please try again or call the staff.";
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Please try again or call the staff.";
         toast({
           title: message,
-          description: message.includes("active employee") ? "Ask staff to start their shift at the counter, then try again." : undefined,
+          description: message.includes("active employee")
+            ? "Ask staff to start their shift at the counter, then try again."
+            : undefined,
           variant: "destructive",
         });
       } finally {
         setIsSubmittingOrder(false);
       }
     },
-    [cart, branchId, sessionToken, toast]
+    [cart, branchId, sessionToken, toast],
   );
 
   useEffect(() => {
@@ -888,7 +1095,9 @@ const Index = () => {
                         const err = await res.json().catch(() => ({}));
                         toast({
                           title: "Invoice unavailable",
-                          description: err?.message || "Failed to generate invoice PDF. Please try again or contact staff.",
+                          description:
+                            err?.message ||
+                            "Failed to generate invoice PDF. Please try again or contact staff.",
                           variant: "destructive",
                         });
                         return;
@@ -900,7 +1109,8 @@ const Index = () => {
                     } catch {
                       toast({
                         title: "Invoice unavailable",
-                        description: "Could not load the invoice. Check your connection and try again.",
+                        description:
+                          "Could not load the invoice. Check your connection and try again.",
                         variant: "destructive",
                       });
                     }
@@ -909,8 +1119,15 @@ const Index = () => {
                   Download PDF invoice
                 </Button>
               )}
-              <p className="text-sm text-muted-foreground mt-4">Scroll down to leave us a review.</p>
-              <Button variant="ghost" size="sm" className="mt-2" onClick={() => setOrderSuccess(false)}>
+              <p className="text-sm text-muted-foreground mt-4">
+                Scroll down to leave us a review.
+              </p>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mt-2"
+                onClick={() => setOrderSuccess(false)}
+              >
                 Close
               </Button>
             </motion.div>
@@ -919,9 +1136,7 @@ const Index = () => {
       </AnimatePresence>
 
       {showMenu && (
-        <div className="min-h-screen bg-gradient-to-br from-olive-50 via-olive-100 to-olive-200">
-
-
+        <div className="min-h-[100dvh] bg-gradient-to-br from-olive-50 via-olive-100 to-olive-200">
           {/* Header: on mobile reserve top for buttons (pt-14), then compact hero so no overlap and section not too tall */}
           <header className="relative overflow-hidden px-0 pt-14 pb-4 text-white sm:pt-8 sm:py-10">
             <div className="absolute inset-0 bg-gradient-to-r from-emerald-700 via-emerald-800 to-green-950" />
@@ -951,14 +1166,17 @@ const Index = () => {
                     ...f,
                     name: lastCustomerName || f.name,
                     mobile: lastCustomerMobile || f.mobile,
-                    orderId: lastOrderId != null ? String(lastOrderId) : f.orderId,
+                    orderId:
+                      lastOrderId != null ? String(lastOrderId) : f.orderId,
                   }));
                   setIssueDialogOpen(true);
                 }}
                 aria-label="Raise issue or need help"
               >
                 <HelpCircle className="w-4 h-4 sm:mr-1 shrink-0" />
-                <span className="hidden sm:inline">Raise Issue / Need Help</span>
+                <span className="hidden sm:inline">
+                  Raise Issue / Need Help
+                </span>
                 <span className="sm:hidden">Help</span>
               </Button>
               <Button
@@ -1039,7 +1257,7 @@ const Index = () => {
                       Location
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="max-w-4xl max-h-[80vh]">
+                  <DialogContent className="max-w-4xl max-h-[80dvh]">
                     <DialogHeader>
                       <DialogTitle>Chapter 1 Cafe Location</DialogTitle>
                     </DialogHeader>
@@ -1050,8 +1268,8 @@ const Index = () => {
             </div>
           </header>
 
-          {/* Categories - memoized so cart/dialog updates do not re-render menu (stops blink) */}
-          <main className="mx-auto max-w-6xl px-4 py-8 pb-[max(12rem,calc(6rem+env(safe-area-inset-bottom)))] sm:py-10 sm:pb-10">
+          {/* Categories - memoized so cart/dialog updates do not re-render menu (stops blink). QA: Fixed pb reserves space for fixed cart bar so content never overlaps on iPhone when Safari UI changes. */}
+          <main className="mx-auto max-w-6xl w-full min-w-0 px-4 py-8 pb-[7.5rem] sm:py-10 sm:pb-10 overflow-x-hidden">
             <div className="space-y-6">
               <MenuCategoriesSection
                 menuCategories={menuCategories}
@@ -1069,7 +1287,7 @@ const Index = () => {
             </div>
           </main>
 
-          {/* Floating Cart Summary - above browser chrome on mobile, safe area for notched phones */}
+          {/* Floating Cart Summary - above browser chrome on mobile. QA: Bar height ~80px + safe area; main has pb-[7.5rem] so content doesn't sit under this bar. */}
           <div className="fixed bottom-0 inset-x-0 px-4 z-40 pb-[max(1rem,calc(env(safe-area-inset-bottom)+80px))] sm:pb-[max(1rem,env(safe-area-inset-bottom))]">
             <div className="mx-auto max-w-md">
               <AnimatePresence>
@@ -1084,7 +1302,10 @@ const Index = () => {
                     <div className="min-w-0">
                       <div className="flex items-center gap-1 text-sm font-semibold">
                         <ShoppingBag className="w-4 h-4 shrink-0" />
-                        <span>{cart.length} item{cart.length > 1 ? "s" : ""} in order</span>
+                        <span>
+                          {cart.length} item{cart.length > 1 ? "s" : ""} in
+                          order
+                        </span>
                       </div>
                       <div className="text-xs text-emerald-100">
                         Total: ₹{cartTotal.toFixed(0)}
@@ -1127,15 +1348,25 @@ const Index = () => {
               <div className="flex flex-col gap-3 pt-2">
                 {branchContact?.phone?.trim() && (
                   <>
-                    <p className="text-sm font-medium">📞 +91 {branchContact.phone.replace(/\D/g, "").slice(-10).replace(/(\d{5})(\d{5})/, "$1 $2")}</p>
+                    <p className="text-sm font-medium">
+                      📞 +91{" "}
+                      {branchContact.phone
+                        .replace(/\D/g, "")
+                        .slice(-10)
+                        .replace(/(\d{5})(\d{5})/, "$1 $2")}
+                    </p>
                     {branchContact?.location && (
-                      <p className="text-xs text-muted-foreground">📍 {branchContact.location}</p>
+                      <p className="text-xs text-muted-foreground">
+                        📍 {branchContact.location}
+                      </p>
                     )}
                     <Button
                       variant="outline"
                       className="w-full justify-start gap-3"
                       onClick={() => {
-                        const num = branchContact!.phone!.replace(/\D/g, "").slice(-10);
+                        const num = branchContact!
+                          .phone!.replace(/\D/g, "")
+                          .slice(-10);
                         window.location.href = `tel:+91${num}`;
                       }}
                     >
@@ -1146,7 +1377,9 @@ const Index = () => {
                       variant="outline"
                       className="w-full justify-start gap-3 text-[#25D366] border-[#25D366] hover:bg-[#25D366]/10"
                       onClick={() => {
-                        const num = branchContact!.phone!.replace(/\D/g, "").slice(-10);
+                        const num = branchContact!
+                          .phone!.replace(/\D/g, "")
+                          .slice(-10);
                         window.open(`https://wa.me/91${num}`, "_blank");
                       }}
                     >
@@ -1171,7 +1404,11 @@ const Index = () => {
                   e.preventDefault();
                   const mobile = issueForm.mobile.replace(/\D/g, "").slice(-10);
                   if (mobile.length !== 10) {
-                    toast({ title: "Invalid mobile", description: "Enter a valid 10-digit number", variant: "destructive" });
+                    toast({
+                      title: "Invalid mobile",
+                      description: "Enter a valid 10-digit number",
+                      variant: "destructive",
+                    });
                     return;
                   }
                   setIssueSubmitting(true);
@@ -1182,7 +1419,9 @@ const Index = () => {
                       body: JSON.stringify({
                         name: issueForm.name.trim(),
                         mobile,
-                        orderId: issueForm.orderId ? Number(issueForm.orderId) : undefined,
+                        orderId: issueForm.orderId
+                          ? Number(issueForm.orderId)
+                          : undefined,
                         branchId: branchId || undefined,
                         issueType: issueForm.issueType,
                         message: issueForm.message.trim(),
@@ -1194,14 +1433,26 @@ const Index = () => {
                     }
                     const submittedName = issueForm.name.trim() || "there";
                     setIssueDialogOpen(false);
-                    setIssueForm({ name: "", mobile: "", orderId: "", issueType: "OTHER", message: "" });
+                    setIssueForm({
+                      name: "",
+                      mobile: "",
+                      orderId: "",
+                      issueType: "OTHER",
+                      message: "",
+                    });
                     toast({
                       title: `Thank you, ${submittedName}!`,
-                      description: "We've received your query and will get back to you soon. You can continue browsing the menu below.",
+                      description:
+                        "We've received your query and will get back to you soon. You can continue browsing the menu below.",
                     });
                     window.scrollTo({ top: 0, behavior: "smooth" });
                   } catch (err) {
-                    toast({ title: "Error", description: err instanceof Error ? err.message : "Could not submit", variant: "destructive" });
+                    toast({
+                      title: "Error",
+                      description:
+                        err instanceof Error ? err.message : "Could not submit",
+                      variant: "destructive",
+                    });
                   } finally {
                     setIssueSubmitting(false);
                   }
@@ -1212,32 +1463,48 @@ const Index = () => {
                   <input
                     className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
                     value={issueForm.name}
-                    onChange={(e) => setIssueForm((f) => ({ ...f, name: e.target.value }))}
+                    onChange={(e) =>
+                      setIssueForm((f) => ({ ...f, name: e.target.value }))
+                    }
                     placeholder="Your name"
                     required
                   />
                 </div>
                 <div className="grid gap-2">
-                  <label className="text-sm font-medium">Mobile (10 digits) *</label>
+                  <label className="text-sm font-medium">
+                    Mobile (10 digits) *
+                  </label>
                   <input
                     className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
                     type="tel"
                     inputMode="numeric"
                     maxLength={10}
                     value={issueForm.mobile}
-                    onChange={(e) => setIssueForm((f) => ({ ...f, mobile: e.target.value.replace(/\D/g, "").slice(0, 10) }))}
+                    onChange={(e) =>
+                      setIssueForm((f) => ({
+                        ...f,
+                        mobile: e.target.value.replace(/\D/g, "").slice(0, 10),
+                      }))
+                    }
                     placeholder="9876543210"
                     required
                   />
                 </div>
                 <div className="grid gap-2">
-                  <label className="text-sm font-medium">Order ID (optional)</label>
+                  <label className="text-sm font-medium">
+                    Order ID (optional)
+                  </label>
                   <input
                     className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
                     type="text"
                     inputMode="numeric"
                     value={issueForm.orderId}
-                    onChange={(e) => setIssueForm((f) => ({ ...f, orderId: e.target.value.replace(/\D/g, "") }))}
+                    onChange={(e) =>
+                      setIssueForm((f) => ({
+                        ...f,
+                        orderId: e.target.value.replace(/\D/g, ""),
+                      }))
+                    }
                     placeholder="e.g. 1"
                   />
                 </div>
@@ -1246,7 +1513,9 @@ const Index = () => {
                   <select
                     className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
                     value={issueForm.issueType}
-                    onChange={(e) => setIssueForm((f) => ({ ...f, issueType: e.target.value }))}
+                    onChange={(e) =>
+                      setIssueForm((f) => ({ ...f, issueType: e.target.value }))
+                    }
                   >
                     <option value="ORDER_ISSUE">Order issue</option>
                     <option value="PAYMENT_ISSUE">Payment issue</option>
@@ -1256,11 +1525,15 @@ const Index = () => {
                   </select>
                 </div>
                 <div className="grid gap-2">
-                  <label className="text-sm font-medium">Describe your issue *</label>
+                  <label className="text-sm font-medium">
+                    Describe your issue *
+                  </label>
                   <textarea
                     className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm"
                     value={issueForm.message}
-                    onChange={(e) => setIssueForm((f) => ({ ...f, message: e.target.value }))}
+                    onChange={(e) =>
+                      setIssueForm((f) => ({ ...f, message: e.target.value }))
+                    }
                     placeholder="Describe your issue..."
                     required
                   />
@@ -1298,7 +1571,10 @@ const Index = () => {
                   alt="Swiggy"
                   className="w-16 h-16 object-contain mb-2 group-hover:scale-110 transition"
                 />
-                <span className="text-base md:text-lg font-bold" style={{ color: "#FC8019" }}>
+                <span
+                  className="text-base md:text-lg font-bold"
+                  style={{ color: "#FC8019" }}
+                >
                   Swiggy
                 </span>
                 <span className="text-xs text-gray-600 text-center mt-1">
@@ -1321,7 +1597,10 @@ const Index = () => {
                   alt="Zomato"
                   className="w-16 h-16 object-contain mb-2 group-hover:scale-110 transition"
                 />
-                <span className="text-base md:text-lg font-bold" style={{ color: "#E23744" }}>
+                <span
+                  className="text-base md:text-lg font-bold"
+                  style={{ color: "#E23744" }}
+                >
                   Zomato
                 </span>
                 <span className="text-xs text-gray-600 text-center mt-1">
@@ -1344,7 +1623,10 @@ const Index = () => {
                   alt="Magicpin"
                   className="w-16 h-16 object-contain mb-2 group-hover:scale-110 transition"
                 />
-                <span className="text-base md:text-lg font-bold" style={{ color: "#6C47FF" }}>
+                <span
+                  className="text-base md:text-lg font-bold"
+                  style={{ color: "#6C47FF" }}
+                >
                   Magicpin
                 </span>
                 <span className="text-xs text-gray-600 text-center mt-1">
@@ -1357,9 +1639,12 @@ const Index = () => {
             </div>
           </div>
 
-
           {/* --- Google Review and Instagram (Side by Side & Responsive, uniform cards) --- */}
-          <div ref={reviewSectionRef} id="google-review" className="flex flex-col md:flex-row items-center justify-center gap-8 mb-12 w-full max-w-4xl px-4 mx-auto">
+          <div
+            ref={reviewSectionRef}
+            id="google-review"
+            className="flex flex-col md:flex-row items-center justify-center gap-8 mb-12 w-full max-w-4xl px-4 mx-auto"
+          >
             {/* Google Review */}
             <a
               href="https://g.page/r/CekUwwDsaYMBEAE/review"
@@ -1393,7 +1678,10 @@ const Index = () => {
                 alt="Instagram"
                 className="w-16 h-16 mb-2 group-hover:scale-110 transition"
               />
-              <span className="text-base md:text-lg font-bold" style={{ color: "#E1306C" }}>
+              <span
+                className="text-base md:text-lg font-bold"
+                style={{ color: "#E1306C" }}
+              >
                 @cafe_chapter_1
               </span>
               <span className="text-xs text-gray-600 text-center mt-1 max-w-xs">
@@ -1425,7 +1713,10 @@ const Index = () => {
                   alt="Zomato"
                   className="w-16 h-16 object-contain mb-2 group-hover:scale-110 transition"
                 />
-                <span className="text-base md:text-lg font-bold" style={{ color: "#E23744" }}>
+                <span
+                  className="text-base md:text-lg font-bold"
+                  style={{ color: "#E23744" }}
+                >
                   Zomato
                 </span>
                 <span className="text-xs text-gray-600 text-center mt-1">
@@ -1448,7 +1739,10 @@ const Index = () => {
                   alt="Swiggy"
                   className="w-16 h-16 object-contain mb-2 group-hover:scale-110 transition"
                 />
-                <span className="text-base md:text-lg font-bold" style={{ color: "#FC8019" }}>
+                <span
+                  className="text-base md:text-lg font-bold"
+                  style={{ color: "#FC8019" }}
+                >
                   Swiggy
                 </span>
                 <span className="text-xs text-gray-600 text-center mt-1">
@@ -1471,7 +1765,10 @@ const Index = () => {
                   alt="Magicpin"
                   className="w-16 h-16 object-contain mb-2 group-hover:scale-110 transition"
                 />
-                <span className="text-base md:text-lg font-bold" style={{ color: "#6C47FF" }}>
+                <span
+                  className="text-base md:text-lg font-bold"
+                  style={{ color: "#6C47FF" }}
+                >
                   Magicpin
                 </span>
                 <span className="text-xs text-gray-600 text-center mt-1">
@@ -1484,11 +1781,11 @@ const Index = () => {
             </div>
           </div>
 
-           
-
           {/* Footer */}
           <div className="text-center py-8 text-olive-700">
-            <p className="text-lg font-light">Scan QR code for quick access to our digital menu</p>
+            <p className="text-lg font-light">
+              Scan QR code for quick access to our digital menu
+            </p>
             <p className="text-sm mt-2">Call us: +91 7800327061</p>
           </div>
         </div>

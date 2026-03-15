@@ -4287,86 +4287,150 @@ const AdminDashboard = () => {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-slate-50">
-                  <TableHead className="text-xs font-semibold">Employee</TableHead>
-                  <TableHead className="text-xs font-semibold">Role</TableHead>
-                  <TableHead className="text-xs font-semibold">Date</TableHead>
-                  <TableHead className="text-xs font-semibold">Start</TableHead>
-                  <TableHead className="text-xs font-semibold">End</TableHead>
-                  <TableHead className="text-xs font-semibold">Total Hours</TableHead>
-                  <TableHead className="text-xs font-semibold">Overtime</TableHead>
-                  <TableHead className="text-xs font-semibold">Reason</TableHead>
-                  <TableHead className="text-xs font-semibold">Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {overtimeRecords.length === 0 && !overtimeLoading && (
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                      No overtime records for the selected filters
-                    </TableCell>
-                  </TableRow>
-                )}
+          {overtimeRecords.length === 0 && !overtimeLoading ? (
+            <p className="text-center py-8 text-muted-foreground text-sm">No overtime records for the selected filters</p>
+          ) : (
+            <>
+              <div className="md:hidden space-y-2 p-3">
                 {overtimeRecords.map((r) => {
                   const isLive = r.live === true || r.status === "RUNNING";
                   const endTime = r.shiftEnd ? new Date(r.shiftEnd).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "—";
                   return (
-                  <TableRow key={r.id} className="text-sm">
-                    <TableCell className="font-medium">{r.employeeName}</TableCell>
-                    <TableCell>{r.role ?? "—"}</TableCell>
-                    <TableCell>{new Date(r.shiftDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</TableCell>
-                    <TableCell>{new Date(r.shiftStart).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</TableCell>
-                    <TableCell>{endTime}</TableCell>
-                    <TableCell>{formatHours(Number(r.totalHours))}</TableCell>
-                    <TableCell className="font-medium text-amber-600">{formatHours(Number(r.overtimeHours))}</TableCell>
-                    <TableCell>{r.reason ?? "—"}</TableCell>
-                    <TableCell>
-                      {isLive ? (
-                        <Badge className="bg-amber-100 text-amber-800 border-amber-200">RUNNING</Badge>
-                      ) : (
-                        <Select
-                          value={r.status}
-                          onValueChange={async (status) => {
-                            try {
-                              const res = await fetch(`${apiBase}/overtime/${r.id}/status`, {
-                                method: "PATCH",
-                                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-                                body: JSON.stringify({ status }),
-                              });
-                              if (res.ok) {
-                                loadOvertime();
-                                if (overtimeSummary.pendingOvertimeCount > 0 || overtimeSummary.overtimeRunningCount > 0) {
-                                  const sumRes = await fetch(`${apiBase}/overtime/summary`, { headers: { Authorization: `Bearer ${token}` } });
-                                  if (sumRes.ok) {
-                                    const summary = await sumRes.json();
-                                    setOvertimeSummary({ pendingOvertimeCount: summary.pendingOvertimeCount ?? 0, overtimeRunningCount: summary.overtimeRunningCount ?? 0, overtimeRunning: summary.overtimeRunning ?? [] });
+                    <div key={r.id} className="rounded-lg border bg-slate-50/50 p-3 text-sm grid grid-cols-2 gap-x-3 gap-y-1">
+                      <span className="text-muted-foreground">Employee</span>
+                      <span className="font-medium">{r.employeeName}</span>
+                      <span className="text-muted-foreground">Role</span>
+                      <span>{r.role ?? "—"}</span>
+                      <span className="text-muted-foreground">Date</span>
+                      <span>{new Date(r.shiftDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>
+                      <span className="text-muted-foreground">Start</span>
+                      <span>{new Date(r.shiftStart).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</span>
+                      <span className="text-muted-foreground">End</span>
+                      <span>{endTime}</span>
+                      <span className="text-muted-foreground">Total Hours</span>
+                      <span>{formatHours(Number(r.totalHours))}</span>
+                      <span className="text-muted-foreground">Overtime</span>
+                      <span className="font-medium text-amber-600">{formatHours(Number(r.overtimeHours))}</span>
+                      <span className="text-muted-foreground">Reason</span>
+                      <span>{r.reason ?? "—"}</span>
+                      <span className="text-muted-foreground">Status</span>
+                      <span>
+                        {isLive ? (
+                          <Badge className="bg-amber-100 text-amber-800 border-amber-200">RUNNING</Badge>
+                        ) : (
+                          <Select
+                            value={r.status}
+                            onValueChange={async (status) => {
+                              try {
+                                const res = await fetch(`${apiBase}/overtime/${r.id}/status`, {
+                                  method: "PATCH",
+                                  headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                                  body: JSON.stringify({ status }),
+                                });
+                                if (res.ok) {
+                                  loadOvertime();
+                                  if (overtimeSummary.pendingOvertimeCount > 0 || overtimeSummary.overtimeRunningCount > 0) {
+                                    const sumRes = await fetch(`${apiBase}/overtime/summary`, { headers: { Authorization: `Bearer ${token}` } });
+                                    if (sumRes.ok) {
+                                      const summary = await sumRes.json();
+                                      setOvertimeSummary({ pendingOvertimeCount: summary.pendingOvertimeCount ?? 0, overtimeRunningCount: summary.overtimeRunningCount ?? 0, overtimeRunning: summary.overtimeRunning ?? [] });
+                                    }
                                   }
                                 }
-                              }
-                            } catch (_e) {}
-                          }}
-                        >
-                          <SelectTrigger className="w-[110px] h-8 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="PENDING">Pending</SelectItem>
-                            <SelectItem value="APPROVED">Approved</SelectItem>
-                            <SelectItem value="REJECTED">Rejected</SelectItem>
-                            <SelectItem value="PAID">Paid</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    </TableCell>
-                  </TableRow>
+                              } catch (_e) {}
+                            }}
+                          >
+                            <SelectTrigger className="w-full max-w-[120px] h-9 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="PENDING">Pending</SelectItem>
+                              <SelectItem value="APPROVED">Approved</SelectItem>
+                              <SelectItem value="REJECTED">Rejected</SelectItem>
+                              <SelectItem value="PAID">Paid</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </span>
+                    </div>
                   );
                 })}
-              </TableBody>
-            </Table>
-          </div>
+              </div>
+              <div className="hidden md:block overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-50">
+                      <TableHead className="text-xs font-semibold">Employee</TableHead>
+                      <TableHead className="text-xs font-semibold">Role</TableHead>
+                      <TableHead className="text-xs font-semibold">Date</TableHead>
+                      <TableHead className="text-xs font-semibold">Start</TableHead>
+                      <TableHead className="text-xs font-semibold">End</TableHead>
+                      <TableHead className="text-xs font-semibold">Total Hours</TableHead>
+                      <TableHead className="text-xs font-semibold">Overtime</TableHead>
+                      <TableHead className="text-xs font-semibold">Reason</TableHead>
+                      <TableHead className="text-xs font-semibold">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {overtimeRecords.map((r) => {
+                      const isLive = r.live === true || r.status === "RUNNING";
+                      const endTime = r.shiftEnd ? new Date(r.shiftEnd).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "—";
+                      return (
+                        <TableRow key={r.id} className="text-sm">
+                          <TableCell className="font-medium">{r.employeeName}</TableCell>
+                          <TableCell>{r.role ?? "—"}</TableCell>
+                          <TableCell>{new Date(r.shiftDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</TableCell>
+                          <TableCell>{new Date(r.shiftStart).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</TableCell>
+                          <TableCell>{endTime}</TableCell>
+                          <TableCell>{formatHours(Number(r.totalHours))}</TableCell>
+                          <TableCell className="font-medium text-amber-600">{formatHours(Number(r.overtimeHours))}</TableCell>
+                          <TableCell>{r.reason ?? "—"}</TableCell>
+                          <TableCell>
+                            {isLive ? (
+                              <Badge className="bg-amber-100 text-amber-800 border-amber-200">RUNNING</Badge>
+                            ) : (
+                              <Select
+                                value={r.status}
+                                onValueChange={async (status) => {
+                                  try {
+                                    const res = await fetch(`${apiBase}/overtime/${r.id}/status`, {
+                                      method: "PATCH",
+                                      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                                      body: JSON.stringify({ status }),
+                                    });
+                                    if (res.ok) {
+                                      loadOvertime();
+                                      if (overtimeSummary.pendingOvertimeCount > 0 || overtimeSummary.overtimeRunningCount > 0) {
+                                        const sumRes = await fetch(`${apiBase}/overtime/summary`, { headers: { Authorization: `Bearer ${token}` } });
+                                        if (sumRes.ok) {
+                                          const summary = await sumRes.json();
+                                          setOvertimeSummary({ pendingOvertimeCount: summary.pendingOvertimeCount ?? 0, overtimeRunningCount: summary.overtimeRunningCount ?? 0, overtimeRunning: summary.overtimeRunning ?? [] });
+                                        }
+                                      }
+                                    }
+                                  } catch (_e) {}
+                                }}
+                              >
+                                <SelectTrigger className="w-[110px] h-8 text-xs">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="PENDING">Pending</SelectItem>
+                                  <SelectItem value="APPROVED">Approved</SelectItem>
+                                  <SelectItem value="REJECTED">Rejected</SelectItem>
+                                  <SelectItem value="PAID">Paid</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -4423,37 +4487,52 @@ const AdminDashboard = () => {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-slate-50">
-                  <TableHead className="text-xs font-semibold">Employee</TableHead>
-                  <TableHead className="text-xs font-semibold">Date</TableHead>
-                  <TableHead className="text-xs font-semibold">Scheduled Start</TableHead>
-                  <TableHead className="text-xs font-semibold">Actual Login</TableHead>
-                  <TableHead className="text-xs font-semibold">Late</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {lateEntries.length === 0 && !lateLoading && (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                      No late entries for the selected filters
-                    </TableCell>
-                  </TableRow>
-                )}
+          {lateEntries.length === 0 && !lateLoading ? (
+            <p className="text-center py-8 text-muted-foreground text-sm">No late entries for the selected filters</p>
+          ) : (
+            <>
+              <div className="md:hidden space-y-2 p-3">
                 {lateEntries.map((e) => (
-                  <TableRow key={e.id} className="text-sm">
-                    <TableCell className="font-medium">{e.employee?.name ?? "—"}</TableCell>
-                    <TableCell>{new Date(e.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</TableCell>
-                    <TableCell>{e.shiftStartTime}</TableCell>
-                    <TableCell>{new Date(e.actualLoginTime).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</TableCell>
-                    <TableCell className="font-medium text-amber-600">{formatLateMinutes(e.lateDurationMinutes)}</TableCell>
-                  </TableRow>
+                  <div key={e.id} className="rounded-lg border bg-slate-50/50 p-3 text-sm grid grid-cols-2 gap-x-3 gap-y-1">
+                    <span className="text-muted-foreground">Employee</span>
+                    <span className="font-medium">{e.employee?.name ?? "—"}</span>
+                    <span className="text-muted-foreground">Date</span>
+                    <span>{new Date(e.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>
+                    <span className="text-muted-foreground">Scheduled Start</span>
+                    <span>{e.shiftStartTime}</span>
+                    <span className="text-muted-foreground">Actual Login</span>
+                    <span>{new Date(e.actualLoginTime).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</span>
+                    <span className="text-muted-foreground">Late</span>
+                    <span className="font-medium text-amber-600">{formatLateMinutes(e.lateDurationMinutes)}</span>
+                  </div>
                 ))}
-              </TableBody>
-            </Table>
-          </div>
+              </div>
+              <div className="hidden md:block overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-50">
+                      <TableHead className="text-xs font-semibold">Employee</TableHead>
+                      <TableHead className="text-xs font-semibold">Date</TableHead>
+                      <TableHead className="text-xs font-semibold">Scheduled Start</TableHead>
+                      <TableHead className="text-xs font-semibold">Actual Login</TableHead>
+                      <TableHead className="text-xs font-semibold">Late</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {lateEntries.map((e) => (
+                      <TableRow key={e.id} className="text-sm">
+                        <TableCell className="font-medium">{e.employee?.name ?? "—"}</TableCell>
+                        <TableCell>{new Date(e.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</TableCell>
+                        <TableCell>{e.shiftStartTime}</TableCell>
+                        <TableCell>{new Date(e.actualLoginTime).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</TableCell>
+                        <TableCell className="font-medium text-amber-600">{formatLateMinutes(e.lateDurationMinutes)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

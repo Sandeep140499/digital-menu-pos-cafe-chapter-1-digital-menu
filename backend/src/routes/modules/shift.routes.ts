@@ -182,6 +182,21 @@ shiftRouter.post(
       });
     }
 
+    // One shift per day: if employee already ended a shift today, they cannot start again until next day
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const completedToday = await prisma.employeeShift.findMany({
+      where: { employeeId, shiftEnd: { not: null } },
+      select: { shiftEnd: true },
+    });
+    const hasEndedShiftToday = completedToday.some(
+      (s) => s.shiftEnd && s.shiftEnd.toISOString().slice(0, 10) === todayStr
+    );
+    if (hasEndedShiftToday) {
+      return res.status(400).json({
+        message: "You already completed a shift today. You can start again tomorrow.",
+      });
+    }
+
     const shiftStartTime = new Date();
     const shift = await prisma.employeeShift.create({
       data: {

@@ -492,8 +492,8 @@ function MenuCategoryItemsPanel({
           </Button>
         </div>
       </div>
-      <div className="px-4 py-3 sm:px-5 sm:py-4">
-        <ul className="divide-y divide-black/5 rounded-xl bg-white ring-1 ring-black/5">
+      <div className="px-4 py-3 sm:px-5 sm:py-4 min-w-0">
+        <ul className="divide-y divide-black/5 rounded-xl bg-white ring-1 ring-black/5 min-w-0 w-full">
           {section.items.map((item: any, idx: number) => {
             const isAddon = item.name.toLowerCase().startsWith("add-on");
             const priceText = String(item.price);
@@ -514,21 +514,23 @@ function MenuCategoryItemsPanel({
               return (
                 <li
                   key={idx}
-                  className={["flex flex-col px-4 py-3 gap-2 transition", isAddon ? "bg-amber-50/70" : "hover:bg-olive-50/60"].join(" ")}
+                  className={["flex items-center gap-4 w-full min-w-0 px-4 py-3 transition", isAddon ? "bg-amber-50/70" : "hover:bg-olive-50/60"].join(" ")}
                 >
-                  <div className={["text-sm font-semibold sm:text-base break-words", isAddon ? "text-amber-900" : "text-emerald-900"].join(" ")}>
-                    {item.name}
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <span className={priceBadgeClass}>{priceDisplay}</span>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Button variant="outline" size="sm" className="border-emerald-600 text-emerald-700 hover:bg-emerald-50" onClick={() => addToCart(item.name, halfPrice!, "HALF")}>
-                        Half
-                      </Button>
-                      <Button variant="outline" size="sm" className="border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => addToCart(item.name, fullPrice, "FULL")}>
-                        Full
-                      </Button>
+                  <div className="flex flex-col gap-1.5 min-w-0 flex-1">
+                    <div className={["text-sm font-semibold sm:text-base break-words", isAddon ? "text-amber-900" : "text-emerald-900"].join(" ")}>
+                      {item.name}
                     </div>
+                    <span className={["w-fit rounded-full px-3 py-1 text-sm font-extrabold", isAddon ? "bg-amber-100 text-amber-900" : "bg-olive-100 text-olive-900"].join(" ")}>
+                      {priceDisplay}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button variant="outline" size="sm" className="min-h-[44px] min-w-[72px] touch-manipulation border-emerald-600 text-emerald-700 hover:bg-emerald-50" onClick={() => addToCart(item.name, halfPrice!, "HALF")}>
+                      Half
+                    </Button>
+                    <Button variant="outline" size="sm" className="min-h-[44px] min-w-[72px] touch-manipulation border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => addToCart(item.name, fullPrice, "FULL")}>
+                      Full
+                    </Button>
                   </div>
                 </li>
               );
@@ -537,14 +539,14 @@ function MenuCategoryItemsPanel({
             return (
               <li
                 key={idx}
-                className={["flex px-4 py-3 items-center justify-between gap-3 transition", isAddon ? "bg-amber-50/70" : "hover:bg-olive-50/60"].join(" ")}
+                className={["flex w-full min-w-0 px-4 py-3 items-center justify-between gap-3 transition", isAddon ? "bg-amber-50/70" : "hover:bg-olive-50/60"].join(" ")}
               >
                 <span className={["min-w-0 flex-1 line-clamp-2 break-words text-sm font-semibold sm:text-base", isAddon ? "text-amber-900" : "text-emerald-900"].join(" ")}>
                   {item.name}
                 </span>
                 <div className="flex items-center gap-2 shrink-0">
                   <span className={priceBadgeClass}>{priceDisplay}</span>
-                  <Button variant="outline" size="sm" className="border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => addToCart(item.name, fullPrice, "FULL")}>
+                  <Button variant="outline" size="sm" className="min-h-[44px] touch-manipulation border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => addToCart(item.name, fullPrice, "FULL")}>
                     Add
                   </Button>
                 </div>

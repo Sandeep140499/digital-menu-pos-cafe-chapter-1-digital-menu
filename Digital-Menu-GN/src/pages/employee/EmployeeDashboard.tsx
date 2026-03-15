@@ -675,17 +675,25 @@ const EmployeeDashboard = () => {
       .catch(() => {});
   }, [token]);
 
+  const todayIso = new Date().toISOString();
+  const endedShiftToday = myShiftHistory.some(
+    (s) => s.shiftEnd && isSameDay(typeof s.shiftEnd === "string" ? s.shiftEnd : new Date(s.shiftEnd).toISOString(), todayIso)
+  );
+
   const startShift = async () => {
     if (!token) return;
-    // One shift per day: cannot start twice same day; must end previous shift before starting next day
+    // One shift per day: cannot start again after ending a shift the same day
+    if (endedShiftToday) {
+      toast.error("You already completed a shift today. You can start again tomorrow.");
+      return;
+    }
     if (shiftActive && currentShift) {
       toast.error("You already have an active shift. End it first.");
       return;
     }
     const openShift = myShiftHistory.find((s) => !s.shiftEnd);
     if (openShift) {
-      const today = new Date().toISOString();
-      if (isSameDay(openShift.shiftStart, today)) {
+      if (isSameDay(openShift.shiftStart, todayIso)) {
         toast.error("You already started a shift today. End it first or contact admin.");
       } else {
         toast.error("Please end your previous shift first. Contact admin if you need help.");
@@ -1685,9 +1693,9 @@ const EmployeeDashboard = () => {
             <Button
               variant={shiftActive ? "destructive" : "default"}
               size="lg"
-              disabled={shiftLoading}
+              disabled={shiftLoading || endedShiftToday}
               onClick={shiftActive ? endShift : startShift}
-              className={`gap-2 shrink-0 ${!shiftActive && !shiftLoading ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""}`}
+              className={`gap-2 shrink-0 ${!shiftActive && !shiftLoading && !endedShiftToday ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""}`}
             >
               {shiftLoading ? (
                 <span className="inline-block h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -1696,7 +1704,7 @@ const EmployeeDashboard = () => {
               ) : (
                 <Play className="h-4 w-4" />
               )}
-              {shiftLoading ? "Please wait..." : shiftActive ? "End Shift" : "Start Shift"}
+              {shiftLoading ? "Please wait..." : shiftActive ? "End Shift" : endedShiftToday ? "Start tomorrow" : "Start Shift"}
             </Button>
           </div>
         </div>
@@ -2067,40 +2075,71 @@ const EmployeeDashboard = () => {
           {myShiftHistory.length === 0 ? (
             <p className="text-muted-foreground text-center py-8">No shift history yet</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-slate-50 text-left">
-                    <th className="p-2 font-medium">Date</th>
-                    <th className="p-2 font-medium">In</th>
-                    <th className="p-2 font-medium">Out</th>
-                    <th className="p-2 font-medium text-right">Hours</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {myShiftHistory.slice(0, 20).map((s) => {
-                    const isActive = !s.shiftEnd;
-                    const hours = isActive
-                      ? getElapsedHours(s.shiftStart, s.shiftEnd, currentTime)
-                      : (s.totalHours ?? 0);
-                    return (
-                      <tr key={s.id} className="border-b last:border-b-0">
-                        <td className="p-2">{new Date(s.shiftStart).toLocaleDateString("en-IN")}</td>
-                        <td className="p-2">{new Date(s.shiftStart).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</td>
-                        <td className="p-2">
-                          {s.shiftEnd
-                            ? new Date(s.shiftEnd).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
-                            : "—"}
-                        </td>
-                        <td className="p-2 text-right font-medium">
-                          {formatHours(hours, isActive)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <>
+              {/* Mobile: card list */}
+              <div className="space-y-2 md:hidden">
+                {myShiftHistory.slice(0, 20).map((s) => {
+                  const isActive = !s.shiftEnd;
+                  const hours = isActive
+                    ? getElapsedHours(s.shiftStart, s.shiftEnd, currentTime)
+                    : (s.totalHours ?? 0);
+                  return (
+                    <div
+                      key={s.id}
+                      className="rounded-lg border bg-slate-50/50 p-3 text-sm grid grid-cols-2 gap-x-3 gap-y-1"
+                    >
+                      <span className="text-muted-foreground">Date</span>
+                      <span className="font-medium">{new Date(s.shiftStart).toLocaleDateString("en-IN")}</span>
+                      <span className="text-muted-foreground">In</span>
+                      <span>{new Date(s.shiftStart).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</span>
+                      <span className="text-muted-foreground">Out</span>
+                      <span>
+                        {s.shiftEnd
+                          ? new Date(s.shiftEnd).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
+                          : "—"}
+                      </span>
+                      <span className="text-muted-foreground">Hours</span>
+                      <span className="font-medium">{formatHours(hours, isActive)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Desktop: table */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 text-left">
+                      <th className="p-2 font-medium">Date</th>
+                      <th className="p-2 font-medium">In</th>
+                      <th className="p-2 font-medium">Out</th>
+                      <th className="p-2 font-medium text-right">Hours</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {myShiftHistory.slice(0, 20).map((s) => {
+                      const isActive = !s.shiftEnd;
+                      const hours = isActive
+                        ? getElapsedHours(s.shiftStart, s.shiftEnd, currentTime)
+                        : (s.totalHours ?? 0);
+                      return (
+                        <tr key={s.id} className="border-b last:border-b-0">
+                          <td className="p-2">{new Date(s.shiftStart).toLocaleDateString("en-IN")}</td>
+                          <td className="p-2">{new Date(s.shiftStart).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</td>
+                          <td className="p-2">
+                            {s.shiftEnd
+                              ? new Date(s.shiftEnd).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
+                              : "—"}
+                          </td>
+                          <td className="p-2 text-right font-medium">
+                            {formatHours(hours, isActive)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -2190,7 +2229,9 @@ const EmployeeDashboard = () => {
         <DialogHeader>
           <DialogTitle id="start-shift-title">Start shift?</DialogTitle>
           <DialogDescription id="start-shift-desc">
-            To accept orders and track working time, please start your shift.
+            {endedShiftToday
+              ? "You already completed a shift today. You can start again tomorrow."
+              : "To accept orders and track working time, please start your shift."}
           </DialogDescription>
         </DialogHeader>
         <div className="flex justify-end gap-2">
@@ -2201,17 +2242,19 @@ const EmployeeDashboard = () => {
               setShowStartShiftPrompt(false);
             }}
           >
-            Not now
+            {endedShiftToday ? "Close" : "Not now"}
           </Button>
-          <Button
-            className="bg-emerald-600 hover:bg-emerald-700 text-white"
-            onClick={async () => {
-              await startShift();
-              setShowStartShiftPrompt(false);
-            }}
-          >
-            Start Shift
-          </Button>
+          {!endedShiftToday && (
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={async () => {
+                await startShift();
+                setShowStartShiftPrompt(false);
+              }}
+            >
+              Start Shift
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>
@@ -2402,7 +2445,7 @@ const EmployeeDashboard = () => {
     <DashboardShell
       role="EMPLOYEE"
       userName={profile?.name ?? "Employee"}
-      branchName={profile?.branch?.name ?? undefined}
+      branchName={profile?.branch?.name && !/^main(\s+branch)?$/i.test(profile.branch.name.trim()) ? profile.branch.name.trim() : "Gautam Nagar"}
       sidebarItems={sidebarItems}
       activeKey={activeSection}
       onSelect={setActiveSection}

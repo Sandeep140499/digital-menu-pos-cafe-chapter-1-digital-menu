@@ -18,6 +18,12 @@ export function setSplashVisited(): void {
 const QUOTE = "Good food, good mood — savor the moment.";
 const DEFAULT_BRANCH = "Gautam Nagar";
 
+function normalizeBranchName(name: string | null | undefined): string {
+  const n = name?.trim();
+  if (!n || /^main(\s+branch)?$/i.test(n)) return DEFAULT_BRANCH;
+  return n;
+}
+
 function getTimeBasedGreeting(): string {
   const hour = new Date().getHours();
   if (hour >= 22) return "Night craving";
@@ -36,7 +42,7 @@ const SPLASH_DURATION_MS = 2800;
 export default function SplashScreen({ onFinish, branchName }: SplashScreenProps) {
   const [exiting, setExiting] = useState(false);
   const greeting = getTimeBasedGreeting();
-  const displayBranch = branchName?.trim() || DEFAULT_BRANCH;
+  const displayBranch = normalizeBranchName(branchName);
 
   useEffect(() => {
     const timer = setTimeout(() => {

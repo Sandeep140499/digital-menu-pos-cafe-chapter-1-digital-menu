@@ -1,0 +1,25 @@
+# Env and secrets
+.env
+.env.local
+.env.*.local
+backend/.env
+Digital-Menu-GN/.env
+
+# Dependencies
+node_modules
+backend/node_modules
+Digital-Menu-GN/node_modules
+
+# Build outputs
+dist
+backend/dist
+Digital-Menu-GN/dist
+
+# Logs and misc
+*.log
+.DS_Store
+.idea
+.vscode
+
+# Keep examples
+!.env.example

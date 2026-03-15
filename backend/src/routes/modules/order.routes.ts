@@ -1,0 +1,941 @@
+import { Router } from "express";
+import { z } from "zod";
+import { OrderStatus as OrderStatusEnum } from "@prisma/client";
+import { prisma } from "../../config/prisma.js";
+import { authenticate, requireRole } from "../../middleware/auth.js";
+import { buildOrderInvoice, buildStatusMessage, getWaMeLink } from "../../services/whatsapp.js";
+import { generateOrderInvoicePdf, getInvoiceFileName } from "../../services/invoicePdf.js";
+
+const mobileRegex = /^[6-9]\d{9}$/;
+
+const createOrderSchema = z.object({
+  tableId: z.number().int().optional(),
+  tableNumber: z.string().min(1),
+  branchId: z.number().int(),
+  sessionToken: z.string().optional(),
+  packaging: z.boolean().optional(),
+  customerName: z.string().min(1, "Name is required"),
+  customerMobile: z
+    .union([z.string().regex(mobileRegex), z.string().max(20)])
+    .optional()
+    .transform((s) => {
+      if (s == null || s === undefined) return null;
+      const digits = String(s).replace(/\D/g, "").slice(-10);
+      return digits.length === 10 && /^[6-9]/.test(digits) ? digits : null;
+    }),
+  items: z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        unitPrice: z.number().nonnegative(),
+        quantity: z.number().int().min(1),
+        variant: z.enum(["HALF", "FULL"]).optional(),
+      }),
+    )
+    .min(1),
+});
+
+const updateStatusSchema = z.object({
+  status: z.enum(["ACCEPTED", "PREPARING", "SERVED", "ORDER_COMPLETE"]),
+});
+
+const updateOrderCustomerSchema = z.object({
+  customerName: z.string().min(1).optional(),
+  customerMobile: z.string().regex(mobileRegex, "Valid 10-digit mobile number required"),
+});
+
+const modifyOrderSchema = z.object({
+  removedItemIds: z.array(z.number()),
+  reason: z.string().optional(),
+});
+
+export const orderRouter = Router();
+
+async function assignEmployeeToOrder(branchId: number) {
+  // active employees = status ACTIVE + active (non-paused) shift
+  const activeShifts = await prisma.employeeShift.findMany({
+    where: {
+      branchId,
+      shiftEnd: null,
+      status: "ACTIVE" as any,
+      employee: { status: "ACTIVE" },
+    },
+    include: { employee: true },
+  });
+
+  if (!activeShifts.length) return { employeeId: null as number | null, shiftId: null as number | null };
+
+  // pick shift with least number of orders today
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
+
+  const withCounts = await Promise.all(
+    activeShifts.map(async (shift) => {
+      const count = await prisma.order.count({
+        where: {
+          shiftId: shift.id,
+          createdAt: { gte: todayStart, lte: todayEnd },
+        },
+      });
+      return { shift, count };
+    }),
+  );
+
+  withCounts.sort((a, b) => a.count - b.count);
+
+  return {
+    employeeId: withCounts[0].shift.employeeId,
+    shiftId: withCounts[0].shift.id,
+  };
+}
+
+// Customer: create order from QR menu
+orderRouter.post("/", async (req, res) => {
+  const parsed = createOrderSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res
+      .status(400)
+      .json({ message: "Invalid input", errors: parsed.error.issues });
+  }
+
+  const { tableId, tableNumber, branchId, items, sessionToken, packaging, customerName, customerMobile: rawMobile } = parsed.data;
+  const customerMobile = rawMobile ?? null;
+
+  const branchExists = await prisma.branch.findUnique({ where: { id: branchId }, select: { id: true } });
+  if (!branchExists) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid branch. The branch may have been removed. Please refresh the page or scan the QR again.",
+    });
+  }
+
+  let resolvedTableId = tableId ?? null;
+  if (!resolvedTableId) {
+    let table = await prisma.table.findFirst({
+      where: {
+        tableNumber,
+        branchId,
+      },
+    });
+
+    if (!table) {
+      table = await prisma.table.create({
+        data: {
+          tableNumber,
+          branchId,
+        },
+      });
+    }
+
+    resolvedTableId = table.id;
+  }
+
+  // Normalize item name: store base name without "(5pc / 8pc)" so variant (HALF/FULL) carries size for analytics
+  const normalizeItemName = (name: string) =>
+    (name || "").replace(/\s*\(5pc\s*\/\s*8pc\)\s*/gi, "").trim() || name;
+
+  let totalAmount = 0;
+  const orderItemsData = items.map((item) => {
+    const price = item.unitPrice;
+    totalAmount += price * item.quantity;
+    const baseName = normalizeItemName(item.name);
+
+    return {
+      name: baseName,
+      quantity: item.quantity,
+      price,
+      variant: item.variant ?? undefined,
+    };
+  });
+
+  if (packaging) {
+    orderItemsData.push({
+      name: "Packaging",
+      quantity: 1,
+      price: 0,
+      variant: undefined,
+    });
+  }
+
+  // Require at least one active employee (shift) for the branch; order is not assigned until an employee accepts
+  const { employeeId: _anyEmployeeId } = await assignEmployeeToOrder(branchId);
+  if (_anyEmployeeId == null) {
+    try {
+      await prisma.errorLog.create({
+        data: {
+          errorType: "NO_ACTIVE_EMPLOYEE",
+          apiEndpoint: "/orders",
+          errorMessage: "A customer tried to place an order but no employee was at counter (no active shift). Ask staff to start their shift.",
+          branchId,
+          status: "UNRESOLVED",
+        },
+      });
+    } catch (logErr) {
+      console.error("Failed to log no-active-employee notification:", logErr);
+    }
+    return res.status(503).json({
+      message: "No active employee at counter. Please contact at counter if open.",
+    });
+  }
+
+  const order = await prisma.order.create({
+    data: {
+      tableId: resolvedTableId,
+      branchId,
+      employeeId: undefined,
+      shiftId: undefined,
+      status: "NEW_ORDER",
+      totalAmount,
+      sessionToken,
+      customerName,
+      customerMobile,
+      items: {
+        create: orderItemsData,
+      },
+    },
+    include: { items: true, branch: true, employee: true },
+  });
+
+  const branchInfo = order.branch
+    ? {
+        name: order.branch.name,
+        location: order.branch.location,
+        logoUrl: order.branch.logoUrl,
+        phone: order.branch.phone,
+        googleReviewUrl: order.branch.googleReviewUrl,
+      }
+    : null;
+
+  const apiBase = process.env.PUBLIC_API_BASE_URL || "";
+  const invoicePdfUrl = apiBase ? `${apiBase.replace(/\/$/, "")}/orders/${order.id}/invoice-pdf` : undefined;
+
+  const acceptedBy = order.employee
+    ? { name: order.employee.name, role: order.employee.role ?? "Counter Staff" }
+    : undefined;
+  let invoiceMessage: string | undefined;
+  let waMeLink: string | undefined;
+  if (order.customerMobile && order.customerName) {
+    invoiceMessage = buildOrderInvoice({
+      orderId: order.id,
+      customerName: order.customerName,
+      items: order.items.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price, variant: i.variant })),
+      totalAmount: order.totalAmount,
+      tableNumber,
+      branch: branchInfo,
+      invoicePdfUrl,
+      acceptedBy,
+    });
+    waMeLink = getWaMeLink(order.customerMobile, invoiceMessage);
+  }
+
+  req.app.locals.io?.emit("order:new", order);
+
+  return res.status(201).json({
+    order,
+    ...(invoiceMessage && waMeLink ? { invoiceMessage, waMeLink } : {}),
+    invoicePdfUrl,
+    invoiceFileName: getInvoiceFileName(order.id),
+  });
+});
+
+// Customer or staff: get WhatsApp invoice link for an order (by order id)
+orderRouter.get("/:id/whatsapp-invoice", async (req, res) => {
+  const id = Number(req.params.id);
+  const order = await prisma.order.findUnique({
+    where: { id },
+    include: { items: true, branch: true, table: true, employee: true },
+  });
+  if (!order || !order.customerMobile || !order.customerName) {
+    return res.status(404).json({ message: "Order not found or has no customer details" });
+  }
+  const branchInfo = order.branch
+    ? {
+        name: order.branch.name,
+        location: order.branch.location,
+        logoUrl: order.branch.logoUrl,
+        phone: order.branch.phone,
+        googleReviewUrl: order.branch.googleReviewUrl,
+      }
+    : null;
+  const acceptedBy = order.employee
+    ? { name: order.employee.name, role: order.employee.role ?? "Counter Staff" }
+    : undefined;
+  const apiBase = process.env.PUBLIC_API_BASE_URL || "";
+  const invoicePdfUrl = apiBase ? `${apiBase.replace(/\/$/, "")}/orders/${order.id}/invoice-pdf` : undefined;
+  const invoiceMessage = buildOrderInvoice({
+    orderId: order.id,
+    customerName: order.customerName,
+    items: order.items.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price, variant: i.variant, isRemoved: i.isRemoved })),
+    totalAmount: order.totalAmount,
+    tableNumber: order.table?.tableNumber ?? String(order.tableId),
+    branch: branchInfo,
+    invoicePdfUrl,
+    acceptedBy,
+  });
+  const waMeLink = getWaMeLink(order.customerMobile, invoiceMessage);
+  return res.json({ invoiceMessage, waMeLink });
+});
+
+// Public: download professional PDF invoice (INV-YYYY-NNNN.pdf)
+orderRouter.get("/:id/invoice-pdf", async (req, res) => {
+  const id = Number(req.params.id);
+  const order = await prisma.order.findUnique({
+    where: { id },
+    include: { items: true, branch: true, table: true, employee: true },
+  });
+  if (!order) return res.status(404).json({ message: "Order not found" });
+
+  const tableNumber = order.table?.tableNumber ?? String(order.tableId);
+  const acceptedBy = order.employee ? { name: order.employee.name, role: order.employee.role ?? "Counter Staff" } : undefined;
+  const orderType = tableNumber === "Takeaway" ? "Takeaway" : "Dine-In";
+  const statusMap: Record<string, string> = {
+    NEW_ORDER: "Preparing",
+    ACCEPTED: "Preparing",
+    PREPARING: "Preparing",
+    SERVED: "Served",
+    ORDER_COMPLETE: "Completed",
+  };
+  const paymentMap: Record<string, string> = {
+    PAYMENT_PENDING: "Pending",
+    PAID: "Paid",
+    PARTIAL: "Partial",
+    UNPAID: "Unpaid",
+  };
+
+  try {
+    const pdfBytes = await generateOrderInvoicePdf({
+      id: order.id,
+      createdAt: order.createdAt,
+      totalAmount: order.totalAmount,
+      status: statusMap[order.status] ?? order.status,
+      paymentStatus: paymentMap[order.paymentStatus] ?? order.paymentStatus,
+      customerName: order.customerName,
+      customerMobile: order.customerMobile,
+      tableNumber,
+      orderType,
+      items: order.items.map((i) => ({
+        name: i.name,
+        quantity: i.quantity,
+        price: i.price,
+        variant: i.variant,
+        isRemoved: i.isRemoved,
+      })),
+      branch: order.branch
+        ? {
+            name: order.branch.name,
+            location: order.branch.location,
+            phone: order.branch.phone,
+            googleReviewUrl: order.branch.googleReviewUrl,
+            logoUrl: order.branch.logoUrl ?? undefined,
+          }
+        : null,
+      acceptedBy,
+    });
+    const filename = getInvoiceFileName(order.id);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    return res.send(Buffer.from(pdfBytes));
+  } catch (err) {
+    console.error("Invoice PDF error:", err);
+    return res.status(500).json({ message: "Failed to generate invoice PDF" });
+  }
+});
+
+// Customer: get active order for table/session
+orderRouter.get("/session", async (req, res) => {
+  const tableId = Number(req.query.tableId);
+  const sessionToken = req.query.sessionToken as string | undefined;
+
+  if (!tableId || !sessionToken) {
+    return res.status(400).json({ message: "tableId and sessionToken required" });
+  }
+
+  const order = await prisma.order.findFirst({
+    where: {
+      tableId,
+      sessionToken,
+      status: { in: ["NEW_ORDER", "ACCEPTED", "PREPARING", "SERVED"] },
+    },
+    include: { items: { include: { menuItem: true } }, table: true },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return res.json(order);
+});
+
+// Admin: unique customer mobiles (for new item broadcast)
+orderRouter.get(
+  "/customer-mobiles",
+  authenticate,
+  requireRole("ADMIN"),
+  async (_req, res) => {
+    const orders = await prisma.order.findMany({
+      where: { customerMobile: { not: null } },
+      select: { customerMobile: true, customerName: true },
+    });
+    const seen = new Set<string>();
+    const mobiles: { mobile: string; name: string | null }[] = [];
+    for (const o of orders) {
+      const m = o.customerMobile!.replace(/\D/g, "").slice(-10);
+      if (m.length === 10 && !seen.has(m)) {
+        seen.add(m);
+        mobiles.push({ mobile: m, name: o.customerName });
+      }
+    }
+    return res.json({ mobiles, count: mobiles.length });
+  },
+);
+
+// Admin or Employee: get live orders (NEW_ORDER..SERVED) + ORDER_COMPLETE (so Pending Payments shows completed-but-unpaid)
+// Limited to today (branch timezone, default Asia/Kolkata) so we don't return yesterday's orders.
+function getStartOfTodayInTimezone(timeZone = "Asia/Kolkata"): Date {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("en-CA", { timeZone }); // "YYYY-MM-DD"
+  const [y, m, d] = dateStr.split("-").map(Number);
+  // 00:00 in that timezone: for Asia/Kolkata (UTC+5:30), (y,m,d) 00:00 IST = (y,m,d-1) 18:30 UTC
+  const utcPrevDay = Date.UTC(y, m - 1, d - 1);
+  const istOffsetMs = 18.5 * 60 * 60 * 1000; // 18h30 in ms
+  return new Date(utcPrevDay + istOffsetMs);
+}
+
+orderRouter.get(
+  "/live",
+  authenticate,
+  async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const role = user?.role;
+      const userId = user?.id != null ? Number(user.id) : null;
+
+      const timeZone = process.env.TZ || "Asia/Kolkata";
+      const startOfToday = getStartOfTodayInTimezone(timeZone);
+
+      const liveStatuses: OrderStatusEnum[] = [
+        OrderStatusEnum.NEW_ORDER,
+        OrderStatusEnum.ACCEPTED,
+        OrderStatusEnum.PREPARING,
+        OrderStatusEnum.SERVED,
+        OrderStatusEnum.ORDER_COMPLETE,
+      ];
+      const where: { branchId?: number; status: { in: OrderStatusEnum[] }; createdAt?: { gte: Date } } = {
+        status: { in: liveStatuses },
+        createdAt: { gte: startOfToday },
+      };
+
+      if (role === "EMPLOYEE" && userId != null) {
+        const employee = await prisma.employee.findUnique({
+          where: { id: userId },
+        });
+        if (employee?.branchId != null) where.branchId = employee.branchId;
+      }
+
+      const orders = await prisma.order.findMany({
+        where,
+        orderBy: { createdAt: "asc" },
+        include: {
+          items: { include: { menuItem: true } },
+          table: true,
+          employee: true,
+          branch: true,
+        },
+      });
+
+      return res.json(orders);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to load live orders";
+      const details = err instanceof Error ? err.stack : String(err);
+      console.error("GET /orders/live error:", message, details);
+      return res.status(500).json({
+        message: "Failed to load live orders. Check server logs.",
+        ...(process.env.NODE_ENV === "development" && { detail: message }),
+      });
+    }
+  },
+);
+
+// Admin: get all orders (for dashboard)
+orderRouter.get(
+  "/all",
+  authenticate,
+  requireRole("ADMIN"),
+  async (req, res) => {
+    const { date, status, tableId } = req.query;
+    
+    let dateFilter = {};
+    if (date) {
+      const start = new Date(date as string);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(date as string);
+      end.setHours(23, 59, 59, 999);
+      dateFilter = { createdAt: { gte: start, lte: end } };
+    }
+
+    const where: any = {
+      ...dateFilter,
+    };
+    
+    if (status) {
+      where.status = status as any;
+    }
+    
+    if (tableId) {
+      where.tableId = Number(tableId);
+    }
+
+    const orders = await prisma.order.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      include: { 
+        items: { include: { menuItem: true } }, 
+        table: true,
+        employee: true,
+        branch: true,
+      },
+    });
+
+    // Group by table
+    const byTable = new Map();
+    for (const order of orders) {
+      const key = order.table?.tableNumber || order.tableId;
+      if (!byTable.has(key)) {
+        byTable.set(key, {
+          tableId: order.tableId,
+          tableNumber: order.table?.tableNumber || key,
+          orders: [],
+          totalAmount: 0,
+        });
+      }
+      const table = byTable.get(key);
+      table.orders.push(order);
+      table.totalAmount += order.totalAmount;
+    }
+
+    return res.json({
+      orders,
+      byTable: Array.from(byTable.values()),
+      count: orders.length,
+    });
+  },
+);
+
+// Admin: customer leaderboard (aggregate from orders by customerMobile)
+orderRouter.get(
+  "/customer-leaderboard",
+  authenticate,
+  requireRole("ADMIN"),
+  async (req, res) => {
+    const { limit = "20", sortBy = "orders" } = req.query;
+    const limitNum = Math.min(Math.max(Number(limit) || 20, 1), 100);
+
+    const orders = await prisma.order.findMany({
+      where: { customerMobile: { not: null } },
+      select: {
+        customerName: true,
+        customerMobile: true,
+        totalAmount: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const byMobile = new Map<
+      string,
+      { customerName: string | null; totalOrders: number; totalSpent: number; lastOrderDate: string | null }
+    >();
+    for (const o of orders) {
+      const mobile = (o.customerMobile || "").trim();
+      if (!mobile) continue;
+      const existing = byMobile.get(mobile);
+      const name = (o.customerName || "").trim() || null;
+      const createdAt = o.createdAt?.toISOString?.() ?? null;
+      if (!existing) {
+        byMobile.set(mobile, {
+          customerName: name,
+          totalOrders: 1,
+          totalSpent: o.totalAmount ?? 0,
+          lastOrderDate: createdAt,
+        });
+      } else {
+        existing.totalOrders += 1;
+        existing.totalSpent += o.totalAmount ?? 0;
+        if (createdAt && (!existing.lastOrderDate || createdAt > existing.lastOrderDate)) {
+          existing.lastOrderDate = createdAt;
+        }
+        if (name) existing.customerName = name;
+      }
+    }
+
+    let list = Array.from(byMobile.entries()).map(([mobile, data]) => ({
+      customerMobile: mobile,
+      customerName: data.customerName ?? "—",
+      totalOrders: data.totalOrders,
+      totalSpent: data.totalSpent,
+      lastOrderDate: data.lastOrderDate,
+    }));
+
+    if (sortBy === "amount") {
+      list.sort((a, b) => b.totalSpent - a.totalSpent);
+    } else {
+      list.sort((a, b) => b.totalOrders - a.totalOrders);
+    }
+    list = list.slice(0, limitNum);
+
+    return res.json({ leaderboard: list });
+  },
+);
+
+// Employee: accept order (first to click gets it; locks order to this employee)
+orderRouter.post(
+  "/:id/accept",
+  authenticate,
+  requireRole("EMPLOYEE"),
+  async (req, res) => {
+    const id = Number(req.params.id);
+    const employeeId = req.user!.id;
+    const order = await prisma.order.findUnique({
+      where: { id },
+      include: { branch: true, table: true, employee: true },
+    });
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (order.employeeId != null) {
+      return res.status(409).json({
+        message: "Order already accepted by another employee",
+        acceptedBy: order.employee ? { name: order.employee.name, employeeCode: order.employee.employeeCode } : null,
+      });
+    }
+    const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
+    if (!employee || employee.branchId !== order.branchId) {
+      return res.status(403).json({ message: "You can only accept orders for your branch" });
+    }
+    const activeShift = await prisma.employeeShift.findFirst({
+      where: { employeeId, branchId: order.branchId, shiftEnd: null, status: "ACTIVE" as any },
+    });
+    if (!activeShift) {
+      return res.status(400).json({ message: "Start (or resume) your shift first to accept orders" });
+    }
+    const updated = await prisma.order.update({
+      where: { id },
+      data: {
+        employeeId,
+        shiftId: activeShift.id,
+        status: OrderStatusEnum.ACCEPTED,
+      },
+      include: { items: true, table: true, employee: true, branch: true },
+    });
+    req.app.locals.io?.emit("order:updated", updated);
+    let statusWaMeLink: string | null = null;
+    const up = updated as typeof updated & { table?: { tableNumber: string } | null; branch?: { name: string; location: string | null; phone: string | null; googleReviewUrl: string | null } | null };
+    if (up.customerMobile && up.customerName) {
+      const msg = buildStatusMessage({
+        orderId: up.id,
+        customerName: up.customerName,
+        status: "Accepted",
+        tableNumber: up.table?.tableNumber ?? undefined,
+        totalAmount: up.totalAmount,
+        branch: up.branch ? { name: up.branch.name, location: up.branch.location, phone: up.branch.phone, googleReviewUrl: up.branch.googleReviewUrl } : null,
+      });
+      statusWaMeLink = getWaMeLink(up.customerMobile, msg);
+    }
+    return res.json({ order: up, statusWaMeLink });
+  },
+);
+
+orderRouter.patch(
+  "/:id/status",
+  authenticate,
+  requireRole("EMPLOYEE"),
+  async (req, res) => {
+    const parsed = updateStatusSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ message: "Invalid input", errors: parsed.error.issues });
+    }
+
+    const id = Number(req.params.id);
+    const status = parsed.data.status as OrderStatusEnum;
+    const order = await prisma.order.update({
+      where: { id },
+      data: { status },
+      include: { branch: true, table: true, items: true, employee: true },
+    });
+
+    req.app.locals.io?.emit("order:updated", order);
+
+    type OrderWithRelations = typeof order & { table?: { tableNumber: string } | null; branch?: { name: string; location: string | null; phone: string | null; googleReviewUrl: string | null } | null };
+    const o = order as OrderWithRelations;
+
+    let statusWhatsAppMessage: string | null = null;
+    let statusWaMeLink: string | null = null;
+    if (o.customerMobile && o.customerName) {
+      const statusLabel =
+        status === "SERVED"
+          ? "Food is ready"
+          : status === "ORDER_COMPLETE"
+            ? "Order completed"
+            : status;
+      statusWhatsAppMessage = buildStatusMessage({
+        orderId: o.id,
+        customerName: o.customerName,
+        status: statusLabel,
+        tableNumber: o.table?.tableNumber ?? undefined,
+        totalAmount: o.totalAmount,
+        branch: o.branch
+          ? {
+              name: o.branch.name,
+              location: o.branch.location,
+              phone: o.branch.phone,
+              googleReviewUrl: o.branch.googleReviewUrl,
+            }
+          : null,
+      });
+      statusWaMeLink = getWaMeLink(o.customerMobile, statusWhatsAppMessage);
+    }
+
+    return res.json({
+      order: o,
+      ...(statusWhatsAppMessage && statusWaMeLink
+        ? { statusWhatsAppMessage, statusWaMeLink }
+        : {}),
+    });
+  },
+);
+
+// Employee: set/update customer mobile (mandatory for WhatsApp updates)
+orderRouter.patch(
+  "/:id/customer",
+  authenticate,
+  requireRole("EMPLOYEE"),
+  async (req, res) => {
+    const parsed = updateOrderCustomerSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ message: "Invalid input", errors: parsed.error.issues });
+    }
+    const id = Number(req.params.id);
+    const order = await prisma.order.update({
+      where: { id },
+      data: {
+        customerMobile: parsed.data.customerMobile,
+        ...(parsed.data.customerName ? { customerName: parsed.data.customerName } : {}),
+      },
+      include: { items: true, table: true },
+    });
+    req.app.locals.io?.emit("order:updated", order);
+    return res.json(order);
+  },
+);
+
+// Employee: modify order by removing unavailable items
+orderRouter.post(
+  "/:id/modify",
+  authenticate,
+  requireRole("EMPLOYEE"),
+  async (req, res) => {
+    const parsed = modifyOrderSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ message: "Invalid input", errors: parsed.error.issues });
+    }
+
+    const orderId = Number(req.params.id);
+    const employeeId = req.user!.id;
+    const { removedItemIds, reason } = parsed.data;
+
+    // Get current order
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: true },
+    });
+
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    const oldAmount = order.totalAmount;
+
+    // Mark items as removed
+    await prisma.orderItem.updateMany({
+      where: { id: { in: removedItemIds }, orderId },
+      data: {
+        isRemoved: true,
+        removedAt: new Date(),
+        removedBy: employeeId,
+        removalReason: reason || "Item not available",
+      },
+    });
+
+    // Calculate new total from non-removed items
+    const remainingItems = await prisma.orderItem.findMany({
+      where: { orderId, isRemoved: false },
+    });
+
+    const newAmount = remainingItems.reduce(
+      (sum, item) => sum + item.price * item.quantity,
+      0
+    );
+
+    // Update order total and track original amount
+    const updatedOrder = await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        totalAmount: newAmount,
+        originalAmount: order.originalAmount || oldAmount,
+      },
+      include: { items: true, table: true },
+    });
+
+    // Create removed items report entries
+    const removedItems = order.items.filter((item) =>
+      removedItemIds.includes(item.id)
+    );
+
+    await prisma.removedItemsReport.createMany({
+      data: removedItems.map((item) => ({
+        orderId,
+        employeeId,
+        itemName: item.name,
+        quantity: item.quantity,
+        unitPrice: item.price,
+        totalLoss: item.price * item.quantity,
+        reason: reason || "Item not available",
+        date: new Date(),
+      })),
+    });
+
+    // Track modification
+    await prisma.orderModification.create({
+      data: {
+        orderId,
+        modifiedBy: employeeId,
+        oldAmount,
+        newAmount,
+        itemsRemoved: removedItems.map((item) => ({
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price,
+        })),
+        reason: reason || "Item not available",
+      },
+    });
+
+    req.app.locals.io?.emit("order:modified", updatedOrder);
+
+    return res.json({
+      order: updatedOrder,
+      removedItems: removedItems.map((item) => ({
+        name: item.name,
+        quantity: item.quantity,
+        totalLoss: item.price * item.quantity,
+      })),
+      oldAmount,
+      newAmount,
+    });
+  },
+);
+
+// Admin: get removed items report
+orderRouter.get(
+  "/reports/removed-items",
+  authenticate,
+  requireRole("ADMIN"),
+  async (req, res) => {
+    const { date, startDate, endDate } = req.query;
+
+    let dateFilter: any = {};
+    if (date) {
+      const start = new Date(date as string);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(date as string);
+      end.setHours(23, 59, 59, 999);
+      dateFilter = { createdAt: { gte: start, lte: end } };
+    } else if (startDate || endDate) {
+      dateFilter.createdAt = {};
+      if (startDate) {
+        dateFilter.createdAt.gte = new Date(startDate as string);
+      }
+      if (endDate) {
+        const end = new Date(endDate as string);
+        end.setHours(23, 59, 59, 999);
+        dateFilter.createdAt.lte = end;
+      }
+    }
+
+    const removedItems = await prisma.removedItemsReport.findMany({
+      where: dateFilter,
+      orderBy: { createdAt: "desc" },
+      include: {
+        order: { include: { table: true } },
+        employee: { select: { id: true, name: true } },
+      },
+    });
+
+    // Calculate daily totals
+    const dailyTotals = new Map();
+    for (const item of removedItems) {
+      const date = item.createdAt.toISOString().slice(0, 10);
+      if (!dailyTotals.has(date)) {
+        dailyTotals.set(date, {
+          date,
+          totalItems: 0,
+          totalLoss: 0,
+          orders: new Set(),
+        });
+      }
+      const day = dailyTotals.get(date);
+      day.totalItems += item.quantity;
+      day.totalLoss += item.totalLoss;
+      day.orders.add(item.orderId);
+    }
+
+    const summary = {
+      totalItemsRemoved: removedItems.length,
+      totalQuantity: removedItems.reduce((sum, item) => sum + item.quantity, 0),
+      totalLoss: removedItems.reduce((sum, item) => sum + item.totalLoss, 0),
+      uniqueOrders: new Set(removedItems.map((item) => item.orderId)).size,
+    };
+
+    return res.json({
+      removedItems,
+      dailyStats: Array.from(dailyTotals.values()).map((d) => ({
+        ...d,
+        orders: d.orders.size,
+      })),
+      summary,
+    });
+  },
+);
+
+// Admin: get order modifications
+orderRouter.get(
+  "/reports/modifications",
+  authenticate,
+  requireRole("ADMIN"),
+  async (req, res) => {
+    const { date } = req.query;
+
+    let dateFilter: any = {};
+    if (date) {
+      const start = new Date(date as string);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(date as string);
+      end.setHours(23, 59, 59, 999);
+      dateFilter = { modifiedAt: { gte: start, lte: end } };
+    }
+
+    const modifications = await prisma.orderModification.findMany({
+      where: dateFilter,
+      orderBy: { modifiedAt: "desc" },
+      include: {
+        order: { include: { table: true } },
+      },
+    });
+
+    return res.json(modifications);
+  },
+);
+

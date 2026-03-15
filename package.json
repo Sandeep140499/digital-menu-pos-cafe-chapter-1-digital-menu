@@ -1,0 +1,11 @@
+{
+  "name": "gn-monorepo",
+  "private": true,
+  "scripts": {
+    "test": "npm run test:api && npm run test:e2e",
+    "test:api": "npm run test --prefix backend",
+    "test:e2e": "npm run test:e2e --prefix Digital-Menu-GN",
+    "test:watch:api": "npm run test:watch --prefix backend"
+  },
+  "description": "Run test:api for backend only, test:e2e for E2E (requires backend on :4000). Use test:watch:api for API tests on every change."
+}

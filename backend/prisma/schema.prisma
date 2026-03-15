@@ -1,0 +1,347 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Admin {
+  id           Int      @id @default(autoincrement())
+  name         String
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
+model Branch {
+  id              Int       @id @default(autoincrement())
+  name            String
+  location        String?
+  timezone        String?   @default("Asia/Kolkata")
+  logoUrl         String?
+  phone           String?   // Restaurant phone for Call/WhatsApp
+  googleReviewUrl String?   // Google review link
+  pincode         String?   // Branch address pincode (for payslip, etc.)
+  directorsEmail  String?   // Comma-separated verified director emails (for salary slip copies)
+  createdAt       DateTime  @default(now())
+  employees   Employee[]
+  tables      Table[]
+  shifts      EmployeeShift[]
+  orders      Order[]
+  customerQueries CustomerQuery[]
+  directorVerifications   DirectorVerification[]
+  directorRemovalRequests DirectorRemovalRequest[]
+}
+
+model DirectorVerification {
+  id        Int      @id @default(autoincrement())
+  branchId  Int
+  branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  email     String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  @@unique([branchId, email])
+}
+
+model DirectorRemovalRequest {
+  id        Int      @id @default(autoincrement())
+  branchId  Int
+  branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  email     String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  @@unique([branchId, email])
+}
+
+model Employee {
+  id              Int               @id @default(autoincrement())
+  name            String
+  email           String            @unique
+  passwordHash    String
+  employeeCode    String            @unique
+  role            String?           // e.g. "Counter Staff", "Kitchen", "Manager"
+  status          EmployeeStatus    @default(ACTIVE)
+  createdAt       DateTime          @default(now())
+  branchId        Int
+  branch          Branch            @relation(fields: [branchId], references: [id])
+  shifts          EmployeeShift[]
+  orders          Order[]
+  paymentRecords  PaymentRecord[]   @relation("PaymentConfirmedBy")
+  emailVerified   Boolean           @default(false)
+  verificationOtp String?
+  verificationOtpExpiresAt DateTime?
+  profileImageUrl String?
+  removedItems    RemovedItemsReport[]
+  updatedAt       DateTime         @updatedAt
+  phone                 String?
+  salary                Float?
+  address               String?
+  pincode               String?
+  workingHoursPerDay    Int?    // 1-24, for payroll and overtime calculation
+  shiftStartTime        String? // Scheduled shift start e.g. "10:00" (24h)
+  shiftEndTime          String? // Scheduled shift end e.g. "17:00" (24h)
+  joiningDate           DateTime? @db.Date
+  overtimeRecords       EmployeeOvertime[]
+  lateEntries           LateEntry[]
+}
+
+model EmployeeShift {
+  id         Int       @id @default(autoincrement())
+  employeeId Int
+  employee   Employee  @relation(fields: [employeeId], references: [id])
+  branchId   Int
+  branch     Branch    @relation(fields: [branchId], references: [id])
+  shiftStart DateTime
+  shiftEnd   DateTime?
+  totalHours Float?    // computed on shift end
+  totalSales Float?    @default(0)
+  status     ShiftStatus @default(ACTIVE)
+  pauseCount Int       @default(0)
+  lastPauseAt DateTime?
+  endReason  String?   // "Auto Closed" | "Normal End" | null (legacy)
+  createdAt  DateTime  @default(now())
+  orders     Order[]
+  overtimeRecord EmployeeOvertime?
+}
+
+enum ShiftStatus {
+  ACTIVE
+  PAUSED
+  ENDED
+}
+
+model EmployeeOvertime {
+  id             Int      @id @default(autoincrement())
+  employeeId     Int
+  employee       Employee @relation(fields: [employeeId], references: [id])
+  shiftId        Int      @unique  // one overtime record per shift
+  shift          EmployeeShift @relation(fields: [shiftId], references: [id])
+  employeeName   String   // denormalized for display
+  role           String?  // denormalized
+  shiftDate      DateTime @db.Date  // date of shift (shiftStart date in branch TZ)
+  shiftStart     DateTime
+  shiftEnd       DateTime
+  totalHours     Float
+  overtimeHours  Float    // totalHours - workingHoursPerDay, min 0
+  reason         String?  // "Auto Closed" | "Normal End" | etc.
+  status         String   @default("PENDING") // PENDING | APPROVED | REJECTED | PAID
+  createdAt      DateTime @default(now())
+
+  @@index([employeeId])
+  @@index([shiftDate])
+  @@index([createdAt])
+}
+
+model LateEntry {
+  id                Int      @id @default(autoincrement())
+  employeeId        Int
+  employee          Employee @relation(fields: [employeeId], references: [id])
+  date              DateTime @db.Date
+  shiftStartTime    String   // scheduled e.g. "10:00"
+  actualLoginTime   DateTime // when employee actually started shift
+  lateDurationMinutes Int    // minutes late
+  shiftId           Int?     // optional link to EmployeeShift
+  createdAt         DateTime @default(now())
+
+  @@index([employeeId])
+  @@index([date])
+  @@index([createdAt])
+}
+
+model Table {
+  id          Int      @id @default(autoincrement())
+  branchId    Int
+  branch      Branch   @relation(fields: [branchId], references: [id])
+  tableNumber String
+  qrCodeUrl   String?
+  createdAt   DateTime @default(now())
+  orders      Order[]
+}
+
+model MenuCategory {
+  id        Int          @id @default(autoincrement())
+  name      String
+  slug      String?      @unique
+  imageUrl  String?      @map("image_url")
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  items     MenuItem[]
+}
+
+model MenuItem {
+  id          Int          @id @default(autoincrement())
+  name        String
+  description String?
+  imageUrl    String?
+  basePrice   Float        // default / full price
+  hasHalf     Boolean      @default(false)
+  halfPrice   Float?
+  isActive    Boolean      @default(true)
+  categoryId  Int?
+  category    MenuCategory? @relation(fields: [categoryId], references: [id])
+  createdAt   DateTime     @default(now())
+  orderItems  OrderItem[]
+}
+
+model ErrorLog {
+  id           Int       @id @default(autoincrement())
+  errorType    String    // API_FAILURE, DATABASE, MENU_LOAD, etc.
+  apiEndpoint  String?
+  errorMessage String    @db.Text
+  stackTrace   String?   @db.Text
+  branchId     Int?      // affected branch if applicable
+  status       String    @default("UNRESOLVED") // RESOLVED | UNRESOLVED
+  createdAt    DateTime  @default(now())
+  resolvedAt   DateTime?
+  metadata     Json?     // extra context
+
+  @@index([branchId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Order {
+  id              Int              @id @default(autoincrement())
+  tableId         Int
+  table           Table            @relation(fields: [tableId], references: [id])
+  employeeId      Int?
+  employee        Employee?        @relation(fields: [employeeId], references: [id])
+  branchId        Int
+  branch          Branch           @relation(fields: [branchId], references: [id])
+  shiftId         Int?
+  shift           EmployeeShift?   @relation(fields: [shiftId], references: [id])
+  status          OrderStatus      @default(NEW_ORDER)
+  paymentStatus   PaymentStatus    @default(PAYMENT_PENDING)
+  totalAmount     Float            @default(0)
+  originalAmount  Float?           @default(0) // Track original amount before modifications
+  customerName    String?          // Customer name (mandatory at checkout)
+  customerMobile  String?          // 10-digit mobile for WhatsApp & tracking
+  reviewSent      Boolean          @default(false) // Google review link sent once
+  acceptedAt      DateTime?        // When employee accepted the order (for "time to complete")
+  completedAt     DateTime?        // When order was marked ORDER_COMPLETE
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  items           OrderItem[]
+  paymentRecords  PaymentRecord[]
+  sessionToken    String?
+  removedItems    RemovedItemsReport[]
+  modifications   OrderModification[]
+
+  @@index([branchId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([customerMobile])
+}
+
+model OrderItem {
+  id          Int       @id @default(autoincrement())
+  orderId     Int
+  order       Order     @relation(fields: [orderId], references: [id])
+  menuItemId  Int?
+  menuItem    MenuItem? @relation(fields: [menuItemId], references: [id])
+  name        String
+  quantity    Int
+  price       Float     // unit price for selected variant
+  variant     String?   // "HALF" | "FULL" | null
+  isRemoved   Boolean   @default(false)  // Track if item was removed by employee
+  removedAt   DateTime? // When item was removed
+  removedBy   Int?      // Employee ID who removed it
+  removalReason String? // Reason for removal (e.g., "Item not available")
+}
+
+model RemovedItemsReport {
+  id          Int       @id @default(autoincrement())
+  date        DateTime  @default(now())
+  orderId     Int
+  order       Order     @relation(fields: [orderId], references: [id])
+  employeeId  Int?
+  employee    Employee? @relation(fields: [employeeId], references: [id])
+  itemName    String
+  quantity    Int
+  unitPrice   Float
+  totalLoss   Float     // quantity * unitPrice
+  reason      String?
+  createdAt   DateTime  @default(now())
+}
+
+model OrderModification {
+  id          Int       @id @default(autoincrement())
+  orderId     Int
+  order       Order     @relation(fields: [orderId], references: [id])
+  modifiedBy  Int       // Employee ID
+  modifiedAt  DateTime  @default(now())
+  oldAmount   Float     // Total before modification
+  newAmount   Float     // Total after modification
+  itemsRemoved Json?    // Array of removed items
+  reason      String?
+}
+
+model PaymentRecord {
+  id                  Int            @id @default(autoincrement())
+  orderId             Int
+  order               Order          @relation(fields: [orderId], references: [id])
+  paymentStatus       PaymentStatus
+  paidAmount          Float          @default(0)
+  remainingAmount     Float          @default(0)
+  confirmedByEmployee Int?
+  confirmedBy         Employee?      @relation("PaymentConfirmedBy", fields: [confirmedByEmployee], references: [id])
+  createdAt           DateTime       @default(now())
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+  LEFT
+}
+
+enum OrderStatus {
+  NEW_ORDER
+  ACCEPTED
+  PREPARING
+  SERVED
+  ORDER_COMPLETE
+}
+
+enum PaymentStatus {
+  PAYMENT_PENDING
+  PAID
+  PARTIAL
+  UNPAID
+}
+
+model AdminNotification {
+  id        Int       @id @default(autoincrement())
+  type      String    // e.g. PAYMENT_PENDING, DAILY_REPORT_SENT
+  orderId   Int?      // optional, for order-related alerts
+  branchId  Int?      // optional, for branch-scoped alerts
+  message   String    @db.Text
+  meta      Json?     // e.g. { totalPending: 1670, count: 3 } for summary alerts
+  isRead    Boolean   @default(false)
+  createdAt DateTime  @default(now())
+
+  @@index([isRead])
+  @@index([createdAt])
+  @@index([type])
+}
+
+model CustomerQuery {
+  id        Int       @id @default(autoincrement())
+  name      String
+  mobile    String
+  orderId   Int?      // optional order reference
+  branchId  Int?
+  branch    Branch?   @relation(fields: [branchId], references: [id])
+  issueType String    // ORDER_ISSUE, PAYMENT_ISSUE, FOOD_ISSUE, DELAY_ISSUE, OTHER
+  message   String    @db.Text
+  status    String    @default("PENDING") // PENDING, IN_PROGRESS, RESOLVED
+  createdAt DateTime  @default(now())
+  resolvedAt DateTime?
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([branchId])
+}

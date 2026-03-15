@@ -29,6 +29,7 @@ app.use(helmet());
 app.use(express.json());
 app.use(morgan("dev"));
 
+app.get("/", (_req, res) => res.status(200).send("OK"));
 app.use("/api", router);
 
 app.use(errorHandler);
@@ -69,7 +70,7 @@ async function startServer() {
       console.log(`⚠️  Port ${DEFAULT_PORT} is in use. Using port ${port} instead.`);
     }
     
-    server.listen(port, async () => {
+    server.listen(port, "0.0.0.0", async () => {
       console.log(`✅ Backend server listening on port ${port}`);
       console.log(`📡 API Base URL: http://localhost:${port}/api`);
       if (isMailConfigured()) {

@@ -41,6 +41,7 @@ Use the **Description** block above in your GitHub repository **About** → **De
 
 ---
 
-## Deploy (SnapDeploy)
+## Deploy
 
-To push to GitHub and deploy with [SnapDeploy](https://snapdeploy.dev/containers), see **[DEPLOY.md](./DEPLOY.md)** (Dockerfiles for backend and frontend, push steps, and SnapDeploy setup).
+- **Vercel (frontend) + Render (backend) + Railway (DB)** – free and stable: see **[DEPLOY-VERCEL-RENDER.md](./DEPLOY-VERCEL-RENDER.md)**.
+- **SnapDeploy (containers)** – see **[DEPLOY.md](./DEPLOY.md)** (Dockerfiles, push steps, and SnapDeploy setup).

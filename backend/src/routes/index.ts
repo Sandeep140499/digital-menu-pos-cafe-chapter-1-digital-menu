@@ -17,6 +17,9 @@ import { notificationRouter } from "./modules/notification.routes.js";
 
 export const router = Router();
 
+// Health check for load balancers / deployment platforms
+router.get("/health", (_req, res) => res.status(200).json({ ok: true }));
+
 router.use("/auth", authRouter);
 router.use("/employees", employeeRouter);
 router.use("/shift", shiftRouter);

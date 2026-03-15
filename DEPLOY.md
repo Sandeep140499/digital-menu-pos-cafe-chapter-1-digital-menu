@@ -1,6 +1,9 @@
-# Push to GitHub & Deploy with SnapDeploy
+# Deploy options
 
-Use this to push your repo and deploy both the **backend** and **frontend** as containers on [SnapDeploy](https://snapdeploy.dev/containers).
+**Recommended (free, stable):** Frontend on **Vercel**, backend on **Render**, database on **Railway**.  
+→ See **[DEPLOY-VERCEL-RENDER.md](./DEPLOY-VERCEL-RENDER.md)** for step-by-step.
+
+**Containers (SnapDeploy):** Push to GitHub and deploy backend + frontend as containers on [SnapDeploy](https://snapdeploy.dev/containers). Details below.
 
 ---
 
@@ -49,13 +52,16 @@ SnapDeploy is a container hosting platform (AWS): [https://snapdeploy.dev/contai
    - **Dockerfile path:** `backend/Dockerfile`  
      (or the path to the Dockerfile inside the repo, e.g. `./backend/Dockerfile` if SnapDeploy expects a path from repo root).
    - **Root/build context:** repo root (so `backend/` is available).
-5. **Environment variables** (set in SnapDeploy dashboard):
+5. **Start command** (if prompted): `cd backend && PORT=4000 npm start` (so the app runs from the backend folder; use the port your platform assigns if it sets `PORT`).
+6. **Environment variables** (set in SnapDeploy dashboard):
    - `DATABASE_URL` – PostgreSQL connection string.
    - `JWT_SECRET` – strong random string.
    - `JWT_EXPIRES_IN` – e.g. `7d`.
    - `PORT` – e.g. `4000` (if SnapDeploy doesn’t set it).
    - Optional: `EMAIL_*`, `FRONTEND_CUSTOMER_URL`, `FRONTEND_DASHBOARD_URL`, `GOOGLE_REVIEW_URL` (see `backend/.env.example`).
-6. Deploy. Note the backend URL (e.g. `https://your-api.snapdeploy.app`).
+7. **Health check** (if configurable): path `/` or `/api/health`, port same as app (e.g. `4000` or the `PORT` you set). Backend listens on `0.0.0.0`.
+8. Deploy. Note the backend URL (e.g. `https://your-api.snapdeploy.app`).
+9. **If health check still fails:** Check deploy logs. Often the app exits before listening because (a) `prisma migrate deploy` fails (wrong or unreachable `DATABASE_URL`), or (b) build didn’t run so `dist/` is missing. Ensure `DATABASE_URL` is set and that your DB allows connections from the deployment platform’s IP. The Dockerfile now starts the server even if migrate fails so the container stays up; fix DB and re-run migrations if needed.
 
 ### Frontend container
 
@@ -83,7 +89,25 @@ so the app calls the backend by its real URL.
 
 ---
 
-## 3. After first deploy
+## 3. Deploy backend anywhere
+
+The backend is set up to run on **any** host: use **root directory** = `backend` (or deploy from a repo that contains only the `backend/` folder).
+
+| Platform | Root dir | Build | Start | Config |
+|----------|----------|-------|--------|--------|
+| **Docker** (SnapDeploy, Fly, ECS, etc.) | Repo root, Dockerfile path `backend/Dockerfile` | Image build | `node dist/index.js` (in container) | `backend/Dockerfile` |
+| **Render** | `backend` | Uses `render.yaml` or: `npm ci && npx prisma generate && npm run build` | `npx prisma migrate deploy \|\| true && npm start` | `backend/render.yaml` |
+| **Railway** | `backend` | Uses `railway.toml` or: `npm ci && npx prisma generate && npm run build` | `npx prisma migrate deploy \|\| true && npm start` | `backend/railway.toml` |
+| **Heroku** | `backend` | `npm ci && npm run build` | From `Procfile`: `node dist/index.js` | `backend/Procfile` |
+| **Generic (VPS, etc.)** | `backend` | `npm ci && npm run build` | `npm start` (uses `PORT` from env, default 4000) | — |
+
+**Required env vars:** `DATABASE_URL`, `JWT_SECRET`. Optional: `PORT`, `JWT_EXPIRES_IN`, `EMAIL_*`, `FRONTEND_*_URL`, `GOOGLE_REVIEW_URL` (see `backend/.env.example`).
+
+**Health:** App listens on `0.0.0.0` and exposes `GET /` and `GET /api/health`. Set your platform’s health check to one of these and the same port the app uses (`PORT` or 4000).
+
+---
+
+## 4. After first deploy
 
 1. **Backend:** Ensure the database is reachable from SnapDeploy (e.g. Railway, Neon, or any PostgreSQL with a public or allowed IP). Run migrations via the container’s start command (`prisma migrate deploy` is already in the Dockerfile).
 2. **Frontend:** Open the frontend URL; login and menu should use the backend URL you set in `VITE_API_BASE_URL`.
@@ -91,7 +115,7 @@ so the app calls the backend by its real URL.
 
 ---
 
-## 4. Change and redeploy
+## 5. Change and redeploy
 
 To deploy again after code or config changes:
 
@@ -107,18 +131,21 @@ To deploy again after code or config changes:
 
 ---
 
-## 5. Files added for deployment
+## 6. Files added for deployment
 
 | File | Purpose |
 |------|--------|
-| `backend/Dockerfile` | Builds Node app, runs Prisma generate + build; production image runs `prisma migrate deploy` then `node dist/index.js`. |
+| `backend/Dockerfile` | Container build; runs `prisma migrate deploy` then `node dist/index.js`. Use with any Docker host. |
+| `backend/Procfile` | Heroku/Render: `web: node dist/index.js`. |
+| `backend/render.yaml` | Render Blueprint: build + start + health for Node. |
+| `backend/railway.toml` | Railway: build command, start command, health path. |
 | `backend/.dockerignore` | Keeps node_modules, .env, tests out of the build context. |
 | `Digital-Menu-GN/Dockerfile` | Builds Vite app (with optional `VITE_API_BASE_URL`), serves static files with nginx. |
 | `Digital-Menu-GN/.dockerignore` | Keeps node_modules and env files out of the build context. |
 
 ---
 
-## 6. Useful commands (local check)
+## 7. Useful commands (local check)
 
 ```powershell
 # Backend – build and run locally (set DATABASE_URL etc. in env)

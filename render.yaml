@@ -1,0 +1,20 @@
+# Render Blueprint – backend only (monorepo).
+# Use this when connecting the full repo: Render will deploy the backend from backend/.
+# Docs: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: digital-menu-api
+    runtime: node
+    rootDir: backend
+    buildCommand: "npm ci && npx prisma generate && npm run build"
+    startCommand: "npx prisma migrate deploy || true && npm start"
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: "7d"

@@ -91,7 +91,23 @@ so the app calls the backend by its real URL.
 
 ---
 
-## 4. Files added for deployment
+## 4. Change and redeploy
+
+To deploy again after code or config changes:
+
+1. **Commit and push to `main`:**
+   ```powershell
+   cd d:\GN
+   git add .
+   git commit -m "Your change message"
+   git push origin main
+   ```
+2. If SnapDeploy is connected to this repo, it will usually **auto-redeploy** on push. Otherwise use the **Redeploy** (or “Deploy”) button in the SnapDeploy dashboard for each container (backend and frontend).
+3. To change **environment variables** only (no code change), update them in the SnapDeploy project settings and trigger a redeploy from the dashboard.
+
+---
+
+## 5. Files added for deployment
 
 | File | Purpose |
 |------|--------|
@@ -102,7 +118,7 @@ so the app calls the backend by its real URL.
 
 ---
 
-## 5. Useful commands (local check)
+## 6. Useful commands (local check)
 
 ```powershell
 # Backend – build and run locally (set DATABASE_URL etc. in env)

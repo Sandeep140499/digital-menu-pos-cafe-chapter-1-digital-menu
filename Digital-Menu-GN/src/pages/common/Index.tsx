@@ -507,32 +507,46 @@ function MenuCategoryItemsPanel({
             } else {
               fullPrice = Number(priceText.replace("₹", "").trim());
             }
-            return (
-              <li
-                key={idx}
-                className={["flex px-4 py-3 items-center justify-between gap-4 transition", isAddon ? "bg-amber-50/70" : "hover:bg-olive-50/60"].join(" ")}
-              >
-                <span className={["min-w-0 truncate text-sm font-semibold sm:text-base", isAddon ? "text-amber-900" : "text-emerald-900"].join(" ")}>
-                  {item.name}
-                </span>
-                <div className="flex items-center gap-3">
-                  <span className={["shrink-0 rounded-full px-3 py-1 text-sm font-extrabold", isAddon ? "bg-amber-100 text-amber-900" : "bg-olive-100 text-olive-900"].join(" ")}>
-                    {priceText.startsWith("₹") ? priceText : `₹${priceText}`}
-                  </span>
-                  {hasHalfFull && halfPrice != null ? (
-                    <>
+            const priceDisplay = priceText.startsWith("₹") ? priceText : `₹${priceText}`;
+            const priceBadgeClass = ["shrink-0 rounded-full px-3 py-1 text-sm font-extrabold", isAddon ? "bg-amber-100 text-amber-900" : "bg-olive-100 text-olive-900"].join(" ");
+
+            if (hasHalfFull && halfPrice != null) {
+              return (
+                <li
+                  key={idx}
+                  className={["flex flex-col px-4 py-3 gap-2 transition", isAddon ? "bg-amber-50/70" : "hover:bg-olive-50/60"].join(" ")}
+                >
+                  <div className={["text-sm font-semibold sm:text-base break-words", isAddon ? "text-amber-900" : "text-emerald-900"].join(" ")}>
+                    {item.name}
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className={priceBadgeClass}>{priceDisplay}</span>
+                    <div className="flex items-center gap-2 shrink-0">
                       <Button variant="outline" size="sm" className="border-emerald-600 text-emerald-700 hover:bg-emerald-50" onClick={() => addToCart(item.name, halfPrice!, "HALF")}>
                         Half
                       </Button>
                       <Button variant="outline" size="sm" className="border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => addToCart(item.name, fullPrice, "FULL")}>
                         Full
                       </Button>
-                    </>
-                  ) : (
-                    <Button variant="outline" size="sm" className="border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => addToCart(item.name, fullPrice, "FULL")}>
-                      Add
-                    </Button>
-                  )}
+                    </div>
+                  </div>
+                </li>
+              );
+            }
+
+            return (
+              <li
+                key={idx}
+                className={["flex px-4 py-3 items-center justify-between gap-3 transition", isAddon ? "bg-amber-50/70" : "hover:bg-olive-50/60"].join(" ")}
+              >
+                <span className={["min-w-0 flex-1 line-clamp-2 break-words text-sm font-semibold sm:text-base", isAddon ? "text-amber-900" : "text-emerald-900"].join(" ")}>
+                  {item.name}
+                </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className={priceBadgeClass}>{priceDisplay}</span>
+                  <Button variant="outline" size="sm" className="border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => addToCart(item.name, fullPrice, "FULL")}>
+                    Add
+                  </Button>
                 </div>
               </li>
             );
@@ -689,11 +703,9 @@ const Index = () => {
         },
       ];
     });
-    setCartOpen(true);
-    toast({
-      title: "Added to order",
-      description: `${itemName} ${variant ? `(${variant})` : ""} added to your order.`,
-    });
+    // Don't open cart on add – customer stays on menu; cart opens only on "View & Checkout"
+    const result = toast({ title: "Added" });
+    if (result?.dismiss) setTimeout(result.dismiss, 2000);
   }, [toast]);
 
   const incrementCartItem = (id: string) => {
@@ -1037,7 +1049,7 @@ const Index = () => {
           </header>
 
           {/* Categories - memoized so cart/dialog updates do not re-render menu (stops blink) */}
-          <main className="mx-auto max-w-6xl px-4 py-8 pb-24 sm:py-10 sm:pb-10">
+          <main className="mx-auto max-w-6xl px-4 py-8 pb-[max(12rem,calc(6rem+env(safe-area-inset-bottom)))] sm:py-10 sm:pb-10">
             <div className="space-y-6">
               <MenuCategoriesSection
                 menuCategories={menuCategories}
@@ -1055,8 +1067,8 @@ const Index = () => {
             </div>
           </main>
 
-          {/* Floating Cart Summary - safe area for notched phones, thumb-friendly */}
-          <div className="fixed bottom-0 inset-x-0 px-4 pb-4 z-40 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          {/* Floating Cart Summary - above browser chrome on mobile, safe area for notched phones */}
+          <div className="fixed bottom-0 inset-x-0 px-4 z-40 pb-[max(1rem,calc(env(safe-area-inset-bottom)+80px))] sm:pb-[max(1rem,env(safe-area-inset-bottom))]">
             <div className="mx-auto max-w-md">
               <AnimatePresence>
                 {cart.length > 0 && (

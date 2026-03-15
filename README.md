@@ -1,6 +1,6 @@
 # Cafe Chapter 1 – Digital Menu & POS
 
-**Repository name suggestion:** `cafe-chapter-1-digital-menu` or `digital-menu-pos`
+**Repository:** [digital-menu-pos-cafe-chapter-1-digital-menu](https://github.com/Sandeep140499/digital-menu-pos-cafe-chapter-1-digital-menu)
 
 ---
 

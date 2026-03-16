@@ -9,6 +9,7 @@ import "./utils/asyncErrors.js";
 import { router } from "./routes/index.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { isMailConfigured, verifyMailConnection } from "./config/mailer.js";
+import { openApiSpec } from "./openapi.js";
 import net from "net";
 
 const app = express();
@@ -30,6 +31,36 @@ app.use(express.json());
 app.use(morgan("dev"));
 
 app.get("/", (_req, res) => res.status(200).send("OK"));
+
+// OpenAPI / Swagger docs
+app.get("/api/openapi.json", (_req, res) => {
+  res.json(openApiSpec);
+});
+
+app.get("/api/docs", (_req, res) => {
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Gautam Nagar POS API Docs</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script>
+    window.onload = () => {
+      window.ui = SwaggerUIBundle({
+        url: "/api/openapi.json",
+        dom_id: "#swagger-ui",
+      });
+    };
+  </script>
+</body>
+</html>`;
+  res.type("html").send(html);
+});
+
 app.use("/api", router);
 
 app.use(errorHandler);

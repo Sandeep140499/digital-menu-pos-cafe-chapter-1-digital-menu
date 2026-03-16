@@ -25,7 +25,18 @@ const io = new SocketIOServer(server, {
 // Attach io to app locals so services/controllers can emit events
 app.locals.io = io;
 
-app.use(cors());
+// CORS: allow frontend origin and Authorization header so verify-invite and other API calls work from deployed frontend
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim()).filter(Boolean)
+  : undefined;
+app.use(
+  cors({
+    origin: allowedOrigins ?? true,
+    methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: false,
+  }),
+);
 app.use(helmet());
 app.use(express.json());
 app.use(morgan("dev"));
@@ -35,6 +46,32 @@ app.get("/", (_req, res) => res.status(200).send("OK"));
 // OpenAPI / Swagger docs
 app.get("/api/openapi.json", (_req, res) => {
   res.json(openApiSpec);
+});
+
+// Explicit OPTIONS (preflight) for all /api routes so POST /api/employees/:id/verify-and-send-invite works from frontend on Render etc.
+app.use("/api", (req, res, next) => {
+  if (req.method === "OPTIONS") {
+    const origin =
+      allowedOrigins?.length &&
+      req.headers.origin &&
+      allowedOrigins.includes(req.headers.origin)
+        ? req.headers.origin
+        : allowedOrigins?.length
+          ? allowedOrigins[0]
+          : req.headers.origin || "*";
+    res.setHeader("Access-Control-Allow-Origin", String(origin));
+    res.setHeader(
+      "Access-Control-Allow-Methods",
+      "GET, POST, PATCH, PUT, DELETE, OPTIONS",
+    );
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      "Content-Type, Authorization",
+    );
+    res.setHeader("Access-Control-Max-Age", "86400");
+    return res.sendStatus(204);
+  }
+  next();
 });
 
 app.get("/api/docs", (_req, res) => {

@@ -100,8 +100,9 @@ orderRouter.post("/", async (req, res) => {
       .json({ message: "Invalid input", errors: parsed.error.issues });
   }
 
-  const { tableId, tableNumber, branchId, items, sessionToken, packaging, customerName, customerMobile: rawMobile } = parsed.data;
+  const { tableId, tableNumber, branchId, items, sessionToken, packaging, customerName: rawName, customerMobile: rawMobile } = parsed.data;
   const customerMobile = rawMobile ?? null;
+  const customerName = (rawName || "").trim().toUpperCase() || (rawName || "").trim();
 
   const branchExists = await prisma.branch.findUnique({ where: { id: branchId }, select: { id: true } });
   if (!branchExists) {
@@ -567,9 +568,13 @@ orderRouter.get(
       }
     }
 
+    const toDisplayName = (name: string | null): string => {
+      const s = (name || "").trim();
+      return s === "" ? "—" : s.toUpperCase();
+    };
     let list = Array.from(byMobile.entries()).map(([mobile, data]) => ({
       customerMobile: mobile,
-      customerName: data.customerName ?? "—",
+      customerName: toDisplayName(data.customerName),
       totalOrders: data.totalOrders,
       totalSpent: data.totalSpent,
       lastOrderDate: data.lastOrderDate,
@@ -716,11 +721,14 @@ orderRouter.patch(
         .json({ message: "Invalid input", errors: parsed.error.issues });
     }
     const id = Number(req.params.id);
+    const customerName = parsed.data.customerName
+      ? (parsed.data.customerName || "").trim().toUpperCase() || undefined
+      : undefined;
     const order = await prisma.order.update({
       where: { id },
       data: {
         customerMobile: parsed.data.customerMobile,
-        ...(parsed.data.customerName ? { customerName: parsed.data.customerName } : {}),
+        ...(customerName ? { customerName } : {}),
       },
       include: { items: true, table: true },
     });

@@ -2609,29 +2609,27 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
         payYear,
         payMonthName,
       );
-      setSalarySlips((prev) => [
-        ...prev,
-        {
-          id: Date.now(),
-          salaryNumber,
-          employee: { name: selectedEmployee.name },
-          employeeCode: selectedEmployee.employeeCode,
-          month: payMonthName,
-          year: payYear,
-          basicSalary: basicSalary || 0,
-          allowances: allowanceRows,
-          deductions: deductionRows,
-          netSalary,
-          paidDays,
-          lopDays,
-          status: "Sent",
-          createdAt: new Date().toISOString(),
-        },
-      ]);
+      const newSlip = {
+        id: Date.now(),
+        salaryNumber,
+        employee: { name: selectedEmployee.name },
+        employeeCode: selectedEmployee.employeeCode,
+        month: payMonthName,
+        year: payYear,
+        basicSalary: basicSalary || 0,
+        allowances: allowanceRows,
+        deductions: deductionRows,
+        netSalary,
+        paidDays,
+        lopDays,
+        status: "Sent",
+        createdAt: new Date().toISOString(),
+      };
+      setSalarySlips((prev) => [newSlip, ...prev]);
       onOpenChange(false);
       toast({
-        title: "Salary slip generated",
-        description: `For ${selectedEmployee.name}`,
+        title: "Slip generated successfully",
+        description: `Salary slip for ${selectedEmployee.name} has been added. It appears at the top of the list below.`,
       });
     } catch (e: unknown) {
       const err = e as { message?: string; errors?: { message?: string }[] };
@@ -4297,14 +4295,19 @@ const AdminDashboard = () => {
     if (!token || !emp) return;
     setVerifyingEmployeeId(emp.id);
     try {
-      const res = await fetch(
+      const res = await fetchWithTimeout(
         `${apiBase}/employees/${emp.id}/verify-and-send-invite`,
         {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
+          timeout: 20000,
         },
       );
-      const data = await res.json().catch(() => ({}));
+      const contentType = res.headers.get("content-type");
+      const isJson = contentType?.includes("application/json");
+      const data = isJson
+        ? await res.json().catch(() => ({}))
+        : { message: await res.text().catch(() => "Server error") };
       if (res.ok) {
         const { _message, ...updated } = data as {
           _message?: string;
@@ -4324,15 +4327,27 @@ const AdminDashboard = () => {
         }
       } else {
         const payload = data as { message?: string; detail?: string };
-        const desc = payload.detail
-          ? `${payload.message || "Failed to send invite"}. ${payload.detail}`
-          : payload.message || "Failed to send invite";
-        toast({ title: "Error", description: desc, variant: "destructive" });
+        const desc =
+          payload.message ||
+          (res.status === 503
+            ? "Email is not configured on the server. Add EMAIL_SMTP_* and EMAIL_FROM_ADDRESS in the backend environment (e.g. Render dashboard)."
+            : res.status === 500
+              ? "Server could not send email. Check backend SMTP settings and logs."
+              : "Failed to send invite.");
+        const extra = payload.detail ? ` ${payload.detail}` : "";
+        toast({
+          title: "Error",
+          description: desc + extra,
+          variant: "destructive",
+        });
       }
-    } catch {
+    } catch (e) {
+      const isAbort = e instanceof Error && e.name === "AbortError";
       toast({
         title: "Error",
-        description: "Failed to send invite",
+        description: isAbort
+          ? "Request timed out. Check your connection and try again."
+          : "Failed to send invite. Check network and backend.",
         variant: "destructive",
       });
     } finally {
@@ -4962,9 +4977,9 @@ const AdminDashboard = () => {
 
   // ============ SECTIONS ============
 
-  // 1. COMPACT KPI CARDS - All INR (responsive: 1 col mobile, 2 col sm, 4 col md+)
+  // 1. COMPACT KPI CARDS - All INR (responsive: 2 col mobile, 4 col md+)
   const KPICards = () => (
-    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 w-full min-w-0">
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 w-full min-w-0">
       {/* Row 1 */}
       <Card className="bg-gradient-to-br from-emerald-50 to-white border-emerald-100 min-w-0 overflow-hidden">
         <CardContent className="p-2 sm:p-3">
@@ -5137,10 +5152,10 @@ const AdminDashboard = () => {
   const ItemSalesSection = () => (
     <Card className="min-h-0 flex flex-col">
       <CardHeader className="pb-3 flex-shrink-0">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-2 md:gap-3">
           <div className="flex items-center gap-2 min-w-0">
             <Utensils className="h-5 w-5 shrink-0 text-emerald-600" />
-            <div>
+            <div className="min-w-0 flex-1">
               <CardTitle className="text-base sm:text-lg truncate">
                 Today&apos;s Item Sales
               </CardTitle>
@@ -5149,7 +5164,7 @@ const AdminDashboard = () => {
               </p>
             </div>
           </div>
-          <Badge variant="outline" className="w-fit shrink-0">
+          <Badge variant="outline" className="w-fit self-start">
             {todayStats.totalItemsSold} items sold
           </Badge>
         </div>
@@ -5454,15 +5469,16 @@ const AdminDashboard = () => {
                         {s.late
                           ? new Date(s.late.scheduledStart).toLocaleTimeString(
                               "en-IN",
-                              { hour: "2-digit", minute: "2-digit" },
+                              { hour: "2-digit", minute: "2-digit", hour12: true },
                             )
-                          : ((s.employee as any)?.shiftStartTime ?? "—")}
+                          : formatShiftTime24ToAmPm((s.employee as any)?.shiftStartTime ?? "") || "—"}
                       </TableCell>
                       <TableCell className="text-xs">
                         {s.shiftStart
                           ? new Date(s.shiftStart).toLocaleTimeString("en-IN", {
                               hour: "2-digit",
                               minute: "2-digit",
+                              hour12: true,
                             })
                           : "—"}
                       </TableCell>
@@ -6402,40 +6418,40 @@ const AdminDashboard = () => {
         </Card>
       ) : (
         <>
-          {/* Table: Customer Name, Mobile, Total Orders, Rank (scrolls on mobile) */}
+          {/* Table: Customer Name, Mobile, Total Orders, Total Spent — clear list form */}
           <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50">
-                  <TableHead className="whitespace-nowrap">Rank</TableHead>
-                  <TableHead className="whitespace-nowrap">
+                  <TableHead className="w-14 whitespace-nowrap">Rank</TableHead>
+                  <TableHead className="min-w-[140px] sm:min-w-[180px] whitespace-nowrap">
                     Customer Name
                   </TableHead>
-                  <TableHead className="whitespace-nowrap">
+                  <TableHead className="min-w-[110px] whitespace-nowrap">
                     Mobile Number
                   </TableHead>
-                  <TableHead className="whitespace-nowrap text-right">
+                  <TableHead className="w-24 whitespace-nowrap text-right">
                     Total Orders
                   </TableHead>
-                  <TableHead className="whitespace-nowrap text-right">
+                  <TableHead className="min-w-[100px] whitespace-nowrap text-right">
                     Total Spent
                   </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {leaderboard.map((row, idx) => (
-                  <TableRow key={row.customerMobile}>
+                  <TableRow key={`${row.customerMobile}-${idx}`}>
                     <TableCell className="font-medium">{idx + 1}</TableCell>
-                    <TableCell className="font-medium">
-                      {row.customerName}
+                    <TableCell className="font-medium align-top">
+                      {(row.customerName || "—").toUpperCase()}
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {row.customerMobile}
+                    <TableCell className="text-muted-foreground align-top font-mono text-sm">
+                      {row.customerMobile || "—"}
                     </TableCell>
-                    <TableCell className="text-right font-semibold">
+                    <TableCell className="text-right font-semibold align-top">
                       {row.totalOrders}
                     </TableCell>
-                    <TableCell className="text-right font-semibold text-emerald-700">
+                    <TableCell className="text-right font-semibold text-emerald-700 align-top">
                       {formatINR(row.totalSpent)}
                     </TableCell>
                   </TableRow>
@@ -6446,9 +6462,10 @@ const AdminDashboard = () => {
           <p className="text-sm text-muted-foreground font-medium">
             Top {Math.min(leaderboardLimit, leaderboard.length)} — Card view
           </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {leaderboard.map((row, idx) => {
               const rank = idx + 1;
+              const displayName = (row.customerName || "—").toUpperCase();
               const loyaltyTag =
                 row.totalOrders > 30
                   ? "VIP CUSTOMER"
@@ -6469,12 +6486,12 @@ const AdminDashboard = () => {
                 : "—";
               return (
                 <Card
-                  key={row.customerMobile}
+                  key={`${row.customerMobile}-${idx}`}
                   className="overflow-hidden border-l-4 border-l-emerald-500"
                 >
                   <CardHeader className="pb-2">
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-start gap-2 min-w-0">
                         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-800 font-bold text-sm">
                           {rank === 1
                             ? "🥇"
@@ -6484,12 +6501,15 @@ const AdminDashboard = () => {
                                 ? "🥉"
                                 : `#${rank}`}
                         </span>
-                        <div className="min-w-0">
-                          <CardTitle className="text-base truncate">
-                            {row.customerName}
+                        <div className="min-w-0 flex-1">
+                          <CardTitle
+                            className="text-base break-words leading-snug"
+                            title={displayName}
+                          >
+                            {displayName}
                           </CardTitle>
-                          <p className="text-xs text-muted-foreground">
-                            📞 {row.customerMobile}
+                          <p className="text-xs text-muted-foreground font-mono mt-0.5">
+                            📞 {row.customerMobile || "—"}
                           </p>
                         </div>
                       </div>
@@ -7115,13 +7135,26 @@ const AdminDashboard = () => {
     return `${h} Hour${h !== 1 ? "s" : ""} ${m} Min`;
   };
 
+  /** Format "HH:mm" (24h) to "10:00 AM" / "3:23 PM" for Scheduled Start in Late Entries. */
+  const formatShiftTime24ToAmPm = (timeStr: string): string => {
+    if (!timeStr || typeof timeStr !== "string") return timeStr || "—";
+    const match = /^(\d{1,2}):(\d{2})$/.exec(timeStr.trim());
+    if (!match) return timeStr;
+    const hour = parseInt(match[1], 10);
+    const minute = match[2];
+    if (hour < 0 || hour > 23) return timeStr;
+    const h = hour % 12 || 12;
+    const ampm = hour < 12 ? "AM" : "PM";
+    return `${h}:${minute} ${ampm}`;
+  };
+
   const LateSection = () => (
     <div className="space-y-4">
       <div>
         <h2 className="text-xl font-bold">Late Entries</h2>
         <p className="text-sm text-muted-foreground">
-          Employees who started their shift after the scheduled shift start
-          time.
+          Employees who started their shift after the scheduled shift start time.
+          <span className="block mt-1 text-xs">Scheduled Start = shift start time (e.g. 10:00 AM). Actual Login = when the employee started their shift.</span>
         </p>
       </div>
       <Card>
@@ -7224,7 +7257,7 @@ const AdminDashboard = () => {
                     <span className="text-muted-foreground">
                       Scheduled Start
                     </span>
-                    <span>{e.shiftStartTime}</span>
+                    <span>{formatShiftTime24ToAmPm(e.shiftStartTime)}</span>
                     <span className="text-muted-foreground">Actual Login</span>
                     <span>
                       {new Date(e.actualLoginTime).toLocaleTimeString("en-IN", {
@@ -7249,10 +7282,10 @@ const AdminDashboard = () => {
                       <TableHead className="text-xs font-semibold">
                         Date
                       </TableHead>
-                      <TableHead className="text-xs font-semibold">
+                      <TableHead className="text-xs font-semibold" title="Scheduled shift start time">
                         Scheduled Start
                       </TableHead>
-                      <TableHead className="text-xs font-semibold">
+                      <TableHead className="text-xs font-semibold" title="When the employee actually started their shift">
                         Actual Login
                       </TableHead>
                       <TableHead className="text-xs font-semibold">
@@ -7273,11 +7306,11 @@ const AdminDashboard = () => {
                             year: "numeric",
                           })}
                         </TableCell>
-                        <TableCell>{e.shiftStartTime}</TableCell>
+                        <TableCell>{formatShiftTime24ToAmPm(e.shiftStartTime)}</TableCell>
                         <TableCell>
                           {new Date(e.actualLoginTime).toLocaleTimeString(
                             "en-IN",
-                            { hour: "2-digit", minute: "2-digit" },
+                            { hour: "2-digit", minute: "2-digit", hour12: true },
                           )}
                         </TableCell>
                         <TableCell className="font-medium text-amber-600">

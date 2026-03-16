@@ -37,7 +37,29 @@ app.use(
     credentials: false,
   }),
 );
-app.use(helmet());
+// Helmet with relaxed CSP so Swagger UI docs can load external JS/CSS bundles.
+// This keeps defaults but allows the Swagger CDN domains.
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        "script-src": [
+          "'self'",
+          "https://cdn.jsdelivr.net",
+          "https://unpkg.com",
+        ],
+        "style-src": [
+          "'self'",
+          "https://cdn.jsdelivr.net",
+          "https://unpkg.com",
+          "https://fonts.googleapis.com",
+        ],
+        "img-src": ["'self'", "data:", "https://cdn.jsdelivr.net"],
+      },
+    },
+  }),
+);
 app.use(express.json());
 app.use(morgan("dev"));
 
@@ -80,11 +102,11 @@ app.get("/api/docs", (_req, res) => {
 <head>
   <meta charset="utf-8" />
   <title>Gautam Nagar POS API Docs</title>
-  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css" />
 </head>
 <body>
   <div id="swagger-ui"></div>
-  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
   <script>
     window.onload = () => {
       window.ui = SwaggerUIBundle({

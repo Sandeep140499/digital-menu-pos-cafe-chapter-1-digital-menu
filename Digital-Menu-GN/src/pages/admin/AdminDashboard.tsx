@@ -4317,7 +4317,10 @@ const AdminDashboard = () => {
         {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
-          timeout: 20000,
+          // Allow extra time in production where SMTP can be slow,
+          // so the request does not fail with a client-side timeout
+          // while the server is still sending the email.
+          timeout: 60000,
         },
       );
       const contentType = res.headers.get("content-type");
@@ -6108,8 +6111,13 @@ const AdminDashboard = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-2">
-              <div className="h-60">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="h-60 min-h-[240px]">
+                <ResponsiveContainer
+                  width="100%"
+                  height="100%"
+                  minWidth={0}
+                  minHeight={200}
+                >
                   <LineChart data={trendData} margin={{ top: 10, right: 20, bottom: 0, left: -10 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                     <XAxis dataKey="label" tickMargin={6} />
@@ -6144,8 +6152,13 @@ const AdminDashboard = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-2">
-              <div className="h-60">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="h-60 min-h-[240px]">
+                <ResponsiveContainer
+                  width="100%"
+                  height="100%"
+                  minWidth={0}
+                  minHeight={200}
+                >
                   <BarChart data={routePerformanceData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                     <XAxis dataKey="route" tickMargin={6} />
@@ -6169,8 +6182,13 @@ const AdminDashboard = () => {
             </CardHeader>
             <CardContent className="pt-2">
               <div className="flex items-center justify-between gap-4">
-                <div className="h-48 w-48">
-                  <ResponsiveContainer width="100%" height="100%">
+                <div className="h-48 w-48 min-h-[192px] min-w-[192px]">
+                  <ResponsiveContainer
+                    width="100%"
+                    height="100%"
+                    minWidth={0}
+                    minHeight={180}
+                  >
                     <PieChart>
                       <Pie
                         data={deviceTrafficData}

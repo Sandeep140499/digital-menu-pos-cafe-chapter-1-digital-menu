@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../../config/prisma.js";
 import { mailer, getFromAddress, isMailConfigured } from "../../config/mailer.js";
 import { authenticate, requireRole } from "../../middleware/auth.js";
+import { getPublicMenuViewCount } from "../../services/publicTraffic.js";
 
 export const reportRouter = Router();
 
@@ -214,6 +215,90 @@ reportRouter.get(
     }));
 
     return res.json(data);
+  },
+);
+
+// Admin: dashboard performance summary (for admin Performance page)
+reportRouter.get(
+  "/dashboard-summary",
+  authenticate,
+  requireRole("ADMIN"),
+  async (_req, res) => {
+    const { start, end } = getBusinessDayRange();
+
+    const paidOrders = await prisma.order.findMany({
+      where: {
+        paymentStatus: "PAID",
+        createdAt: { gte: start, lte: end },
+      },
+      select: {
+        id: true,
+        createdAt: true,
+        totalAmount: true,
+        table: {
+          select: { tableNumber: true },
+        },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    // Simple per-hour buckets for "trend"
+    const buckets: Record<
+      string,
+      { orders: number; revenue: number }
+    > = {};
+
+    for (const o of paidOrders) {
+      const d = new Date(o.createdAt);
+      const key = `${d.getHours().toString().padStart(2, "0")}:00`;
+      if (!buckets[key]) {
+        buckets[key] = { orders: 0, revenue: 0 };
+      }
+      buckets[key].orders += 1;
+      buckets[key].revenue += o.totalAmount || 0;
+    }
+
+    const trend = Object.entries(buckets)
+      .sort(([a], [b]) => (a < b ? -1 : 1))
+      .map(([label, value]) => ({
+        label,
+        orders: value.orders,
+        revenue: value.revenue,
+      }));
+
+    // Top routes – currently approximated from table number (this can be refined later)
+    const byTable: Record<string, { count: number; revenue: number }> = {};
+    for (const o of paidOrders) {
+      const key = o.table?.tableNumber || "Takeaway";
+      if (!byTable[key]) {
+        byTable[key] = { count: 0, revenue: 0 };
+      }
+      byTable[key].count += 1;
+      byTable[key].revenue += o.totalAmount || 0;
+    }
+    const routes = Object.entries(byTable)
+      .map(([name, value]) => ({
+        route: name,
+        orders: value.count,
+        revenue: value.revenue,
+      }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 6);
+
+    // Public network traffic from in-memory counter
+    const publicNetworkTraffic = getPublicMenuViewCount();
+
+    return res.json({
+      date: start.toISOString().slice(0, 10),
+      totalOrders: paidOrders.length,
+      totalRevenue: paidOrders.reduce(
+        (sum, o) => sum + (o.totalAmount || 0),
+        0,
+      ),
+      publicNetworkTraffic,
+      trend,
+      routes,
+    });
   },
 );
 

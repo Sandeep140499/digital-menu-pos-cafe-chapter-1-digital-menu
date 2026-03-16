@@ -4,7 +4,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import toast from "react-hot-toast";
+import { useToast } from "@/hooks/use-toast";
 import { Link } from "react-router-dom";
 import { API_BASE_URL } from "@/constants";
 import cafeLogo from "@/assets/logo.png";
@@ -15,6 +15,7 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,7 +42,12 @@ const Login = () => {
       window.sessionStorage.setItem("dm_auth_token", data.token);
       window.sessionStorage.setItem("dm_auth_role", data.role);
 
-      toast.success(`Logged in as ${data.role}`, { duration: 4000 });
+      toast({
+        title: "Login successful",
+        description: `Logged in as ${data.role}`,
+        className:
+          "border-emerald-500 bg-emerald-50 text-emerald-900 font-medium",
+      });
 
       if (data.role === "ADMIN") {
         navigate("/admin");
@@ -49,8 +55,10 @@ const Login = () => {
         navigate("/employee");
       }
     } catch (error: any) {
-      toast.error(error.message ?? "Unable to login. Check credentials.", {
-        duration: 5000,
+      toast({
+        title: "Login failed",
+        description: error.message ?? "Unable to login. Check credentials.",
+        variant: "destructive",
       });
     } finally {
       setLoading(false);

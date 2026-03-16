@@ -44,7 +44,7 @@ import {
   X,
   Lock,
 } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip as RechartsTooltip, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip as RechartsTooltip, Legend as RechartsLegend, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -3809,6 +3809,7 @@ const AdminDashboard = () => {
         employeesRes,
         ordersRes,
         trafficRes,
+        dashboardSummaryRes,
         activeShiftsRes,
         overtimeSummaryRes,
         branchesRes,

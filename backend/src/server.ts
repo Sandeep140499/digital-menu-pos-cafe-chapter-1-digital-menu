@@ -141,10 +141,16 @@ async function startServer() {
     server.listen(port, "0.0.0.0", async () => {
       console.log(`✅ Backend server listening on port ${port}`);
       console.log(`📡 API Base URL: http://localhost:${port}/api`);
+      // For local development, skip failing on SMTP verification errors.
       if (isMailConfigured()) {
         verifyMailConnection()
           .then(() => console.log("📧 Mail (SMTP) connection verified"))
-          .catch((err: unknown) => console.error("📧 Mail (SMTP) verification failed:", (err as Error)?.message || err));
+          .catch((err: unknown) => {
+            console.warn(
+              "📧 Mail (SMTP) verification failed. Email features may not work until SMTP env vars are correct.",
+              (err as Error)?.message || err,
+            );
+          });
       } else {
         console.log("📧 Mail not configured (EMAIL_SMTP_* / EMAIL_FROM_ADDRESS missing)");
       }

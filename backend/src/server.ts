@@ -44,8 +44,10 @@ app.use(
     contentSecurityPolicy: {
       useDefaults: true,
       directives: {
+        // Allow Swagger UI assets and inline bootstrap script on /api/docs
         "script-src": [
           "'self'",
+          "'unsafe-inline'",
           "https://cdn.jsdelivr.net",
           "https://unpkg.com",
         ],

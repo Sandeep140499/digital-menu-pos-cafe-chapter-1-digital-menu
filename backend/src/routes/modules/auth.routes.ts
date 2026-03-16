@@ -191,6 +191,13 @@ authRouter.post("/forgot-password", async (req, res) => {
     ? await prisma.employee.findUnique({ where: { email } })
     : null;
 
+  // Security rule: only verified employee emails can request a reset.
+  if (employee && !employee.emailVerified) {
+    return res.status(403).json({
+      message: "Please verify your email first before resetting your password.",
+    });
+  }
+
   if (!admin && !employee) {
     return res.json({
       message: "If this email exists, a reset link has been sent.",

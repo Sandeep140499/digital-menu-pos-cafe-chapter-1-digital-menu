@@ -6,10 +6,20 @@ export const openApiSpec = {
     description:
       "REST API for the Gautam Nagar Digital Menu POS system (auth, employees, shifts, orders, reports, menu, config, notifications, etc.).",
   },
+  // Multiple servers so Swagger UI lets the user choose
+  // between local dev and the deployed backend.
   servers: [
     {
       url: "/api",
-      description: "Relative API base (same host as frontend or backend)",
+      description: "Same host (default: current backend URL)",
+    },
+    {
+      url: "http://localhost:4000/api",
+      description: "Local development (Node backend on :4000)",
+    },
+    {
+      url: "https://digital-menu-pos-cafe-chapter-1-digital.onrender.com/api",
+      description: "Deployed Render backend",
     },
   ],
   tags: [

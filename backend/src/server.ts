@@ -126,7 +126,10 @@ app.use("/api", router);
 
 app.use(errorHandler);
 
-const DEFAULT_PORT = Number(process.env.PORT) || 4000;
+// On Railway (and most platforms), PORT is injected and must be used as-is.
+// Only use the fallback/port-scanning behavior when PORT is not provided (local dev).
+const HAS_PLATFORM_PORT = typeof process.env.PORT === "string" && process.env.PORT.length > 0;
+const DEFAULT_PORT = (HAS_PLATFORM_PORT ? Number(process.env.PORT) : 4000) || 4000;
 const MAX_PORT_ATTEMPTS = 10;
 
 // Function to check if a port is available
@@ -156,9 +159,9 @@ async function findAvailablePort(startPort: number): Promise<number> {
 // Start server with port fallback
 async function startServer() {
   try {
-    const port = await findAvailablePort(DEFAULT_PORT);
-    
-    if (port !== DEFAULT_PORT) {
+    const port = HAS_PLATFORM_PORT ? DEFAULT_PORT : await findAvailablePort(DEFAULT_PORT);
+
+    if (!HAS_PLATFORM_PORT && port !== DEFAULT_PORT) {
       console.log(`⚠️  Port ${DEFAULT_PORT} is in use. Using port ${port} instead.`);
     }
     

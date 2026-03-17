@@ -1,10 +1,13 @@
-# Deploy: Vercel (frontend) + Render (backend) + Railway (database)
+# Deploy: Vercel (frontend) + Render or Railway (backend) + Railway (database)
 
-Free, stable setup for your restaurant app:
+Free, stable setup for your restaurant app. You can run the **backend** on either **Railway** or **Render**; keep both as options.
+
+- **Railway backend:** Fast, no cold start; uses monthly credits.
+- **Render backend:** Free tier can sleep (cold start); runs continuously when you use it. Good fallback when Railway credits run out.
 
 ```
 Frontend (React/Vite)  →  Vercel
-Backend (Node.js API)  →  Render
+Backend (Node.js API)  →  Railway or Render  (same DB)
 Database (PostgreSQL)  →  Railway
 ```
 
@@ -13,11 +16,25 @@ Database (PostgreSQL)  →  Railway
 ## Prerequisites
 
 - GitHub repo pushed (this project).
-- **Railway** database: create a PostgreSQL database and copy the **connection URL** (e.g. `postgresql://...`).
+- **Railway** database: in [Railway](https://railway.app) create a PostgreSQL database and copy the **connection URL** (e.g. `postgresql://...`). Use this same `DATABASE_URL` for either Railway or Render backend.
 
 ---
 
-## 1. Deploy backend on Render
+## 1. Deploy backend (choose Railway or Render)
+
+### Option A — Backend on Railway
+
+1. Go to [Railway](https://railway.app/dashboard) and ensure you have a **workspace** (create one if prompted).
+2. **New** → **Project** → **Deploy from GitHub repo**, and select this project’s repo.
+3. In the new service, open **Settings**:
+   - Set **Root Directory** to **`backend`** (required so Prisma finds `prisma/schema.prisma`).
+   - Build and start commands are read from `backend/railway.toml` (or set **Build Command:** `npm ci && npx prisma generate && npm run build`, **Start Command:** `npx prisma migrate deploy || true && npm start`).
+4. **Variables:** Add `DATABASE_URL` (Railway PostgreSQL URL), `JWT_SECRET`, `JWT_EXPIRES_IN` (e.g. `7d`). Optional: `NODE_ENV=production`, `FRONTEND_CUSTOMER_URL`, `FRONTEND_DASHBOARD_URL`, etc. (see `backend/.env.example`).
+5. **Deploy.** Copy the generated backend URL (e.g. `https://your-app.up.railway.app`). The API base for the frontend is **`https://your-app.up.railway.app/api`**.
+
+Railway backend: no cold start; uses monthly credits. When credits run out, use **Section 7** to switch to Render.
+
+### Option B — Backend on Render
 
 1. Go to [Render](https://render.com) and sign in (e.g. with GitHub).
 2. **New** → **Web Service**.
@@ -60,8 +77,8 @@ Database (PostgreSQL)  →  Railway
    - **Install Command:** `npm install` (default).
 5. **Environment variables** (before first deploy):
    - **Name:** `VITE_API_BASE_URL`  
-   - **Value:** `https://YOUR-RENDER-URL.onrender.com/api`  
-     (use the backend URL from step 1, with `/api` at the end; no trailing slash.)
+   - **Value:** Your backend API URL + `/api`  
+     (e.g. `https://your-app.up.railway.app/api` or `https://digital-menu-api.onrender.com/api` — no trailing slash.)
 6. Click **Deploy**. Wait for the build to finish.
 7. Your app will be at e.g. `https://your-project.vercel.app`.
 
@@ -71,8 +88,8 @@ Database (PostgreSQL)  →  Railway
 
 ## 3. Connect frontend and backend
 
-- **Frontend (Vercel):** Already points to the backend via `VITE_API_BASE_URL` (built at deploy time).
-- **Backend (Render):** Optionally set:
+- **Frontend (Vercel):** Points to the backend via `VITE_API_BASE_URL` (built at deploy time). Use your Railway or Render backend URL + `/api`.
+- **Backend (Railway or Render):** Optionally set:
   - `FRONTEND_CUSTOMER_URL` = `https://your-project.vercel.app`
   - `FRONTEND_DASHBOARD_URL` = `https://your-project.vercel.app`  
   so CORS and emails (e.g. password reset) use the correct frontend URL.
@@ -81,28 +98,43 @@ Database (PostgreSQL)  →  Railway
 
 ## 4. Summary
 
-| What        | Where   | URL / Note                                      |
-|------------|---------|--------------------------------------------------|
-| Frontend   | Vercel  | `https://your-project.vercel.app`               |
-| Backend API| Render  | `https://digital-menu-api.onrender.com` → `/api`|
-| Database   | Railway | Use `DATABASE_URL` in Render env                 |
+| What        | Where            | URL / Note                                                |
+|------------|------------------|------------------------------------------------------------|
+| Frontend   | Vercel           | `https://your-project.vercel.app`                         |
+| Backend API| Railway or Render| e.g. `https://your-app.up.railway.app/api` or `...onrender.com/api` |
+| Database   | Railway          | Use `DATABASE_URL` in your backend (Railway or Render)     |
 
-**Flow:** Browser → Vercel (React) → API calls → Render (Node) → Railway (PostgreSQL).
+**Flow:** Browser → Vercel (React) → API calls → Railway or Render (Node) → Railway (PostgreSQL).
 
 ---
 
 ## 5. Migrations and redeploys
 
-- **Backend:** Start command already runs `npx prisma migrate deploy`. On every deploy, Render runs build then this start command, so migrations run automatically.
-- **Redeploy:** Push to `main`; Vercel and Render will auto-deploy if you enabled that when connecting the repo.
-- **Env changes:** Update env vars in Vercel or Render dashboard, then trigger a redeploy (or push a small commit).
+- **Backend:** Start command runs `npx prisma migrate deploy`. On every deploy, Railway or Render runs build then this start command, so migrations run automatically.
+- **Redeploy:** Push to `main`; Vercel and your backend (Railway or Render) will auto-deploy if you enabled that when connecting the repo.
+- **Env changes:** Update env vars in Vercel or Railway/Render dashboard, then trigger a redeploy (or push a small commit).
 
 ---
 
 ## 6. Free tier notes
 
-- **Render free:** Service may spin down after inactivity; first request can be slow (cold start).
+- **Railway:** Backend and database use monthly credits; no cold start. See [Railway pricing](https://railway.app/pricing). Database + backend can use credits quickly; use Render for backend when you need to preserve credits.
+- **Render free:** Backend may spin down after inactivity; first request can be slow (cold start). Good fallback when Railway credits run out.
 - **Vercel:** Free tier is generous; no sleep.
-- **Railway:** Free tier has a monthly limit; check [Railway pricing](https://railway.app/pricing).
 
 If you want, we can add a **“keep-alive”** ping (e.g. from a cron or frontend) to reduce Render cold starts.
+
+---
+
+## 7. Switch to Render when Railway credits run out
+
+If your backend is on Railway and you run out of credits, you can switch to Render in a few minutes so the app keeps working:
+
+1. **Create the Render backend** (if you haven't already): follow **Section 1** above to create a Web Service with **Root Directory:** `backend`, same build/start commands and env vars (`DATABASE_URL`, `JWT_SECRET`, etc. — same as Railway).
+2. **Trigger a deploy:** Make a tiny change in the repo (e.g. add a comment in `backend/README-DEPLOY.md` or bump a version), push to `main`. Render will deploy (or use **Manual Deploy** in the Render dashboard).
+3. **Point the frontend to Render:** In **Vercel** → your project → **Settings** → **Environment Variables**, set `VITE_API_BASE_URL` to your **Render** backend URL + `/api` (e.g. `https://digital-menu-api.onrender.com/api`). Redeploy the frontend (push a small change or use **Redeploy** in Vercel).
+4. **Optional:** Pause or delete the Railway backend service to avoid extra usage. Keep the Railway **database** running; both Railway and Render backends can use the same `DATABASE_URL`.
+
+After this, the app runs on **Vercel (frontend) + Render (backend) + Railway (database)** and works continuously.
+
+**To use Railway for the backend again:** In Vercel, set `VITE_API_BASE_URL` back to your Railway backend URL + `/api` (e.g. `https://your-app.up.railway.app/api`), redeploy, and optionally start or redeploy the Railway backend service (Section 1, Option A).

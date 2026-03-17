@@ -13,12 +13,12 @@ RUN npm run build
 FROM node:20-alpine
 WORKDIR /app
 ENV NODE_ENV=production
-ENV PORT=4000
 COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev && npm install prisma --save
 COPY prisma ./prisma/
 RUN npx prisma generate
 COPY --from=builder /app/dist ./dist/
-EXPOSE 4000
+# Railway (and most PaaS) injects PORT at runtime; don't override it here.
+# EXPOSE is optional on Railway; keep container flexible.
 # Run migrations; if DB unreachable, still start server so health check can pass (check logs for migrate errors)
 CMD ["sh", "-c", "npx prisma migrate deploy || true && node dist/index.js"]

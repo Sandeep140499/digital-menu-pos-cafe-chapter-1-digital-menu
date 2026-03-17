@@ -1,7 +1,7 @@
 # Deploy options
 
-**Recommended (free, stable):** Frontend on **Vercel**, backend on **Render**, database on **Railway**.  
-→ See **[DEPLOY-VERCEL-RENDER.md](./DEPLOY-VERCEL-RENDER.md)** for step-by-step.
+**Recommended (free, stable):** Frontend on **Vercel**, backend on **Railway** or **Render**, database on **Railway**. Keep **Render** as a fallback: when Railway credits run out, make a small change, push, and use Render for the backend so the app keeps running.  
+→ See **[DEPLOY-VERCEL-RENDER.md](./DEPLOY-VERCEL-RENDER.md)** for step-by-step (includes “Switch to Render when Railway credits run out”).
 
 **Containers (SnapDeploy):** Push to GitHub and deploy backend + frontend as containers on [SnapDeploy](https://snapdeploy.dev/containers). Details below.
 

@@ -96,8 +96,8 @@ The backend is set up to run on **any** host: use **root directory** = `backend`
 | Platform | Root dir | Build | Start | Config |
 |----------|----------|-------|--------|--------|
 | **Docker** (SnapDeploy, Fly, ECS, etc.) | Repo root, Dockerfile path `backend/Dockerfile` | Image build | `node dist/index.js` (in container) | `backend/Dockerfile` |
-| **Render** | `backend` | Uses `render.yaml` or: `npm ci && npx prisma generate && npm run build` | `(npx prisma migrate deploy \|\| true) && npm start` | `backend/render.yaml` |
-| **Railway** | `backend` | Uses `railway.toml` or: `npm ci && npx prisma generate && npm run build` | `(npx prisma migrate deploy \|\| true) && npm start` | `backend/railway.toml` |
+| **Render** | `backend` | Uses `render.yaml` or: `npm ci && npx prisma generate && npm run build` | `npx prisma migrate deploy \|\| true; npm start` | `backend/render.yaml` |
+| **Railway** | `backend` | Uses `railway.toml` or: `npm ci && npx prisma generate && npm run build` | `npx prisma migrate deploy \|\| true; npm start` | `backend/railway.toml` |
 | **Heroku** | `backend` | `npm ci && npm run build` | From `Procfile`: `node dist/index.js` | `backend/Procfile` |
 | **Generic (VPS, etc.)** | `backend` | `npm ci && npm run build` | `npm start` (uses `PORT` from env, default 4000) | — |
 

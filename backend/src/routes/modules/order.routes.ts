@@ -10,7 +10,8 @@ const mobileRegex = /^[6-9]\d{9}$/;
 
 const createOrderSchema = z.object({
   tableId: z.number().int().optional(),
-  tableNumber: z.string().min(1),
+  orderType: z.enum(["DINE_IN", "TAKE_AWAY"]).optional().default("DINE_IN"),
+  tableNumber: z.string().optional().default(""),
   branchId: z.number().int(),
   sessionToken: z.string().optional(),
   packaging: z.boolean().optional(),
@@ -33,6 +34,25 @@ const createOrderSchema = z.object({
       }),
     )
     .min(1),
+}).superRefine((data, ctx) => {
+  const table = (data.tableNumber || "").trim();
+  if (data.orderType === "DINE_IN") {
+    if (!table) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["tableNumber"],
+        message: "Table number is required for dine-in orders",
+      });
+      return;
+    }
+    if (!/^\d+$/.test(table)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["tableNumber"],
+        message: "Table number must be numeric (e.g., 1, 2, 3)",
+      });
+    }
+  }
 });
 
 const updateStatusSchema = z.object({
@@ -46,6 +66,34 @@ const updateOrderCustomerSchema = z.object({
 
 const modifyOrderSchema = z.object({
   removedItemIds: z.array(z.number()),
+  reason: z.string().optional(),
+});
+
+const modifyOrderV2Schema = z.object({
+  removedItemIds: z.array(z.number()).optional().default([]),
+  addedItems: z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        menuItemId: z.number().int().optional(),
+        unitPrice: z.number().nonnegative(),
+        quantity: z.number().int().min(1),
+        variant: z.enum(["HALF", "FULL"]).optional(),
+      }),
+    )
+    .optional()
+    .default([]),
+  updatedItems: z
+    .array(
+      z.object({
+        orderItemId: z.number().int(),
+        quantity: z.number().int().min(1).optional(),
+        unitPrice: z.number().nonnegative().optional(),
+        variant: z.enum(["HALF", "FULL"]).nullable().optional(),
+      }),
+    )
+    .optional()
+    .default([]),
   reason: z.string().optional(),
 });
 
@@ -100,11 +148,25 @@ orderRouter.post("/", async (req, res) => {
       .json({ message: "Invalid input", errors: parsed.error.issues });
   }
 
-  const { tableId, tableNumber, branchId, items, sessionToken, packaging, customerName: rawName, customerMobile: rawMobile } = parsed.data;
+  const {
+    tableId,
+    tableNumber: rawTableNumber,
+    orderType,
+    branchId,
+    items,
+    sessionToken,
+    packaging,
+    customerName: rawName,
+    customerMobile: rawMobile,
+  } = parsed.data;
+  const tableNumber = orderType === "TAKE_AWAY" ? "TAKE_AWAY" : (rawTableNumber || "").trim();
   const customerMobile = rawMobile ?? null;
   const customerName = (rawName || "").trim().toUpperCase() || (rawName || "").trim();
 
-  const branchExists = await prisma.branch.findUnique({ where: { id: branchId }, select: { id: true } });
+  const branchExists = await prisma.branch.findUnique({
+    where: { id: branchId },
+    select: { id: true },
+  });
   if (!branchExists) {
     return res.status(400).json({
       success: false,
@@ -188,6 +250,7 @@ orderRouter.post("/", async (req, res) => {
       employeeId: undefined,
       shiftId: undefined,
       status: "NEW_ORDER",
+      orderType: orderType as any,
       totalAmount,
       sessionToken,
       customerName,
@@ -211,7 +274,9 @@ orderRouter.post("/", async (req, res) => {
     : null;
 
   const apiBase = process.env.PUBLIC_API_BASE_URL || "";
-  const invoicePdfUrl = apiBase ? `${apiBase.replace(/\/$/, "")}/orders/${order.id}/invoice-pdf` : undefined;
+  const invoicePdfUrl = apiBase
+    ? `${apiBase.replace(/\/$/, "")}/api/orders/${order.id}/invoice-pdf`
+    : undefined;
 
   const acceptedBy = order.employee
     ? { name: order.employee.name, role: order.employee.role ?? "Counter Staff" }
@@ -265,7 +330,9 @@ orderRouter.get("/:id/whatsapp-invoice", async (req, res) => {
     ? { name: order.employee.name, role: order.employee.role ?? "Counter Staff" }
     : undefined;
   const apiBase = process.env.PUBLIC_API_BASE_URL || "";
-  const invoicePdfUrl = apiBase ? `${apiBase.replace(/\/$/, "")}/orders/${order.id}/invoice-pdf` : undefined;
+  const invoicePdfUrl = apiBase
+    ? `${apiBase.replace(/\/$/, "")}/api/orders/${order.id}/invoice-pdf`
+    : undefined;
   const invoiceMessage = buildOrderInvoice({
     orderId: order.id,
     customerName: order.customerName,
@@ -291,7 +358,14 @@ orderRouter.get("/:id/invoice-pdf", async (req, res) => {
 
   const tableNumber = order.table?.tableNumber ?? String(order.tableId);
   const acceptedBy = order.employee ? { name: order.employee.name, role: order.employee.role ?? "Counter Staff" } : undefined;
-  const orderType = tableNumber === "Takeaway" ? "Takeaway" : "Dine-In";
+  const orderType =
+    (order as any).orderType === "TAKE_AWAY"
+      ? "Take Away"
+      : (order as any).orderType === "DINE_IN"
+        ? "Dine In"
+        : tableNumber === "Takeaway"
+          ? "Take Away"
+          : "Dine In";
   const statusMap: Record<string, string> = {
     NEW_ORDER: "Preparing",
     ACCEPTED: "Preparing",
@@ -627,6 +701,7 @@ orderRouter.post(
         employeeId,
         shiftId: activeShift.id,
         status: OrderStatusEnum.ACCEPTED,
+        ...(order.acceptedAt ? {} : { acceptedAt: new Date() }),
       },
       include: { items: true, table: true, employee: true, branch: true },
     });
@@ -662,9 +737,17 @@ orderRouter.patch(
 
     const id = Number(req.params.id);
     const status = parsed.data.status as OrderStatusEnum;
+
+    const statusUpdateData: { status: OrderStatusEnum; completedAt?: Date | null } = {
+      status,
+    };
+    if (status === OrderStatusEnum.ORDER_COMPLETE) {
+      statusUpdateData.completedAt = new Date();
+    }
+
     const order = await prisma.order.update({
       where: { id },
-      data: { status },
+      data: statusUpdateData,
       include: { branch: true, table: true, items: true, employee: true },
     });
 
@@ -844,6 +927,197 @@ orderRouter.post(
       oldAmount,
       newAmount,
     });
+  },
+);
+
+// Employee: modify order (remove + add + edit)
+orderRouter.post(
+  "/:id/modify-v2",
+  authenticate,
+  requireRole("EMPLOYEE"),
+  async (req, res) => {
+    const parsed = modifyOrderV2Schema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ message: "Invalid input", errors: parsed.error.issues });
+    }
+
+    const orderId = Number(req.params.id);
+    const employeeId = req.user!.id;
+    const { removedItemIds, addedItems, updatedItems, reason } = parsed.data;
+
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        const order = await tx.order.findUnique({
+          where: { id: orderId },
+          include: { items: true, table: true },
+        });
+        if (!order) {
+          return { error: { status: 404, message: "Order not found" } as const };
+        }
+
+        const oldAmount = order.totalAmount;
+
+        // 1) Remove (only if not already removed -> prevents duplicate removed items reports)
+        const toRemove = removedItemIds.length
+          ? order.items.filter((i) => removedItemIds.includes(i.id) && !i.isRemoved)
+          : [];
+        if (toRemove.length) {
+          await tx.orderItem.updateMany({
+            where: { id: { in: toRemove.map((i) => i.id) }, orderId, isRemoved: false },
+            data: {
+              isRemoved: true,
+              removedAt: new Date(),
+              removedBy: employeeId,
+              removalReason: reason || "Item not available",
+            },
+          });
+
+          await tx.removedItemsReport.createMany({
+            data: toRemove.map((item) => ({
+              orderId,
+              employeeId,
+              itemName: item.name,
+              quantity: item.quantity,
+              unitPrice: item.price,
+              totalLoss: item.price * item.quantity,
+              reason: reason || "Item not available",
+              date: new Date(),
+            })),
+          });
+        }
+
+        // 2) Update qty/price/variant (skip removed items)
+        const updated: Array<{
+          id: number;
+          oldQuantity: number;
+          newQuantity: number;
+          oldUnitPrice: number;
+          newUnitPrice: number;
+          oldVariant: string | null;
+          newVariant: string | null;
+        }> = [];
+        for (const u of updatedItems) {
+          const existing = order.items.find((i) => i.id === u.orderItemId);
+          if (!existing || existing.isRemoved) continue;
+          const nextQty = u.quantity ?? existing.quantity;
+          const nextPrice = u.unitPrice ?? existing.price;
+          const nextVariant =
+            u.variant === undefined ? existing.variant : u.variant ?? null;
+          if (
+            nextQty === existing.quantity &&
+            nextPrice === existing.price &&
+            nextVariant === (existing.variant ?? null)
+          ) {
+            continue;
+          }
+          await tx.orderItem.update({
+            where: { id: existing.id },
+            data: {
+              quantity: nextQty,
+              price: nextPrice,
+              variant: nextVariant,
+            },
+          });
+          updated.push({
+            id: existing.id,
+            oldQuantity: existing.quantity,
+            newQuantity: nextQty,
+            oldUnitPrice: existing.price,
+            newUnitPrice: nextPrice,
+            oldVariant: existing.variant ?? null,
+            newVariant: nextVariant,
+          });
+        }
+
+        // 3) Add new items
+        if (addedItems.length) {
+          await tx.orderItem.createMany({
+            data: addedItems.map((a) => ({
+              orderId,
+              menuItemId: a.menuItemId ?? null,
+              name: a.name,
+              quantity: a.quantity,
+              price: a.unitPrice,
+              variant: a.variant ?? null,
+              addedAt: new Date(),
+              addedBy: employeeId,
+            })),
+          });
+        }
+
+        // 4) Recompute new total from non-removed items
+        const latestItems = await tx.orderItem.findMany({
+          where: { orderId },
+        });
+        const remaining = latestItems.filter((i) => !i.isRemoved);
+        const newAmount = remaining.reduce((sum, i) => sum + i.price * i.quantity, 0);
+
+        const updatedOrder = await tx.order.update({
+          where: { id: orderId },
+          data: {
+            totalAmount: newAmount,
+            originalAmount: order.originalAmount || oldAmount,
+          },
+          include: { items: true, table: true },
+        });
+
+        // 5) Audit row
+        await tx.orderModification.create({
+          data: {
+            orderId,
+            modifiedBy: employeeId,
+            oldAmount,
+            newAmount,
+            itemsRemoved: toRemove.map((i) => ({
+              orderItemId: i.id,
+              name: i.name,
+              quantity: i.quantity,
+              unitPrice: i.price,
+              total: i.price * i.quantity,
+            })),
+            itemsAdded: addedItems.map((a) => ({
+              name: a.name,
+              quantity: a.quantity,
+              unitPrice: a.unitPrice,
+              total: a.unitPrice * a.quantity,
+              variant: a.variant ?? null,
+              menuItemId: a.menuItemId ?? null,
+            })),
+            itemsUpdated: updated.map((u) => ({
+              orderItemId: u.id,
+              oldQuantity: u.oldQuantity,
+              newQuantity: u.newQuantity,
+              oldUnitPrice: u.oldUnitPrice,
+              newUnitPrice: u.newUnitPrice,
+              oldVariant: u.oldVariant,
+              newVariant: u.newVariant,
+            })),
+            reason: reason || "Order modified",
+          },
+        });
+
+        return { updatedOrder, oldAmount, newAmount, removedCount: toRemove.length };
+      });
+
+      if ("error" in result && result.error) {
+        return res
+          .status(result.error.status)
+          .json({ message: result.error.message });
+      }
+
+      req.app.locals.io?.emit("order:modified", result.updatedOrder);
+      return res.json({
+        order: result.updatedOrder,
+        oldAmount: result.oldAmount,
+        newAmount: result.newAmount,
+        removedCount: result.removedCount,
+      });
+    } catch (err) {
+      console.error("POST /orders/:id/modify-v2 error:", err);
+      return res.status(500).json({ message: "Failed to modify order" });
+    }
   },
 );
 

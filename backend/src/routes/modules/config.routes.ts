@@ -18,6 +18,7 @@ const branchSchema = z.object({
   pincode: z.string().optional().nullable(),
   directorsEmail: z.string().optional().nullable(),
   showTotalAmountToCustomers: z.boolean().optional(),
+  enableNewOrderRinging: z.boolean().optional(),
 });
 
 const notificationSchema = z.object({
@@ -66,6 +67,30 @@ configRouter.get("/branch-contact", async (_req, res) => {
     showTotalAmountToCustomers: branch?.showTotalAmountToCustomers ?? true,
   });
 });
+
+// Employee: settings that affect employee UX (ringing, etc.)
+configRouter.get(
+  "/employee-settings",
+  authenticate,
+  requireRole("EMPLOYEE"),
+  async (req, res) => {
+    const employeeId = req.user!.id;
+    const employee = await prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: { branchId: true },
+    });
+    if (!employee?.branchId) {
+      return res.json({ enableNewOrderRinging: true });
+    }
+    const branch = await prisma.branch.findUnique({
+      where: { id: employee.branchId },
+      select: { enableNewOrderRinging: true },
+    });
+    return res.json({
+      enableNewOrderRinging: branch?.enableNewOrderRinging ?? true,
+    });
+  },
+);
 
 // Public: lightweight settings for customer UI
 configRouter.get("/public-settings", async (_req, res) => {

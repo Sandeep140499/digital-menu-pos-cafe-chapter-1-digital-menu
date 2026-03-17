@@ -68,13 +68,6 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatHours } from "@/utils/timeFormatter";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   API_BASE_URL,
   fetchWithTimeout,
   ORDER_STATUS_COLORS,
@@ -84,8 +77,8 @@ import {
 
 const apiBase = API_BASE_URL;
 
-/** Delay threshold for "Delayed" order (ms) */
-const DELAYED_ORDER_MINUTES = 2;
+/** Delay threshold for \"Delayed\" order (ms). Business requirement: 30 minutes from acceptance. */
+const DELAYED_ORDER_MINUTES = 30;
 const DELAYED_ORDER_MS = DELAYED_ORDER_MINUTES * 60 * 1000;
 
 // INR Currency formatter
@@ -308,6 +301,7 @@ type OrderItem = {
   quantity: number;
   price: number;
   variant?: string | null;
+  isRemoved?: boolean;
 };
 
 type TableInfo = {
@@ -666,7 +660,7 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
           <div>
             <h4 className="font-medium mb-3">Order Items</h4>
             <div className="space-y-2">
-              {displayOrder.items.map((item) => (
+              {displayOrder.items.filter((i) => !i.isRemoved).map((item) => (
                 <div
                   key={item.id}
                   className={`flex items-center justify-between p-3 border rounded-lg ${
@@ -796,6 +790,7 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
 
 const EmployeeDashboard = () => {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [ringingEnabledByAdmin, setRingingEnabledByAdmin] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   /** Frozen snapshot for modal display – only updated on open or user action, so popup doesn't flash on parent re-renders (clock/poll). */
   const [popupDisplayOrder, setPopupDisplayOrder] = useState<Order | null>(
@@ -870,6 +865,24 @@ const EmployeeDashboard = () => {
   });
 
   const token = window.sessionStorage.getItem("dm_auth_token");
+
+  // Employee UX settings (ringing is branch-controlled by admin)
+  useEffect(() => {
+    const fetchEmployeeSettings = async () => {
+      if (!token) return;
+      try {
+        const res = await fetch(`${apiBase}/config/employee-settings`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json().catch(() => ({}));
+        setRingingEnabledByAdmin(data.enableNewOrderRinging !== false);
+      } catch {
+        setRingingEnabledByAdmin(true);
+      }
+    };
+    fetchEmployeeSettings();
+  }, [token]);
 
   // Performance (API speed) – employee view
   type ApiPerfRow = {
@@ -988,15 +1001,23 @@ const EmployeeDashboard = () => {
   useEffect(() => {
     const n = newOrderPopupOrders.length;
     if (n > prevNewOrderCountRef.current) {
-      playNewOrderSound(newOrderSoundPreset, newOrderSoundVolume);
+      if (ringingEnabledByAdmin) {
+        playNewOrderSound(newOrderSoundPreset, newOrderSoundVolume);
+      }
     }
     prevNewOrderCountRef.current = n;
-  }, [newOrderPopupOrders.length, newOrderSoundPreset, newOrderSoundVolume]);
+  }, [
+    newOrderPopupOrders.length,
+    newOrderSoundPreset,
+    newOrderSoundVolume,
+    ringingEnabledByAdmin,
+  ]);
 
   // Keep ringing (beep) until staff accepts/clears, unless paused.
   useEffect(() => {
     if (pauseNewOrderPopup) return;
     if (newOrderPopupOrders.length === 0) return;
+    if (!ringingEnabledByAdmin) return;
     const id = window.setInterval(() => {
       playNewOrderSound(newOrderSoundPreset, newOrderSoundVolume);
     }, 3000);
@@ -1006,6 +1027,7 @@ const EmployeeDashboard = () => {
     pauseNewOrderPopup,
     newOrderSoundPreset,
     newOrderSoundVolume,
+    ringingEnabledByAdmin,
   ]);
 
   useEffect(() => {
@@ -1314,7 +1336,12 @@ const EmployeeDashboard = () => {
           prev && prev.id === orderId ? { ...prev, ...updated } : prev,
         );
         toast.success(data.message || "You are now handling this order.");
-        if (data.statusWaMeLink) window.open(data.statusWaMeLink, "_blank");
+        // Business rule: employees can send WhatsApp only after payment is completed.
+        if (data.statusWaMeLink) {
+          toast.info(
+            "WhatsApp messages can be sent after payment is marked as Paid.",
+          );
+        }
       } else {
         const err = await res.json().catch(() => ({}));
         toast.error(
@@ -1374,17 +1401,14 @@ const EmployeeDashboard = () => {
               : prev,
           );
           if (data.statusWaMeLink) {
-            window.open(data.statusWaMeLink, "_blank");
-            toast.success(
-              "Opening WhatsApp to send status update to customer. Allow popups if the window did not open.",
-              { duration: 6000 },
-            );
-          } else {
-            toast.success(
-              data.message ||
-                `Order marked as ${status.replace("_", " ").toLowerCase()}`,
+            toast.info(
+              "WhatsApp messages can be sent after payment is marked as Paid.",
             );
           }
+          toast.success(
+            data.message ||
+              `Order marked as ${status.replace("_", " ").toLowerCase()}`,
+          );
         } else {
           const data = await res.json().catch(() => ({}));
           toast.error(data.message || "Failed to update status");
@@ -1575,10 +1599,11 @@ const EmployeeDashboard = () => {
   }, []);
 
   const modifyOrder = useCallback(async () => {
-    if (!selectedOrder || !token || removedItemIds.length === 0) return;
+    if (!selectedOrder || !token) return;
+    if (removedItemIds.length === 0) return;
     setIsModifying(true);
     try {
-      const res = await fetch(`${apiBase}/orders/${selectedOrder.id}/modify`, {
+      const res = await fetch(`${apiBase}/orders/${selectedOrder.id}/modify-v2`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1596,7 +1621,7 @@ const EmployeeDashboard = () => {
         );
         toast.success(
           data.message ||
-            `Removed ${data.removedItems?.length ?? 0} item(s). New total: ${formatINR(data.newAmount ?? 0)}`,
+            `Removed ${data.removedCount ?? 0} item(s). New total: ${formatINR(data.newAmount ?? 0)}`,
         );
         setPopupDisplayOrder(null);
         setIsOrderPopupOpen(false);
@@ -1674,11 +1699,13 @@ const EmployeeDashboard = () => {
     }
   };
 
-  /** Order is delayed if NEW_ORDER/ACCEPTED and older than 2 minutes */
+  /** Order is delayed if NEW_ORDER/ACCEPTED and older than threshold from acceptedAt (fallback createdAt). */
   const isOrderDelayed = (order: Order) => {
-    if (order.status !== "NEW_ORDER" && order.status !== "ACCEPTED")
+    if (order.status !== "NEW_ORDER" && order.status !== "ACCEPTED") {
       return false;
-    return Date.now() - new Date(order.createdAt).getTime() > DELAYED_ORDER_MS;
+    }
+    const startedAt = order.acceptedAt || order.createdAt;
+    return Date.now() - new Date(startedAt).getTime() > DELAYED_ORDER_MS;
   };
 
   /** Priority label for POS-style visibility */
@@ -1827,7 +1854,8 @@ const EmployeeDashboard = () => {
                   {getPriorityLabel(order)}
                 </Badge>
                 <span className="text-xs text-muted-foreground">
-                  #{order.id} · {timeAgo(order.createdAt)}
+                  #{order.id} ·{" "}
+                  {timeAgo(order.acceptedAt ?? order.createdAt)}
                 </span>
               </div>
               <div className="flex items-start justify-between gap-2">
@@ -1873,7 +1901,7 @@ const EmployeeDashboard = () => {
                       </p>
                     )}
                   <div className="mt-2 space-y-1 hidden sm:block">
-                    {order.items.map((item) => (
+                    {order.items.filter((i) => !i.isRemoved).map((item) => (
                       <p key={item.id} className="text-sm">
                         {item.quantity} ×{" "}
                         {formatItemDisplayName(item.name, item.variant)}
@@ -3758,7 +3786,7 @@ const EmployeeDashboard = () => {
             Order #{order.id} · {formatPopupTime(order.createdAt)}
           </p>
           <ul className="mt-2 space-y-0.5 font-medium text-slate-800">
-            {order.items.map((item) => (
+            {order.items.filter((i) => !i.isRemoved).map((item) => (
               <li key={item.id}>
                 {item.quantity}×{" "}
                 {formatItemDisplayName(item.name, item.variant)}

@@ -31,7 +31,7 @@ paymentRouter.patch(
 
     const existingOrder = await prisma.order.findUnique({
       where: { id: orderId },
-      include: { branch: true },
+      include: { branch: true, items: true },
     });
     if (!existingOrder) {
       return res.status(404).json({ message: "Order not found" });
@@ -51,7 +51,7 @@ paymentRouter.patch(
               : "UNPAID",
         reviewSent: paymentStatus === "PAID" && includeReviewLink ? true : existingOrder.reviewSent,
       },
-      include: { branch: true },
+      include: { branch: true, items: true },
     });
 
     const record = await prisma.paymentRecord.create({
@@ -95,11 +95,19 @@ paymentRouter.patch(
             location: order.branch.location,
             phone: order.branch.phone,
             googleReviewUrl: order.branch.googleReviewUrl,
+            showTotalAmountToCustomers: (order.branch as any).showTotalAmountToCustomers,
           }
         : null;
       paymentWhatsAppMessage = buildPaymentMessage({
         orderId: order.id,
         customerName: order.customerName,
+        items: order.items.map((i) => ({
+          name: i.name,
+          quantity: i.quantity,
+          price: i.price,
+          variant: i.variant,
+          isRemoved: i.isRemoved,
+        })),
         totalAmount: order.totalAmount,
         paymentStatus: order.paymentStatus as "PAID" | "PARTIAL" | "UNPAID",
         includeReviewLink: paymentStatus === "PAID" ? includeReviewLink : false,

@@ -232,7 +232,7 @@ authRouter.post("/forgot-password", async (req, res) => {
   try {
     await mailer.sendMail({
       to: email,
-      from: `"${process.env.EMAIL_FROM_NAME || "Digital Menu"}" <${getFromAddress()}>`,
+      from: `"${process.env.EMAIL_FROM_NAME || "Cafe Chapter 1 Restro Private Limited"}" <${getFromAddress()}>`,
       subject: "Reset your password",
       text: `You requested a password reset.
 

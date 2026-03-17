@@ -15,6 +15,7 @@ export type BranchInfo = {
   logoUrl?: string | null;
   phone?: string | null;
   googleReviewUrl?: string | null;
+  instagramUrl?: string | null;
   showTotalAmountToCustomers?: boolean | null;
 };
 
@@ -115,24 +116,44 @@ export function buildStatusMessage(params: {
 export function buildPaymentMessage(params: {
   orderId: number;
   customerName: string;
+  items?: Array<{ name: string; quantity: number; price: number; variant?: string | null; isRemoved?: boolean }>;
   totalAmount: number;
   paymentStatus: "PAID" | "PARTIAL" | "UNPAID";
   includeReviewLink: boolean;
   branch?: BranchInfo | null;
 }): string {
-  const { orderId, customerName, totalAmount, paymentStatus, includeReviewLink, branch } = params;
+  const { orderId, customerName, items, totalAmount, paymentStatus, includeReviewLink, branch } = params;
   const name = branch?.name || RESTAURANT_NAME;
   const reviewUrl = branch?.googleReviewUrl || DEFAULT_REVIEW_URL;
+  const instagramUrl = branch?.instagramUrl || process.env.INSTAGRAM_URL || "";
   const orderIdStr = `ORD${String(orderId).padStart(4, "0")}`;
+  const menuUrl = MENU_BASE_URL;
+
+  const visibleItems = (items || []).filter((i) => !i.isRemoved);
+  const itemLines =
+    visibleItems.length > 0
+      ? visibleItems
+          .map((i) => {
+            const v = i.variant ? ` (${i.variant})` : "";
+            return `- ${i.name}${v} x${i.quantity}`;
+          })
+          .join("\n")
+      : "";
 
   if (paymentStatus === "PAID") {
     let msg = `Payment Received 💳\n\n`;
     msg += `Order: ${orderIdStr}\n`;
-    if (branch?.showTotalAmountToCustomers !== false) {
-      msg += `Amount: ₹${totalAmount.toFixed(0)}\n\n`;
+    msg += `Restaurant: ${name}\n\n`;
+    if (itemLines) {
+      msg += `Items:\n${itemLines}\n\n`;
     }
-    msg += `Visit again ❤️\n\n`;
-    if (includeReviewLink && reviewUrl) msg += `Please review us:\n${reviewUrl}\n`;
+    if (branch?.showTotalAmountToCustomers !== false) {
+      msg += `Total Amount: ₹${totalAmount.toFixed(0)}\n\n`;
+    }
+    if (menuUrl) msg += `Menu:\n${menuUrl}\n\n`;
+    if (includeReviewLink && reviewUrl) msg += `Google Review:\n${reviewUrl}\n\n`;
+    if (instagramUrl) msg += `Instagram:\n${instagramUrl}\n\n`;
+    msg += `Thank you ❤️`;
     return msg;
   }
   let msg = `Payment Pending ⚠️\n\n`;

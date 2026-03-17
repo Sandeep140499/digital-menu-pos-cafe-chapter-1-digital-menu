@@ -382,6 +382,7 @@ type OrderItem = {
   quantity: number;
   price: number;
   variant?: string;
+  isRemoved?: boolean;
 };
 
 type ItemSales = {
@@ -587,6 +588,7 @@ type SettingsSectionContentProps = {
     pincode: string;
     directorsEmail: string;
     showTotalAmountToCustomers: boolean;
+    enableNewOrderRinging?: boolean;
   };
   setBranchForm: React.Dispatch<
     React.SetStateAction<{
@@ -599,6 +601,7 @@ type SettingsSectionContentProps = {
       pincode: string;
       directorsEmail: string;
       showTotalAmountToCustomers: boolean;
+      enableNewOrderRinging?: boolean;
     }>
   >;
   branch: any;
@@ -616,6 +619,7 @@ type SettingsSectionContentProps = {
     pincode: string;
     directorsEmail: string;
     showTotalAmountToCustomers: boolean;
+    enableNewOrderRinging?: boolean;
   };
   setCreateBranchForm: React.Dispatch<
     React.SetStateAction<{
@@ -628,6 +632,7 @@ type SettingsSectionContentProps = {
       pincode: string;
       directorsEmail: string;
       showTotalAmountToCustomers: boolean;
+      enableNewOrderRinging?: boolean;
     }>
   >;
   handleCreateBranch: () => Promise<void>;
@@ -1072,6 +1077,23 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
                   setBranchForm((prev) => ({
                     ...prev,
                     showTotalAmountToCustomers: !!checked,
+                  }))
+                }
+              />
+            </div>
+            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+              <div className="space-y-0.5 pr-4">
+                <Label className="text-sm">New order ringing</Label>
+                <p className="text-xs text-muted-foreground">
+                  Controls whether employee devices play sound for new orders
+                </p>
+              </div>
+              <Switch
+                checked={branchForm.enableNewOrderRinging !== false}
+                onCheckedChange={(checked) =>
+                  setBranchForm((prev) => ({
+                    ...prev,
+                    enableNewOrderRinging: !!checked,
                   }))
                 }
               />
@@ -5004,12 +5026,11 @@ const AdminDashboard = () => {
     }
   }, [token, activeSection, removedItemsDateFilter]);
 
-  // Default date range for Work Hours when section is first opened (so date range UI shows properly)
+  // Default date range for Work Hours when section is first opened (default: current day only)
   useEffect(() => {
     if (activeSection === "hours" && !hoursStartDate && !hoursEndDate) {
       const now = new Date();
-      const start = new Date(now.getFullYear(), now.getMonth(), 1);
-      setHoursStartDate(start.toISOString().slice(0, 10));
+      setHoursStartDate(now.toISOString().slice(0, 10));
       setHoursEndDate(now.toISOString().slice(0, 10));
     }
   }, [activeSection]);
@@ -6172,6 +6193,11 @@ const AdminDashboard = () => {
     const [apiPerfWindowMinutes, setApiPerfWindowMinutes] = useState<number>(60);
     const [apiPerfLoading, setApiPerfLoading] = useState(false);
     const [apiPerf, setApiPerf] = useState<ApiPerfSummary | null>(null);
+    const [apiPerfByActor, setApiPerfByActor] = useState<{
+      CUSTOMER: ApiPerfSummary | null;
+      EMPLOYEE: ApiPerfSummary | null;
+      ADMIN: ApiPerfSummary | null;
+    }>({ CUSTOMER: null, EMPLOYEE: null, ADMIN: null });
     const [sysPerfLoading, setSysPerfLoading] = useState(false);
     const [sysPerf, setSysPerf] = useState<SystemPerf | null>(null);
     const [completionLoading, setCompletionLoading] = useState(false);
@@ -6192,26 +6218,39 @@ const AdminDashboard = () => {
       if (!token) return;
       setApiPerfLoading(true);
       try {
-        const params = new URLSearchParams({
-          windowMinutes: String(apiPerfWindowMinutes),
-          top: "30",
-          actor: apiPerfActor,
-        });
-        const res = await fetch(`${apiBase}/performance/summary?${params}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await res.json().catch(() => null);
-        if (!res.ok) {
-          throw new Error(
-            (data && typeof data === "object" && "message" in data
-              ? String((data as any).message)
-              : "Failed to load performance") || "Failed to load performance",
-          );
-        }
-        setApiPerf(data as ApiPerfSummary);
+        const fetchSummary = async (actor: "ALL" | "ADMIN" | "EMPLOYEE" | "CUSTOMER") => {
+          const params = new URLSearchParams({
+            windowMinutes: String(apiPerfWindowMinutes),
+            top: "30",
+            actor,
+          });
+          const res = await fetch(`${apiBase}/performance/summary?${params}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const data = await res.json().catch(() => null);
+          if (!res.ok) {
+            throw new Error(
+              (data && typeof data === "object" && "message" in data
+                ? String((data as any).message)
+                : "Failed to load performance") || "Failed to load performance",
+            );
+          }
+          return data as ApiPerfSummary;
+        };
+
+        const [all, customer, employee, admin] = await Promise.all([
+          fetchSummary("ALL"),
+          fetchSummary("CUSTOMER"),
+          fetchSummary("EMPLOYEE"),
+          fetchSummary("ADMIN"),
+        ]);
+
+        setApiPerf(all);
+        setApiPerfByActor({ CUSTOMER: customer, EMPLOYEE: employee, ADMIN: admin });
       } catch (e) {
         console.error("Load API performance error:", e);
         setApiPerf(null);
+        setApiPerfByActor({ CUSTOMER: null, EMPLOYEE: null, ADMIN: null });
       } finally {
         setApiPerfLoading(false);
       }
@@ -6439,7 +6478,7 @@ const AdminDashboard = () => {
               Slow APIs (by P95)
             </CardTitle>
             <CardDescription className="text-xs">
-              Endpoints with traffic and latency. P95 is the most important number.
+              Categorized by role: Customer, Employee, Admin.
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-2">
@@ -6452,55 +6491,78 @@ const AdminDashboard = () => {
                 No API traffic in this window yet.
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-slate-50">
-                      <TableHead>API</TableHead>
-                      <TableHead className="text-right whitespace-nowrap">
-                        Hits
-                      </TableHead>
-                      <TableHead className="text-right whitespace-nowrap">
-                        Avg (ms)
-                      </TableHead>
-                      <TableHead className="text-right whitespace-nowrap">
-                        P50 (ms)
-                      </TableHead>
-                      <TableHead className="text-right whitespace-nowrap">
-                        P95 (ms)
-                      </TableHead>
-                      <TableHead className="text-right whitespace-nowrap">
-                        Max (ms)
-                      </TableHead>
-                      <TableHead className="text-right whitespace-nowrap">
-                        5xx
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {(apiPerf?.rows ?? []).map((r) => (
-                      <TableRow key={r.key}>
-                        <TableCell className="font-medium">{r.key}</TableCell>
-                        <TableCell className="text-right">{r.count}</TableCell>
-                        <TableCell className="text-right">
-                          {Math.round(r.avgMs)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {Math.round(r.p50Ms)}
-                        </TableCell>
-                        <TableCell className="text-right font-semibold text-amber-700">
-                          {Math.round(r.p95Ms)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {Math.round(r.maxMs)}
-                        </TableCell>
-                        <TableCell className="text-right text-red-600 font-semibold">
-                          {r.errorCount}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+              <div className="space-y-4">
+                {(
+                  [
+                    { key: "CUSTOMER" as const, label: "Customer APIs" },
+                    { key: "EMPLOYEE" as const, label: "Employee APIs" },
+                    { key: "ADMIN" as const, label: "Admin APIs" },
+                  ] as const
+                ).map((grp) => {
+                  const s = apiPerfByActor[grp.key];
+                  const rows = s?.rows ?? [];
+                  return (
+                    <div key={grp.key} className="space-y-2">
+                      <div className="text-sm font-semibold text-slate-900">
+                        {grp.label}
+                      </div>
+                      {rows.length === 0 ? (
+                        <div className="text-xs text-muted-foreground">
+                          No traffic.
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                          <Table>
+                            <TableHeader>
+                              <TableRow className="bg-slate-50">
+                                <TableHead>API</TableHead>
+                                <TableHead className="text-right whitespace-nowrap">
+                                  Hits
+                                </TableHead>
+                                <TableHead className="text-right whitespace-nowrap">
+                                  Avg (ms)
+                                </TableHead>
+                                <TableHead className="text-right whitespace-nowrap">
+                                  P95 (ms)
+                                </TableHead>
+                                <TableHead className="text-right whitespace-nowrap">
+                                  Max (ms)
+                                </TableHead>
+                                <TableHead className="text-right whitespace-nowrap">
+                                  5xx
+                                </TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {rows.map((r) => (
+                                <TableRow key={`${grp.key}-${r.key}`}>
+                                  <TableCell className="font-medium">
+                                    {r.key}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    {r.count}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    {Math.round(r.avgMs)}
+                                  </TableCell>
+                                  <TableCell className="text-right font-semibold text-amber-700">
+                                    {Math.round(r.p95Ms)}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    {Math.round(r.maxMs)}
+                                  </TableCell>
+                                  <TableCell className="text-right text-red-600 font-semibold">
+                                    {r.errorCount}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </CardContent>
@@ -7285,38 +7347,71 @@ const AdminDashboard = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {shifts.map((shift) => (
-                  <TableRow key={shift.id} className="text-sm">
-                    <TableCell className="font-medium">
-                      {shift.employee?.name}
-                    </TableCell>
-                    <TableCell>{(shift as any).branch?.name || "—"}</TableCell>
-                    <TableCell>
-                      {new Date(shift.shiftStart).toLocaleDateString("en-IN")}
-                    </TableCell>
-                    <TableCell>
-                      {new Date(shift.shiftStart).toLocaleTimeString()}
-                    </TableCell>
-                    <TableCell>
-                      {shift.shiftEnd
-                        ? new Date(shift.shiftEnd).toLocaleTimeString()
-                        : "Active"}
-                    </TableCell>
-                    <TableCell>
-                      {(shift as any).status ||
-                        (shift.shiftEnd ? "ENDED" : "ACTIVE")}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatHours(shift.totalHours || 0)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {shift.orders?.length || 0}
-                    </TableCell>
-                    <TableCell className="text-right font-medium text-emerald-600">
-                      {formatINR(shift.totalSales || 0)}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {(() => {
+                  const palette = [
+                    "bg-emerald-50",
+                    "bg-amber-50",
+                    "bg-sky-50",
+                    "bg-violet-50",
+                    "bg-rose-50",
+                  ];
+                  const groups = new Map<string, any[]>();
+                  for (const s of shifts) {
+                    const key = new Date(s.shiftStart).toISOString().slice(0, 10);
+                    const arr = groups.get(key) ?? [];
+                    arr.push(s);
+                    groups.set(key, arr);
+                  }
+                  const keys = Array.from(groups.keys()).sort((a, b) => (a < b ? 1 : -1));
+                  return keys.flatMap((dateKey, idx) => {
+                    const rows = groups.get(dateKey) ?? [];
+                    const color = palette[idx % palette.length];
+                    return [
+                      <TableRow key={`date-${dateKey}`} className={`${color}`}>
+                        <TableCell colSpan={9} className="text-xs font-semibold text-slate-700">
+                          {new Date(dateKey).toLocaleDateString("en-IN", {
+                            weekday: "long",
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                          })}
+                        </TableCell>
+                      </TableRow>,
+                      ...rows.map((shift) => (
+                        <TableRow key={shift.id} className="text-sm">
+                          <TableCell className="font-medium">
+                            {shift.employee?.name}
+                          </TableCell>
+                          <TableCell>{(shift as any).branch?.name || "—"}</TableCell>
+                          <TableCell>
+                            {new Date(shift.shiftStart).toLocaleDateString("en-IN")}
+                          </TableCell>
+                          <TableCell>
+                            {new Date(shift.shiftStart).toLocaleTimeString()}
+                          </TableCell>
+                          <TableCell>
+                            {shift.shiftEnd
+                              ? new Date(shift.shiftEnd).toLocaleTimeString()
+                              : "Active"}
+                          </TableCell>
+                          <TableCell>
+                            {(shift as any).status ||
+                              (shift.shiftEnd ? "ENDED" : "ACTIVE")}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {formatHours(shift.totalHours || 0)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {shift.orders?.length || 0}
+                          </TableCell>
+                          <TableCell className="text-right font-medium text-emerald-600">
+                            {formatINR(shift.totalSales || 0)}
+                          </TableCell>
+                        </TableRow>
+                      )),
+                    ];
+                  });
+                })()}
                 {shifts.length === 0 && (
                   <TableRow>
                     <TableCell
@@ -9229,7 +9324,7 @@ const AdminDashboard = () => {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {items.map((item: OrderItem) => (
+                        {items.filter((i: OrderItem) => !i.isRemoved).map((item: OrderItem) => (
                           <TableRow key={item.id}>
                             <TableCell className="text-sm">
                               {formatItemDisplayName(item.name, item.variant)}

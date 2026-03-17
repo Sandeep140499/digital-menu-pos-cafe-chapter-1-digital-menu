@@ -312,7 +312,8 @@ employeeRouter.post(
 
     const baseUrl = (process.env.FRONTEND_URL || process.env.FRONTEND_DASHBOARD_URL || process.env.FRONTEND_CUSTOMER_URL || "http://localhost:5173").replace(/\/$/, "");
     const confirmUrl = `${baseUrl}/employee/confirm-email?token=${encodeURIComponent(linkToken)}`;
-    const fromName = process.env.EMAIL_FROM_NAME || "Chapter One Cafe";
+    const fromName =
+      process.env.EMAIL_FROM_NAME || "Cafe Chapter 1 Restro Private Limited";
 
     if (isMailConfigured()) {
       try {
@@ -627,8 +628,8 @@ employeeRouter.post(
     try {
       await mailer.sendMail({
         to: employee.email,
-        from: `"${process.env.EMAIL_FROM_NAME || "Digital Menu"}" <${getFromAddress()}>`,
-        subject: "Verify your employee account",
+        from: `"${process.env.EMAIL_FROM_NAME || "Cafe Chapter 1 Restro Private Limited"}" <${getFromAddress()}>`,
+        subject: `Verify your email – ${process.env.EMAIL_FROM_NAME || "Cafe Chapter 1 Restro Private Limited"}`,
         text: `Hi ${employee.name},\n\nYour verification code: ${otp}\n\nYou can also verify by logging in and entering this code.\n\nDashboard: ${baseUrl}\n\nIf you did not request this, please ignore.`,
         html: `<!DOCTYPE html><html><body style="font-family:sans-serif;"><p>Hi ${employee.name},</p><p>Your <strong>verification code</strong>: <code style="background:#eee;padding:4px 8px;">${otp}</code></p><p>Verify at: <a href="${verifyUrl}">${verifyUrl}</a></p><p>If you did not request this, please ignore.</p></body></html>`,
       });

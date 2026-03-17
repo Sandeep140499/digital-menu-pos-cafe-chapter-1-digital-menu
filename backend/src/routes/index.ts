@@ -15,6 +15,8 @@ import { overtimeRouter } from "./modules/overtime.routes.js";
 import { lateRouter } from "./modules/late.routes.js";
 import { notificationRouter } from "./modules/notification.routes.js";
 import { performanceRouter } from "./modules/performance.routes.js";
+import { leaveRouter } from "./modules/leave.routes.js";
+import { attendanceRouter } from "./modules/attendance.routes.js";
 
 export const router = Router();
 
@@ -37,4 +39,6 @@ router.use("/overtime", overtimeRouter);
 router.use("/late", lateRouter);
 router.use("/notifications", notificationRouter);
 router.use("/performance", performanceRouter);
+router.use("/leaves", leaveRouter);
+router.use("/attendance", attendanceRouter);
 

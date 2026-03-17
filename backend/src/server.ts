@@ -168,15 +168,12 @@ async function startServer() {
       console.log(`⚠️  Port ${DEFAULT_PORT} is in use. Using port ${port} instead.`);
     }
 
-    console.log("🚀 Starting server with env PORT =", process.env.PORT, "-> listening on", port);
+    // Keep logs minimal; use errors/warnings for operational issues.
     
     server.listen(port, "0.0.0.0", async () => {
-      console.log(`✅ Backend server listening on port ${port}`);
-      console.log(`📡 API Base URL: http://localhost:${port}/api`);
       // For local development, skip failing on SMTP verification errors.
       if (isMailConfigured()) {
         verifyMailConnection()
-          .then(() => console.log("📧 Mail (SMTP) connection verified"))
           .catch((err: unknown) => {
             console.warn(
               "📧 Mail (SMTP) verification failed. Email features may not work until SMTP env vars are correct.",
@@ -184,7 +181,7 @@ async function startServer() {
             );
           });
       } else {
-        console.log("📧 Mail not configured (EMAIL_SMTP_* / EMAIL_FROM_ADDRESS missing)");
+        // mail not configured
       }
       const { startAutoCloseCron } = await import("./services/shiftAutoClose.js");
       startAutoCloseCron();
@@ -196,19 +193,11 @@ async function startServer() {
 
     // Graceful shutdown
     process.on("SIGTERM", () => {
-      console.log("SIGTERM received. Shutting down gracefully...");
-      server.close(() => {
-        console.log("Server closed");
-        process.exit(0);
-      });
+      server.close(() => process.exit(0));
     });
 
     process.on("SIGINT", () => {
-      console.log("SIGINT received. Shutting down gracefully...");
-      server.close(() => {
-        console.log("Server closed");
-        process.exit(0);
-      });
+      server.close(() => process.exit(0));
     });
 
   } catch (error) {

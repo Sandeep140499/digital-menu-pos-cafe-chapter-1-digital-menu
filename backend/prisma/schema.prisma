@@ -26,6 +26,7 @@ model Branch {
   pincode         String?   // Branch address pincode (for payslip, etc.)
   directorsEmail  String?   // Comma-separated verified director emails (for salary slip copies)
   showTotalAmountToCustomers Boolean @default(true)
+  enableNewOrderRinging     Boolean  @default(true)
   createdAt       DateTime  @default(now())
   employees   Employee[]
   tables      Table[]
@@ -89,6 +90,31 @@ model Employee {
   overtimeRecords       EmployeeOvertime[]
   lateEntries           LateEntry[]
   salarySlips           SalarySlip[]
+  leaves                EmployeeLeave[]
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model EmployeeLeave {
+  id         Int         @id @default(autoincrement())
+  employeeId Int
+  employee   Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  startDate  DateTime    @db.Date
+  endDate    DateTime    @db.Date
+  reason     String?
+  status     LeaveStatus @default(PENDING)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@index([employeeId])
+  @@index([startDate])
+  @@index([endDate])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model EmployeeShift {
@@ -237,6 +263,7 @@ model Order {
   shiftId         Int?
   shift           EmployeeShift?   @relation(fields: [shiftId], references: [id])
   status          OrderStatus      @default(NEW_ORDER)
+  orderType       OrderType        @default(DINE_IN)
   paymentStatus   PaymentStatus    @default(PAYMENT_PENDING)
   totalAmount     Float            @default(0)
   originalAmount  Float?           @default(0) // Track original amount before modifications
@@ -269,6 +296,8 @@ model OrderItem {
   quantity    Int
   price       Float     // unit price for selected variant
   variant     String?   // "HALF" | "FULL" | null
+  addedAt     DateTime? // When item was added by employee (post-order)
+  addedBy     Int?      // Employee ID who added it (post-order)
   isRemoved   Boolean   @default(false)  // Track if item was removed by employee
   removedAt   DateTime? // When item was removed
   removedBy   Int?      // Employee ID who removed it
@@ -299,6 +328,8 @@ model OrderModification {
   oldAmount   Float     // Total before modification
   newAmount   Float     // Total after modification
   itemsRemoved Json?    // Array of removed items
+  itemsAdded  Json?    // Array of added items
+  itemsUpdated Json?   // Array of updated items (qty/price/variant)
   reason      String?
 }
 
@@ -326,6 +357,11 @@ enum OrderStatus {
   PREPARING
   SERVED
   ORDER_COMPLETE
+}
+
+enum OrderType {
+  DINE_IN
+  TAKE_AWAY
 }
 
 enum PaymentStatus {

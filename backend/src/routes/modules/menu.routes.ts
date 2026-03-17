@@ -109,6 +109,12 @@ menuRouter.get("/", async (_req, res) => {
     res.setHeader("Cache-Control", "public, max-age=5, stale-while-revalidate=30");
     return res.json(data);
   } catch (err) {
+    const e = err as any;
+    const msg = String(e?.message || "");
+    const isDbDown =
+      msg.includes("Can't reach database server") ||
+      e?.code === "P1001" ||
+      e?.name === "PrismaClientInitializationError";
     console.error("Menu API error:", err);
     // Serve last known good menu to avoid customer-facing crash.
     if (publicMenuCache?.data) {
@@ -116,8 +122,10 @@ menuRouter.get("/", async (_req, res) => {
       res.setHeader("Cache-Control", "public, max-age=2, stale-while-revalidate=30");
       return res.json(publicMenuCache.data);
     }
-    return res.status(500).json({
-      message: "Failed to load menu",
+    return res.status(isDbDown ? 503 : 500).json({
+      message: isDbDown
+        ? "Menu is temporarily unavailable (database offline). Please try again in a moment."
+        : "Failed to load menu",
       categories: [],
       bestSellerItemIds: [],
     });

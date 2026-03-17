@@ -97,7 +97,7 @@ function OrderCartDialog({
     customerName: string;
     customerMobile: string;
     tableNumber: string;
-    packaging: boolean;
+    orderType: "DINE_IN" | "TAKE_AWAY";
   }) => Promise<void>; // customerMobile optional – for WhatsApp invoice
   isSubmittingOrder: boolean;
   lastCustomerName: string;
@@ -107,7 +107,7 @@ function OrderCartDialog({
   const [customerName, setCustomerName] = useState("");
   const [customerMobile, setCustomerMobile] = useState("");
   const [tableNumber, setTableNumber] = useState("");
-  const [packaging, setPackaging] = useState(false);
+  const [orderType, setOrderType] = useState<"DINE_IN" | "TAKE_AWAY">("DINE_IN");
 
   useEffect(() => {
     if (open) {
@@ -218,33 +218,48 @@ function OrderCartDialog({
             </label>
             <label className="flex flex-col gap-1">
               <span className="font-semibold text-olive-900">
-                Table number{" "}
-                {packaging && (
-                  <span className="font-normal text-muted-foreground">
-                    (optional for takeaway)
-                  </span>
-                )}
+                Table number <span className="text-red-500">*</span>
               </span>
               <input
                 value={tableNumber}
-                onChange={(e) => setTableNumber(e.target.value)}
-                placeholder={
-                  packaging
-                    ? "Optional (e.g., T1, 5)"
-                    : "Enter your table number (e.g., T1, 5)"
+                inputMode="numeric"
+                onChange={(e) =>
+                  setTableNumber(e.target.value.replace(/\D/g, ""))
                 }
+                placeholder="Enter table number (e.g., 1, 2, 3)"
+                disabled={orderType === "TAKE_AWAY"}
                 className="w-full rounded-md border px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600"
               />
             </label>
-            <label className="inline-flex items-center gap-2 text-olive-900">
-              <input
-                type="checkbox"
-                checked={packaging}
-                onChange={(e) => setPackaging(e.target.checked)}
-                className="h-4 w-4 rounded border-emerald-600 text-emerald-600"
-              />
-              <span>Packaging required (takeaway)</span>
-            </label>
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <Button
+                type="button"
+                variant={orderType === "DINE_IN" ? "default" : "outline"}
+                className={
+                  orderType === "DINE_IN"
+                    ? "bg-emerald-700 hover:bg-emerald-800"
+                    : "border-emerald-700 text-emerald-800"
+                }
+                onClick={() => setOrderType("DINE_IN")}
+              >
+                DINE IN
+              </Button>
+              <Button
+                type="button"
+                variant={orderType === "TAKE_AWAY" ? "default" : "outline"}
+                className={
+                  orderType === "TAKE_AWAY"
+                    ? "bg-emerald-700 hover:bg-emerald-800"
+                    : "border-emerald-700 text-emerald-800"
+                }
+                onClick={() => {
+                  setOrderType("TAKE_AWAY");
+                  setTableNumber("");
+                }}
+              >
+                TAKE AWAY
+              </Button>
+            </div>
           </div>
           {showTotalAmount && (
             <div className="flex items-center justify-between text-sm">
@@ -258,18 +273,22 @@ function OrderCartDialog({
               !cart.length ||
               isSubmittingOrder ||
               !customerName.trim() ||
-              (!packaging && !tableNumber.trim())
+              (orderType === "DINE_IN" && !tableNumber.trim())
             }
             onClick={() =>
               onCheckout({
                 customerName,
                 customerMobile,
                 tableNumber,
-                packaging,
+                orderType,
               })
             }
           >
-            {isSubmittingOrder ? "Placing Order..." : "Place Order"}
+            {isSubmittingOrder
+              ? "Placing Order..."
+              : orderType === "DINE_IN"
+                ? "DINE IN"
+                : "TAKE AWAY"}
           </Button>
           <p className="text-[10px] text-muted-foreground text-center">
             Show this screen to staff if there is any issue with order
@@ -1016,7 +1035,7 @@ const Index = () => {
       customerName: string;
       customerMobile: string;
       tableNumber: string;
-      packaging: boolean;
+      orderType: "DINE_IN" | "TAKE_AWAY";
     }) => {
       if (!cart.length) {
         toast({
@@ -1038,11 +1057,21 @@ const Index = () => {
         .slice(0, 10);
       const validMobile =
         mobileTrim.length === 10 && /^[6-9]/.test(mobileTrim) ? mobileTrim : "";
-      if (!formData.packaging && !formData.tableNumber.trim()) {
+      if (formData.orderType === "DINE_IN" && !formData.tableNumber.trim()) {
         toast({
           title: "Table number required",
           description:
-            "Please enter your table number, or check packaging for takeaway.",
+            "Please enter your table number.",
+        });
+        return;
+      }
+      if (
+        formData.orderType === "DINE_IN" &&
+        !/^\d+$/.test(formData.tableNumber.trim())
+      ) {
+        toast({
+          title: "Invalid table number",
+          description: "Table number must be numeric (e.g., 1, 2, 3).",
         });
         return;
       }
@@ -1063,12 +1092,11 @@ const Index = () => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            tableNumber: formData.packaging
-              ? formData.tableNumber.trim() || "Takeaway"
-              : formData.tableNumber.trim(),
+            orderType: formData.orderType,
+            tableNumber: formData.tableNumber.trim(),
             branchId,
             sessionToken,
-            packaging: formData.packaging,
+            packaging: formData.orderType === "TAKE_AWAY",
             customerName: nameTrim,
             customerMobile: validMobile || undefined,
             items: cart.map((item) => ({

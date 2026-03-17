@@ -26,6 +26,7 @@ import {
   FileDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { LoaderButton } from "@/components/shared/LoaderButton";
 import {
   Card,
   CardContent,
@@ -55,6 +56,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -176,6 +178,22 @@ function playNewOrderSound() {
   } catch (_) {}
 }
 
+function notifyNewOrders(count: number) {
+  try {
+    if (typeof window === "undefined") return;
+    if (!("Notification" in window)) return;
+    if (Notification.permission !== "granted") return;
+    // Only notify when tab is not visible to avoid noisy duplicates.
+    if (!document.hidden) return;
+    const title = "New order received";
+    const body =
+      count === 1
+        ? "1 new order needs your attention."
+        : `${count} new orders need your attention.`;
+    new Notification(title, { body, silent: true });
+  } catch (_) {}
+}
+
 type OrderItem = {
   id: number;
   name: string;
@@ -217,6 +235,7 @@ const sidebarItems = [
   { key: "live", label: "Live Orders", icon: ShoppingCart },
   { key: "completed", label: "Completed", icon: CheckCircle },
   { key: "pending", label: "Pending Payment", icon: CreditCard },
+  { key: "performance", label: "Performance", icon: Bell },
   { key: "shift", label: "My Shift", icon: Clock },
   { key: "profile", label: "Profile", icon: User },
 ];
@@ -685,6 +704,7 @@ const EmployeeDashboard = () => {
   /** Only the card where Accept was clicked shows "Accepting..." – prevents other cards showing loading */
   const [acceptingOrderId, setAcceptingOrderId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [activeSection, setActiveSection] = useState<string>("dashboard");
   const [currentTime, setCurrentTime] = useState(new Date());
   const [popupCustomerName, setPopupCustomerName] = useState("");
@@ -719,6 +739,76 @@ const EmployeeDashboard = () => {
   const prevNewOrderCountRef = useRef(0);
 
   const token = window.sessionStorage.getItem("dm_auth_token");
+
+  // Performance (API speed) – employee view
+  type ApiPerfRow = {
+    key: string;
+    actor: "ALL" | "ADMIN" | "EMPLOYEE" | "CUSTOMER";
+    count: number;
+    errorCount: number;
+    avgMs: number;
+    p50Ms: number;
+    p95Ms: number;
+    maxMs: number;
+  };
+  type ApiPerfSummary = {
+    now: number;
+    windowMinutes: number;
+    actor: "ALL" | "ADMIN" | "EMPLOYEE" | "CUSTOMER";
+    totalCount: number;
+    totalErrorCount: number;
+    rpm: number;
+    rows: ApiPerfRow[];
+  };
+  const [apiPerfWindowMinutes, setApiPerfWindowMinutes] = useState<number>(60);
+  const [apiPerfLoading, setApiPerfLoading] = useState(false);
+  const [apiPerf, setApiPerf] = useState<ApiPerfSummary | null>(null);
+
+  const loadApiPerf = useCallback(async () => {
+    if (!token) return;
+    setApiPerfLoading(true);
+    try {
+      const params = new URLSearchParams({
+        windowMinutes: String(apiPerfWindowMinutes),
+        top: "30",
+        actor: "EMPLOYEE",
+      });
+      const res = await fetch(`${apiBase}/performance/summary?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error((data as any)?.message || "Failed to load performance");
+      setApiPerf(data as ApiPerfSummary);
+    } catch (e) {
+      console.error("Load employee performance error:", e);
+      setApiPerf(null);
+    } finally {
+      setApiPerfLoading(false);
+    }
+  }, [token, apiPerfWindowMinutes]);
+
+  useEffect(() => {
+    if (activeSection !== "performance") return;
+    loadApiPerf();
+    const id = window.setInterval(() => loadApiPerf(), 30_000);
+    return () => window.clearInterval(id);
+  }, [activeSection, loadApiPerf]);
+
+  const overallApiPerf = useMemo(() => {
+    const rows = apiPerf?.rows ?? [];
+    const total = rows.reduce((s, r) => s + (r.count || 0), 0);
+    const weightedAvg =
+      total > 0 ? rows.reduce((s, r) => s + (Number(r.avgMs) || 0) * r.count, 0) / total : 0;
+    const weightedP95 =
+      total > 0 ? rows.reduce((s, r) => s + (Number(r.p95Ms) || 0) * r.count, 0) / total : 0;
+    return {
+      rpm: apiPerf?.rpm ?? 0,
+      avgMs: Math.round(weightedAvg),
+      p95Ms: Math.round(weightedP95),
+      totalCount: apiPerf?.totalCount ?? 0,
+      totalErrorCount: apiPerf?.totalErrorCount ?? 0,
+    };
+  }, [apiPerf]);
 
   const mergeOrders = (prev: Order[], next: Order[]) => {
     if (prev.length === 0) return next;
@@ -758,6 +848,16 @@ const EmployeeDashboard = () => {
     }
     prevNewOrderCountRef.current = n;
   }, [newOrderPopupOrders.length]);
+
+  // Keep ringing (beep) until staff accepts/clears, unless paused.
+  useEffect(() => {
+    if (pauseNewOrderPopup) return;
+    if (newOrderPopupOrders.length === 0) return;
+    const id = window.setInterval(() => {
+      playNewOrderSound();
+    }, 3000);
+    return () => window.clearInterval(id);
+  }, [newOrderPopupOrders.length, pauseNewOrderPopup]);
 
   const [profile, setProfile] = useState<{
     name: string;
@@ -812,6 +912,7 @@ const EmployeeDashboard = () => {
             const newOrders = data.filter((d: Order) => !prevIds.has(d.id));
             if (newOrders.length > 0) {
               setNewOrderPopupOrders((popup) => [...newOrders, ...popup]);
+              notifyNewOrders(newOrders.length);
               setTimeout(
                 () =>
                   toast.success(`${newOrders.length} new order(s) received.`),
@@ -828,6 +929,7 @@ const EmployeeDashboard = () => {
         setOrders((prev) => (prev.length ? prev : []));
       } finally {
         setLoading(false);
+        setHasLoadedOnce(true);
       }
     }
 
@@ -1027,6 +1129,7 @@ const EmployeeDashboard = () => {
       if (res.ok) {
         const data = await res.json();
         const updated = data.order ?? data;
+        setNewOrderPopupOrders((prev) => prev.filter((o) => o.id !== orderId));
         setOrders((prev) =>
           prev.map((o) =>
             o.id === orderId
@@ -3259,6 +3362,159 @@ const EmployeeDashboard = () => {
     [profile],
   );
 
+  const performanceSectionContent = useMemo(
+    () => (
+      <div className="space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h2 className="text-lg font-bold sm:text-xl">Performance</h2>
+            <p className="text-xs sm:text-sm text-muted-foreground">
+              Live API speed and traffic (employee requests).
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              value={String(apiPerfWindowMinutes)}
+              onValueChange={(v) => setApiPerfWindowMinutes(Number(v) || 60)}
+            >
+              <SelectTrigger className="w-[150px] min-h-[44px] sm:min-h-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="15">Last 15 min</SelectItem>
+                <SelectItem value="60">Last 60 min</SelectItem>
+                <SelectItem value="360">Last 6 hours</SelectItem>
+                <SelectItem value="1440">Last 24 hours</SelectItem>
+              </SelectContent>
+            </Select>
+            <LoaderButton
+              size="sm"
+              variant="outline"
+              loading={apiPerfLoading}
+              loadingLabel="Refreshing..."
+              onClick={loadApiPerf}
+              className="min-h-[44px] sm:min-h-0"
+            >
+              <RefreshCw className="h-4 w-4 mr-1" />
+              Refresh
+            </LoaderButton>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <Card className="bg-white">
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">Requests / min</p>
+              <p className="mt-1 text-lg font-bold">
+                {overallApiPerf.rpm ? overallApiPerf.rpm.toFixed(1) : "0.0"}
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="bg-white">
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">API Avg (ms)</p>
+              <p className="mt-1 text-lg font-bold">{overallApiPerf.avgMs}</p>
+            </CardContent>
+          </Card>
+          <Card className="bg-white">
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">API P95 (ms)</p>
+              <p className="mt-1 text-lg font-bold text-amber-700">
+                {overallApiPerf.p95Ms}
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="bg-white">
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">Errors (5xx)</p>
+              <p className="mt-1 text-lg font-bold text-red-600">
+                {overallApiPerf.totalErrorCount}
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="bg-white">
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">Total requests</p>
+              <p className="mt-1 text-lg font-bold">
+                {overallApiPerf.totalCount}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Slow APIs (by P95)</CardTitle>
+            <CardDescription className="text-xs">
+              Endpoints with traffic and latency (employee traffic).
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-2">
+            {apiPerfLoading && !apiPerf ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">
+                Loading…
+              </div>
+            ) : (apiPerf?.rows?.length ?? 0) === 0 ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">
+                No API traffic in this window yet.
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-50">
+                      <TableHead>API</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">
+                        Hits
+                      </TableHead>
+                      <TableHead className="text-right whitespace-nowrap">
+                        Avg (ms)
+                      </TableHead>
+                      <TableHead className="text-right whitespace-nowrap">
+                        P95 (ms)
+                      </TableHead>
+                      <TableHead className="text-right whitespace-nowrap">
+                        5xx
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(apiPerf?.rows ?? []).map((r) => (
+                      <TableRow key={r.key}>
+                        <TableCell className="font-medium">{r.key}</TableCell>
+                        <TableCell className="text-right">{r.count}</TableCell>
+                        <TableCell className="text-right">
+                          {Math.round(r.avgMs)}
+                        </TableCell>
+                        <TableCell className="text-right font-semibold text-amber-700">
+                          {Math.round(r.p95Ms)}
+                        </TableCell>
+                        <TableCell className="text-right text-red-600 font-semibold">
+                          {r.errorCount}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    ),
+    [
+      apiPerf,
+      apiPerfLoading,
+      apiPerfWindowMinutes,
+      loadApiPerf,
+      overallApiPerf.avgMs,
+      overallApiPerf.p95Ms,
+      overallApiPerf.rpm,
+      overallApiPerf.totalCount,
+      overallApiPerf.totalErrorCount,
+    ],
+  );
+
   const StartShiftPromptDialog = () => (
     <Dialog
       open={showStartShiftPrompt}
@@ -3501,6 +3757,7 @@ const EmployeeDashboard = () => {
         {activeSection === "completed" && completedSectionContent}
         {activeSection === "pending" && pendingSectionContent}
         {activeSection === "paid" && paidSectionContent}
+        {activeSection === "performance" && performanceSectionContent}
         {activeSection === "shift" && shiftSectionContent}
         {activeSection === "profile" && profileSectionContent}
       </div>
@@ -3512,6 +3769,7 @@ const EmployeeDashboard = () => {
       completedSectionContent,
       pendingSectionContent,
       paidSectionContent,
+      performanceSectionContent,
       shiftSectionContent,
       profileSectionContent,
     ],
@@ -3523,7 +3781,7 @@ const EmployeeDashboard = () => {
       : null;
 
   // Skeleton layout so UI feels fast – no blank full-page spinner
-  if (loading) {
+  if (loading && !hasLoadedOnce) {
     return (
       <div className="min-h-screen flex flex-col bg-slate-50">
         <header className="h-14 border-b bg-white shrink-0" />
@@ -3564,7 +3822,17 @@ const EmployeeDashboard = () => {
       }
       companyLogoUrl={companyLogoUrl || undefined}
     >
-      {content}
+      <div className="relative">
+        {loading && hasLoadedOnce && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/40 backdrop-blur-sm">
+            <div className="flex flex-col items-center gap-3 rounded-xl bg-white/80 px-5 py-4 shadow-lg border border-slate-200">
+              <div className="h-8 w-8 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+              <p className="text-sm text-slate-600">Loading data…</p>
+            </div>
+          </div>
+        )}
+        {content}
+      </div>
       <NewOrderPopupDialog />
       <StartShiftPromptDialog />
       <OrderPopupDialogView

@@ -148,6 +148,12 @@ const SALARY_CARD_CLASS =
 const SALARY_INPUT_CLASS =
   "h-11 rounded-lg border border-slate-200 px-3 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none";
 
+function monthNumberToName(month: number | null | undefined): string | undefined {
+  if (month == null) return undefined;
+  const idx = Number(month) - 1;
+  return idx >= 0 && idx < SALARY_MONTH_NAMES.length ? SALARY_MONTH_NAMES[idx] : undefined;
+}
+
 function getNextSalaryNumberModule(
   existingSlips: { salaryNumber?: string; month?: string; year?: number }[],
   payYear: number,
@@ -2605,33 +2611,62 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
     }
     setIsGenerating(true);
     try {
-      await new Promise((r) => setTimeout(r, 400));
       const salaryNumber = getNextSalaryNumberModule(
         salarySlips,
         payYear,
         payMonthName,
       );
-      const newSlip = {
-        id: Date.now(),
-        salaryNumber,
-        employee: { name: selectedEmployee.name },
-        employeeCode: selectedEmployee.employeeCode,
-        month: payMonthName,
-        year: payYear,
-        basicSalary: basicSalary || 0,
-        allowances: allowanceRows,
-        deductions: deductionRows,
-        netSalary,
-        paidDays,
-        lopDays,
-        status: "Sent",
-        createdAt: new Date().toISOString(),
+      const res = await fetch(`${apiBase}/reports/salary-slips`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          employeeId: selectedEmployee.id,
+          salaryNumber,
+          month: payMonthNum,
+          year: payYear,
+          paidDays,
+          lopDays,
+          basicSalary: basicSalary || 0,
+          netSalary,
+          allowances: allowanceRows,
+          deductions: deductionRows,
+        }),
+      });
+      const created = await res.json().catch(() => null);
+      if (!res.ok) {
+        const msg =
+          created && typeof created === "object" && "message" in created
+            ? String((created as any).message)
+            : "Failed to save salary slip";
+        throw new Error(msg);
+      }
+
+      const normalized = {
+        ...(created as any),
+        month:
+          typeof (created as any)?.month === "number"
+            ? monthNumberToName((created as any).month) ?? payMonthName
+            : (created as any)?.month ?? payMonthName,
+        employeeCode:
+          (created as any)?.employee?.employeeCode ??
+          (created as any)?.employeeCode ??
+          selectedEmployee.employeeCode,
+        allowances: Array.isArray((created as any)?.allowances)
+          ? (created as any).allowances
+          : allowanceRows,
+        deductions: Array.isArray((created as any)?.deductions)
+          ? (created as any).deductions
+          : deductionRows,
       };
-      setSalarySlips((prev) => [newSlip, ...prev]);
+
+      setSalarySlips((prev) => [normalized, ...prev]);
       onOpenChange(false);
       toast({
         title: "Slip generated successfully",
-        description: `Salary slip for ${selectedEmployee.name} has been added. It appears at the top of the list below.`,
+        description: `Salary slip for ${selectedEmployee.name} has been saved and added to the list.`,
       });
     } catch (e: unknown) {
       const err = e as { message?: string; errors?: { message?: string }[] };
@@ -3260,16 +3295,17 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
             >
               <Download className="h-4 w-4 mr-2" /> Download
             </Button>
-            <Button
+            <LoaderButton
               variant="outline"
               size="sm"
               className="rounded-lg h-10"
               onClick={handleSendEmail}
-              disabled={sendingEmail || !selectedEmployee}
+              disabled={!selectedEmployee}
+              loading={sendingEmail}
+              loadingLabel="Sending…"
             >
-              <Mail className="h-4 w-4 mr-2" />{" "}
-              {sendingEmail ? "Sending…" : "Send Email"}
-            </Button>
+              <Mail className="h-4 w-4 mr-2" /> Send Email
+            </LoaderButton>
             <Button
               variant="outline"
               size="sm"
@@ -3291,22 +3327,15 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
             >
               Cancel
             </Button>
-            <Button
+            <LoaderButton
               onClick={handleGenerate}
-              disabled={isGenerating || !selectedEmployee}
+              disabled={!selectedEmployee}
+              loading={isGenerating}
+              loadingLabel="Generating..."
               className="rounded-lg h-12 bg-gradient-to-r from-[#064E3B] to-[#047857] hover:opacity-90 text-white font-semibold"
             >
-              {isGenerating ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />{" "}
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <IndianRupee className="h-5 w-5 mr-2" /> Generate Salary Slip
-                </>
-              )}
-            </Button>
+              <IndianRupee className="h-5 w-5 mr-2" /> Generate Salary Slip
+            </LoaderButton>
           </DialogFooter>
         </div>
       </DialogContent>
@@ -3340,6 +3369,7 @@ const AdminDashboard = () => {
     return "overview";
   });
   const [loading, setLoading] = useState(true);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [profile, setProfile] = useState<{ name?: string } | null>(null);
   const [publicNetworkTraffic, setPublicNetworkTraffic] = useState<number>(0);
@@ -3433,7 +3463,7 @@ const AdminDashboard = () => {
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [leaderboardSortBy, setLeaderboardSortBy] = useState<
     "orders" | "amount"
-  >("orders");
+  >("amount");
   const [leaderboardLimit, setLeaderboardLimit] = useState(10);
 
   // Customer queries state
@@ -3813,6 +3843,7 @@ const AdminDashboard = () => {
         activeShiftsRes,
         overtimeSummaryRes,
         branchesRes,
+        salarySlipsRes,
       ] = await Promise.all([
         fetchWithTimeout(`${apiBase}/menu/admin`, opts),
         fetchWithTimeout(`${apiBase}/employees`, opts),
@@ -3822,12 +3853,14 @@ const AdminDashboard = () => {
         fetchWithTimeout(`${apiBase}/shift/active`, opts),
         fetchWithTimeout(`${apiBase}/overtime/summary`, opts),
         fetchWithTimeout(`${apiBase}/branches`, opts),
+        fetchWithTimeout(`${apiBase}/reports/salary-slips`, opts),
       ]);
 
       // Read each response body only once (avoid "body stream already read")
       const menuData = menuRes.ok ? await menuRes.json() : null;
       const empData = employeesRes.ok ? await employeesRes.json() : null;
       const ordersData = ordersRes.ok ? await ordersRes.json() : null;
+      const salarySlipData = salarySlipsRes.ok ? await salarySlipsRes.json() : null;
       if (trafficRes.ok) {
         const trafficData = await trafficRes.json();
         setPublicNetworkTraffic(trafficData.publicNetworkTraffic ?? 0);
@@ -3858,6 +3891,25 @@ const AdminDashboard = () => {
               ? (branchesData as any).data
               : [];
         setBranches(branchList);
+      }
+
+      if (salarySlipData) {
+        const slipsRaw = Array.isArray((salarySlipData as any)?.slips)
+          ? (salarySlipData as any).slips
+          : Array.isArray(salarySlipData)
+            ? salarySlipData
+            : [];
+        const normalized = slipsRaw.map((s: any) => ({
+          ...s,
+          month:
+            typeof s?.month === "number"
+              ? monthNumberToName(s.month) ?? String(s.month)
+              : s?.month,
+          employeeCode: s?.employee?.employeeCode ?? s?.employeeCode,
+          allowances: Array.isArray(s?.allowances) ? s.allowances : [],
+          deductions: Array.isArray(s?.deductions) ? s.deductions : [],
+        }));
+        setSalarySlips(normalized);
       }
 
       if (menuData) {
@@ -3944,6 +3996,7 @@ const AdminDashboard = () => {
       });
     } finally {
       setLoading(false);
+      setHasLoadedOnce(true);
     }
   };
 
@@ -4539,6 +4592,22 @@ const AdminDashboard = () => {
       setLateLoading(false);
     }
   }, [token, apiBase, lateDateFrom, lateDateTo, lateEmployeeFilter]);
+
+  // Debounce late filters so Apply feels reliable and avoids spam fetches
+  const lateDebounceTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!token) return;
+    if (activeSection !== "late") return;
+    if (lateDebounceTimerRef.current)
+      window.clearTimeout(lateDebounceTimerRef.current);
+    lateDebounceTimerRef.current = window.setTimeout(() => {
+      loadLate();
+    }, 350);
+    return () => {
+      if (lateDebounceTimerRef.current)
+        window.clearTimeout(lateDebounceTimerRef.current);
+    };
+  }, [token, activeSection, lateDateFrom, lateDateTo, lateEmployeeFilter, loadLate]);
 
   // Load branch, branches list, and notifications
   const loadSettings = async () => {
@@ -5946,65 +6015,172 @@ const AdminDashboard = () => {
   );
 
   const PerformanceSection = () => {
-    const trendData =
-      performanceSummary?.trend?.length
-        ? performanceSummary.trend
-        : [
-            { label: "00:00", orders: 0, revenue: 0 },
-            { label: "06:00", orders: 0, revenue: 0 },
-          ];
+    type ApiPerfRow = {
+      key: string;
+      actor: "ALL" | "ADMIN" | "EMPLOYEE" | "CUSTOMER";
+      count: number;
+      errorCount: number;
+      avgMs: number;
+      p50Ms: number;
+      p95Ms: number;
+      maxMs: number;
+    };
+    type ApiPerfSummary = {
+      now: number;
+      windowMinutes: number;
+      actor: "ALL" | "ADMIN" | "EMPLOYEE" | "CUSTOMER";
+      totalCount: number;
+      totalErrorCount: number;
+      totalBytesSent?: number;
+      rpm: number;
+      rows: ApiPerfRow[];
+    };
 
-    const routePerformanceData =
-      performanceSummary?.routes?.length
-        ? performanceSummary.routes
-        : [
-            { route: "Menu", orders: 0, revenue: 0 },
-            { route: "Takeaway", orders: 0, revenue: 0 },
-          ];
+    type SystemPerf = {
+      now: number;
+      cpuUsagePct: number;
+      diskUsagePct: number;
+      diskTotalBytes: number;
+      diskUsedBytes: number;
+      diskFreeBytes: number;
+      networkEgressBytes: number;
+      window: { hours: number };
+    };
 
-    const deviceTrafficData = [
-      { name: "Mobile", value: 68 },
-      { name: "Desktop", value: 24 },
-      { name: "Tablet", value: 8 },
-    ];
+    type CompletionRow = {
+      employeeId: number;
+      employeeName: string;
+      employeeCode: string | null;
+      ordersCompleted: number;
+      avgMinutes: number;
+      minMinutes: number;
+      maxMinutes: number;
+    };
 
-    const countryTrafficData = [
-      { name: "India", value: 82 },
-      { name: "USA", value: 7 },
-      { name: "UAE", value: 6 },
-      { name: "Other", value: 5 },
-    ];
+    const [apiPerfActor, setApiPerfActor] = useState<
+      "ALL" | "ADMIN" | "EMPLOYEE" | "CUSTOMER"
+    >("ALL");
+    const [apiPerfWindowMinutes, setApiPerfWindowMinutes] = useState<number>(60);
+    const [apiPerfLoading, setApiPerfLoading] = useState(false);
+    const [apiPerf, setApiPerf] = useState<ApiPerfSummary | null>(null);
+    const [sysPerfLoading, setSysPerfLoading] = useState(false);
+    const [sysPerf, setSysPerf] = useState<SystemPerf | null>(null);
+    const [completionLoading, setCompletionLoading] = useState(false);
+    const [completionRows, setCompletionRows] = useState<CompletionRow[]>([]);
 
-    const deviceColors = ["#22c55e", "#3b82f6", "#f97316"];
-    const countryColors = ["#22c55e", "#16a34a", "#15803d", "#14532d"];
+    const formatBytes = (b: number) => {
+      const n = Number(b) || 0;
+      if (n < 1024) return `${n} B`;
+      const kb = n / 1024;
+      if (kb < 1024) return `${kb.toFixed(1)} KB`;
+      const mb = kb / 1024;
+      if (mb < 1024) return `${mb.toFixed(1)} MB`;
+      const gb = mb / 1024;
+      return `${gb.toFixed(2)} GB`;
+    };
 
-    const realExperienceScore =
-      performanceSummary && performanceSummary.totalOrders > 0
-        ? Math.min(
-            99,
-            70 +
-              Math.min(
-                20,
-                Math.round(
-                  (performanceSummary.totalRevenue /
-                    Math.max(performanceSummary.totalOrders, 1)) /
-                    50,
-                ),
-              ),
-          )
-        : 80;
-    const realExperienceLabel =
-      realExperienceScore >= 90
-        ? "Excellent"
-        : realExperienceScore >= 50
-          ? "Needs improvement"
-          : "Poor";
-    const realExperienceColor =
-      realExperienceScore >= 90
-        ? "text-emerald-600"
-        : realExperienceScore >= 50
-          ? "text-amber-500"
-          : "text-red-500";
+    const loadApiPerf = useCallback(async () => {
+      if (!token) return;
+      setApiPerfLoading(true);
+      try {
+        const params = new URLSearchParams({
+          windowMinutes: String(apiPerfWindowMinutes),
+          top: "30",
+          actor: apiPerfActor,
+        });
+        const res = await fetch(`${apiBase}/performance/summary?${params}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          throw new Error(
+            (data && typeof data === "object" && "message" in data
+              ? String((data as any).message)
+              : "Failed to load performance") || "Failed to load performance",
+          );
+        }
+        setApiPerf(data as ApiPerfSummary);
+      } catch (e) {
+        console.error("Load API performance error:", e);
+        setApiPerf(null);
+      } finally {
+        setApiPerfLoading(false);
+      }
+    }, [token, apiPerfWindowMinutes, apiPerfActor]);
+
+    const loadSysPerf = useCallback(async () => {
+      if (!token) return;
+      setSysPerfLoading(true);
+      try {
+        const res = await fetch(`${apiBase}/performance/system`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) throw new Error((data as any)?.message || "Failed to load system metrics");
+        setSysPerf(data as SystemPerf);
+      } catch (e) {
+        console.error("Load system metrics error:", e);
+        setSysPerf(null);
+      } finally {
+        setSysPerfLoading(false);
+      }
+    }, [token]);
+
+    const loadCompletion = useCallback(async () => {
+      if (!token) return;
+      setCompletionLoading(true);
+      try {
+        const res = await fetch(`${apiBase}/reports/order-completion-times?days=7`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) throw new Error((data as any)?.message || "Failed to load completion times");
+        setCompletionRows(Array.isArray((data as any)?.rows) ? (data as any).rows : []);
+      } catch (e) {
+        console.error("Load completion times error:", e);
+        setCompletionRows([]);
+      } finally {
+        setCompletionLoading(false);
+      }
+    }, [token]);
+
+    useEffect(() => {
+      if (activeSection !== "performance") return;
+      loadApiPerf();
+      loadSysPerf();
+      loadCompletion();
+      const id = window.setInterval(() => loadApiPerf(), 30_000);
+      const id2 = window.setInterval(() => loadSysPerf(), 60_000);
+      const id3 = window.setInterval(() => loadCompletion(), 120_000);
+      return () => {
+        window.clearInterval(id);
+        window.clearInterval(id2);
+        window.clearInterval(id3);
+      };
+    }, [activeSection, loadApiPerf, loadSysPerf, loadCompletion]);
+
+    const overall = useMemo(() => {
+      const rows = apiPerf?.rows ?? [];
+      const total = rows.reduce((s, r) => s + (r.count || 0), 0);
+      const weightedAvg =
+        total > 0
+          ? rows.reduce((s, r) => s + (Number(r.avgMs) || 0) * r.count, 0) /
+            total
+          : 0;
+      const weightedP95 =
+        total > 0
+          ? rows.reduce((s, r) => s + (Number(r.p95Ms) || 0) * r.count, 0) /
+            total
+          : 0;
+      return {
+        rpm: apiPerf?.rpm ?? 0,
+        avgMs: Math.round(weightedAvg),
+        p95Ms: Math.round(weightedP95),
+        totalCount: apiPerf?.totalCount ?? 0,
+        totalErrorCount: apiPerf?.totalErrorCount ?? 0,
+        totalBytesSent: apiPerf?.totalBytesSent ?? 0,
+      };
+    }, [apiPerf]);
 
     return (
       <div className="space-y-4">
@@ -6014,276 +6190,276 @@ const AdminDashboard = () => {
               Performance Dashboard
             </h2>
             <p className="text-xs sm:text-sm text-muted-foreground truncate max-w-full">
-              Real user experience and backend performance (sample data, last 7
-              days).
+              Live backend API latency and traffic (auto refresh every 30 seconds).
             </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              value={apiPerfActor}
+              onValueChange={(v: any) =>
+                setApiPerfActor(
+                  v === "ADMIN" || v === "EMPLOYEE" || v === "CUSTOMER"
+                    ? v
+                    : "ALL",
+                )
+              }
+            >
+              <SelectTrigger className="w-[150px] min-h-[44px] sm:min-h-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All</SelectItem>
+                <SelectItem value="ADMIN">Admin</SelectItem>
+                <SelectItem value="EMPLOYEE">Employee</SelectItem>
+                <SelectItem value="CUSTOMER">Customer</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select
+              value={String(apiPerfWindowMinutes)}
+              onValueChange={(v) => setApiPerfWindowMinutes(Number(v) || 60)}
+            >
+              <SelectTrigger className="w-[150px] min-h-[44px] sm:min-h-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="15">Last 15 min</SelectItem>
+                <SelectItem value="60">Last 60 min</SelectItem>
+                <SelectItem value="360">Last 6 hours</SelectItem>
+                <SelectItem value="1440">Last 24 hours</SelectItem>
+              </SelectContent>
+            </Select>
+            <LoaderButton
+              size="sm"
+              variant="outline"
+              loading={apiPerfLoading}
+              loadingLabel="Refreshing..."
+              onClick={loadApiPerf}
+              className="min-h-[44px] sm:min-h-0"
+            >
+              <RefreshCw className="h-4 w-4 mr-1" />
+              Refresh
+            </LoaderButton>
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-          <Card className="bg-gradient-to-br from-emerald-50 via-white to-emerald-50">
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center justify-between text-base">
-                <span>Real Experience Score</span>
-                <Badge variant="outline" className="text-xs">
-                  Last 24 hours
-                </Badge>
-              </CardTitle>
-              <CardDescription>
-                Overall score based on Core Web Vitals and API latency.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p
-                    className={`text-4xl font-semibold leading-none ${realExperienceColor}`}
-                  >
-                    {realExperienceScore}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {realExperienceLabel}
-                  </p>
-                  <p className="mt-3 text-xs text-muted-foreground max-w-xs">
-                    Target is 90+ for consistently smooth experience across menu
-                    and admin.
-                  </p>
-                </div>
-                <div className="relative h-24 w-24">
-                  <div className="absolute inset-0 rounded-full bg-emerald-100" />
-                  <div className="absolute inset-2 rounded-full bg-white flex items-center justify-center shadow-inner">
-                    <span className="text-xs font-semibold text-emerald-700">
-                      RES
-                    </span>
-                  </div>
-                </div>
-              </div>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <Card className="bg-white">
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">Requests / min</p>
+              <p className="mt-1 text-lg font-bold text-slate-900">
+                {overall.rpm ? overall.rpm.toFixed(1) : "0.0"}
+              </p>
             </CardContent>
           </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Key Metrics</CardTitle>
-              <CardDescription className="text-xs">
-                Core Web Vitals and backend timings (sample).
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                <div className="rounded-lg border bg-slate-50 p-3">
-                  <p className="text-[11px] text-muted-foreground">FCP</p>
-                  <p className="mt-1 text-sm font-semibold">1.1s</p>
-                  <p className="mt-1 text-[11px] text-emerald-600">Good</p>
-                </div>
-                <div className="rounded-lg border bg-slate-50 p-3">
-                  <p className="text-[11px] text-muted-foreground">LCP</p>
-                  <p className="mt-1 text-sm font-semibold">2.2s</p>
-                  <p className="mt-1 text-[11px] text-emerald-600">Good</p>
-                </div>
-                <div className="rounded-lg border bg-slate-50 p-3">
-                  <p className="text-[11px] text-muted-foreground">CLS</p>
-                  <p className="mt-1 text-sm font-semibold">0.03</p>
-                  <p className="mt-1 text-[11px] text-emerald-600">Stable</p>
-                </div>
-                <div className="rounded-lg border bg-slate-50 p-3">
-                  <p className="text-[11px] text-muted-foreground">
-                    API P95 (ms)
-                  </p>
-                  <p className="mt-1 text-sm font-semibold">430ms</p>
-                  <p className="mt-1 text-[11px] text-amber-600">
-                    Watch on peak hours
-                  </p>
-                </div>
-              </div>
+          <Card className="bg-white">
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">API Avg (ms)</p>
+              <p className="mt-1 text-lg font-bold text-slate-900">
+                {overall.avgMs || 0}
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="bg-white">
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">API P95 (ms)</p>
+              <p className="mt-1 text-lg font-bold text-amber-700">
+                {overall.p95Ms || 0}
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="bg-white">
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">Errors (5xx)</p>
+              <p className="mt-1 text-lg font-bold text-red-600">
+                {overall.totalErrorCount || 0}
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="bg-white">
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">Total requests</p>
+              <p className="mt-1 text-lg font-bold text-slate-900">
+                {overall.totalCount || 0}
+              </p>
             </CardContent>
           </Card>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Activity className="h-4 w-4 text-emerald-600" />
-                Core Web Vitals trend
-              </CardTitle>
-              <CardDescription className="text-xs">
-                FCP / LCP / CLS across recent days.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-2">
-              <div className="h-60 min-h-[240px]">
-                <ResponsiveContainer
-                  width="100%"
-                  height="100%"
-                  minWidth={0}
-                  minHeight={200}
-                >
-                  <LineChart data={trendData} margin={{ top: 10, right: 20, bottom: 0, left: -10 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis dataKey="label" tickMargin={6} />
-                    <YAxis />
-                    <RechartsTooltip />
-                    <RechartsLegend />
-                    <Line
-                      type="monotone"
-                      dataKey="orders"
-                      name="Orders"
-                      stroke="#22c55e"
-                      dot={false}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="revenue"
-                      name="Revenue"
-                      stroke="#3b82f6"
-                      dot={false}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <Card className="bg-white">
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">Network Egress (24h)</p>
+              <p className="mt-1 text-lg font-bold text-slate-900">
+                {sysPerf ? formatBytes(sysPerf.networkEgressBytes) : "—"}
+              </p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Estimated from API responses
+              </p>
             </CardContent>
           </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Route performance (P95)</CardTitle>
-              <CardDescription className="text-xs">
-                Slowest admin and public routes by p95 latency.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-2">
-              <div className="h-60 min-h-[240px]">
-                <ResponsiveContainer
-                  width="100%"
-                  height="100%"
-                  minWidth={0}
-                  minHeight={200}
-                >
-                  <BarChart data={routePerformanceData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis dataKey="route" tickMargin={6} />
-                    <YAxis />
-                    <RechartsTooltip />
-                    <Bar dataKey="revenue" name="Revenue" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+          <Card className="bg-white">
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">CPU Usage</p>
+              <p className="mt-1 text-lg font-bold text-slate-900">
+                {sysPerf ? `${sysPerf.cpuUsagePct}%` : "—"}
+              </p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Based on 1‑min load average
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="bg-white">
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">Disk Usage</p>
+              <p className="mt-1 text-lg font-bold text-slate-900">
+                {sysPerf ? `${sysPerf.diskUsagePct}%` : "—"}
+              </p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                {sysPerf
+                  ? `${formatBytes(sysPerf.diskUsedBytes)} / ${formatBytes(sysPerf.diskTotalBytes)}`
+                  : ""}
+              </p>
             </CardContent>
           </Card>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Device traffic</CardTitle>
-              <CardDescription className="text-xs">
-                Distribution of real sessions by device type.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-2">
-              <div className="flex items-center justify-between gap-4">
-                <div className="h-48 w-48 min-h-[192px] min-w-[192px]">
-                  <ResponsiveContainer
-                    width="100%"
-                    height="100%"
-                    minWidth={0}
-                    minHeight={180}
-                  >
-                    <PieChart>
-                      <Pie
-                        data={deviceTrafficData}
-                        dataKey="value"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={70}
-                        paddingAngle={2}
-                      >
-                        {deviceTrafficData.map((entry, index) => (
-                          <Cell
-                            key={entry.name}
-                            fill={deviceColors[index % deviceColors.length]}
-                          />
-                        ))}
-                      </Pie>
-                      <RechartsTooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="space-y-2 text-xs">
-                  {deviceTrafficData.map((d, i) => (
-                    <div key={d.name} className="flex items-center gap-2">
-                      <span
-                        className="h-2 w-2 rounded-full"
-                        style={{
-                          backgroundColor:
-                            deviceColors[i % deviceColors.length],
-                        }}
-                      />
-                      <span className="font-medium">{d.name}</span>
-                      <span className="ml-auto text-muted-foreground">
-                        {d.value}%
-                      </span>
-                    </div>
-                  ))}
-                </div>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Activity className="h-4 w-4 text-emerald-600" />
+              Slow APIs (by P95)
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Endpoints with traffic and latency. P95 is the most important number.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-2">
+            {apiPerfLoading && !apiPerf ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">
+                Loading…
               </div>
-            </CardContent>
-          </Card>
+            ) : (apiPerf?.rows?.length ?? 0) === 0 ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">
+                No API traffic in this window yet.
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-50">
+                      <TableHead>API</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">
+                        Hits
+                      </TableHead>
+                      <TableHead className="text-right whitespace-nowrap">
+                        Avg (ms)
+                      </TableHead>
+                      <TableHead className="text-right whitespace-nowrap">
+                        P50 (ms)
+                      </TableHead>
+                      <TableHead className="text-right whitespace-nowrap">
+                        P95 (ms)
+                      </TableHead>
+                      <TableHead className="text-right whitespace-nowrap">
+                        Max (ms)
+                      </TableHead>
+                      <TableHead className="text-right whitespace-nowrap">
+                        5xx
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(apiPerf?.rows ?? []).map((r) => (
+                      <TableRow key={r.key}>
+                        <TableCell className="font-medium">{r.key}</TableCell>
+                        <TableCell className="text-right">{r.count}</TableCell>
+                        <TableCell className="text-right">
+                          {Math.round(r.avgMs)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {Math.round(r.p50Ms)}
+                        </TableCell>
+                        <TableCell className="text-right font-semibold text-amber-700">
+                          {Math.round(r.p95Ms)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {Math.round(r.maxMs)}
+                        </TableCell>
+                        <TableCell className="text-right text-red-600 font-semibold">
+                          {r.errorCount}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Country traffic</CardTitle>
-              <CardDescription className="text-xs">
-                Where your customers are opening the menu from.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-2">
-              <div className="flex items-center justify-between gap-4">
-                <div className="h-48 w-48">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={countryTrafficData}
-                        dataKey="value"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={70}
-                        paddingAngle={2}
-                      >
-                        {countryTrafficData.map((entry, index) => (
-                          <Cell
-                            key={entry.name}
-                            fill={countryColors[index % countryColors.length]}
-                          />
-                        ))}
-                      </Pie>
-                      <RechartsTooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="space-y-2 text-xs">
-                  {countryTrafficData.map((d, i) => (
-                    <div key={d.name} className="flex items-center gap-2">
-                      <span
-                        className="h-2 w-2 rounded-full"
-                        style={{
-                          backgroundColor:
-                            countryColors[i % countryColors.length],
-                        }}
-                      />
-                      <span className="font-medium">{d.name}</span>
-                      <span className="ml-auto text-muted-foreground">
-                        {d.value}%
-                      </span>
-                    </div>
-                  ))}
-                </div>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Order completion time (avg)</CardTitle>
+            <CardDescription className="text-xs">
+              Average time taken by employees to complete orders (last 7 days).
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-2">
+            {completionLoading && completionRows.length === 0 ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">
+                Loading…
               </div>
-            </CardContent>
-          </Card>
-        </div>
+            ) : completionRows.length === 0 ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">
+                No completed orders in this window yet.
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-50">
+                      <TableHead>Employee</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">
+                        Orders
+                      </TableHead>
+                      <TableHead className="text-right whitespace-nowrap">
+                        Avg (min)
+                      </TableHead>
+                      <TableHead className="text-right whitespace-nowrap">
+                        Min
+                      </TableHead>
+                      <TableHead className="text-right whitespace-nowrap">
+                        Max
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {completionRows.map((r) => (
+                      <TableRow key={String(r.employeeId)}>
+                        <TableCell className="font-medium">
+                          {r.employeeName}
+                          {r.employeeCode ? (
+                            <span className="text-xs text-muted-foreground ml-2 font-mono">
+                              {r.employeeCode}
+                            </span>
+                          ) : null}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {r.ordersCompleted}
+                        </TableCell>
+                        <TableCell className="text-right font-semibold text-emerald-700">
+                          {r.avgMinutes}
+                        </TableCell>
+                        <TableCell className="text-right">{r.minMinutes}</TableCell>
+                        <TableCell className="text-right">{r.maxMinutes}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     );
   };
@@ -6701,7 +6877,7 @@ const AdminDashboard = () => {
     </div>
   );
 
-  // CUSTOMER LEADERBOARD SECTION – Top customers by orders / amount, loyalty badges
+  // CUSTOMER LEADERBOARD SECTION – Top customers by amount (default) / orders
   const CustomerLeaderboardSection = () => (
     <div className="space-y-4 min-w-0">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -6710,7 +6886,7 @@ const AdminDashboard = () => {
             Customer Leaderboard
           </h2>
           <p className="text-sm text-muted-foreground">
-            Top customers by orders or amount spent
+            Highest paying customers (descending)
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -6821,90 +6997,6 @@ const AdminDashboard = () => {
                 ))}
               </TableBody>
             </Table>
-          </div>
-          <p className="text-sm text-muted-foreground font-medium">
-            Top {Math.min(leaderboardLimit, leaderboard.length)} — Card view
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-            {leaderboard.map((row, idx) => {
-              const rank = idx + 1;
-              const displayName = (row.customerName || "—").toUpperCase();
-              const loyaltyTag =
-                row.totalOrders > 30
-                  ? "VIP CUSTOMER"
-                  : row.totalOrders >= 10
-                    ? "REGULAR CUSTOMER"
-                    : "NEW CUSTOMER";
-              const loyaltyClass =
-                row.totalOrders > 30
-                  ? "bg-amber-100 text-amber-800 border-amber-300"
-                  : row.totalOrders >= 10
-                    ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                    : "bg-slate-100 text-slate-700 border-slate-300";
-              const lastOrder = row.lastOrderDate
-                ? new Date(row.lastOrderDate).toLocaleDateString("en-IN", {
-                    day: "numeric",
-                    month: "short",
-                  })
-                : "—";
-              return (
-                <Card
-                  key={`${row.customerMobile}-${idx}`}
-                  className="overflow-hidden border-l-4 border-l-emerald-500"
-                >
-                  <CardHeader className="pb-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-start gap-2 min-w-0">
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-800 font-bold text-sm">
-                          {rank === 1
-                            ? "🥇"
-                            : rank === 2
-                              ? "🥈"
-                              : rank === 3
-                                ? "🥉"
-                                : `#${rank}`}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <CardTitle
-                            className="text-base break-words leading-snug"
-                            title={displayName}
-                          >
-                            {displayName}
-                          </CardTitle>
-                          <p className="text-xs text-muted-foreground font-mono mt-0.5">
-                            📞 {row.customerMobile || "—"}
-                          </p>
-                        </div>
-                      </div>
-                      <Badge
-                        variant="outline"
-                        className={`text-[10px] shrink-0 ${loyaltyClass}`}
-                      >
-                        {loyaltyTag}
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="pt-0 space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">🧾 Orders</span>
-                      <span className="font-semibold">{row.totalOrders}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">
-                        💰 Total Spent
-                      </span>
-                      <span className="font-semibold text-emerald-700">
-                        {formatINR(row.totalSpent)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>Last order</span>
-                      <span>{lastOrder}</span>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
           </div>
         </>
       )}
@@ -7197,26 +7289,24 @@ const AdminDashboard = () => {
               </Select>
             </div>
             <div className="flex items-end gap-2">
-              <Button
+              <LoaderButton
                 variant="outline"
                 size="sm"
                 onClick={handleOvertimeResetFilters}
-                disabled={overtimeLoading}
+                loading={overtimeLoading}
+                loadingLabel="Resetting..."
               >
                 Reset
-              </Button>
-              <Button
+              </LoaderButton>
+              <LoaderButton
                 size="sm"
                 onClick={() => loadOvertime()}
-                disabled={overtimeLoading}
+                loading={overtimeLoading}
+                loadingLabel="Applying..."
               >
-                {overtimeLoading ? (
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Search className="h-4 w-4 mr-1" />
-                )}
+                <Search className="h-4 w-4 mr-1" />
                 Apply
-              </Button>
+              </LoaderButton>
             </div>
           </div>
         </CardHeader>
@@ -7565,7 +7655,7 @@ const AdminDashboard = () => {
               </Select>
             </div>
             <div className="flex items-end gap-2">
-              <Button
+              <LoaderButton
                 variant="outline"
                 size="sm"
                 onClick={() => {
@@ -7573,22 +7663,20 @@ const AdminDashboard = () => {
                   setLateDateTo("");
                   setLateEmployeeFilter("all");
                 }}
-                disabled={lateLoading}
+                loading={lateLoading}
+                loadingLabel="Resetting..."
               >
                 Reset
-              </Button>
-              <Button
+              </LoaderButton>
+              <LoaderButton
                 size="sm"
                 onClick={() => loadLate()}
-                disabled={lateLoading}
+                loading={lateLoading}
+                loadingLabel="Applying..."
               >
-                {lateLoading ? (
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Search className="h-4 w-4 mr-1" />
-                )}
+                <Search className="h-4 w-4 mr-1" />
                 Apply
-              </Button>
+              </LoaderButton>
             </div>
           </div>
         </CardHeader>
@@ -8832,8 +8920,8 @@ const AdminDashboard = () => {
     );
   }
 
-  // Skeleton layout so UI feels fast – no blank full-page spinner
-  if (loading) {
+  // Skeleton layout on first load only (after that, we use a blur overlay)
+  if (loading && !hasLoadedOnce) {
     return (
       <div className="min-h-screen flex flex-col bg-slate-50">
         <header className="h-14 border-b bg-white shrink-0" />
@@ -8910,6 +8998,14 @@ const AdminDashboard = () => {
       }}
     >
       <div className="w-full min-h-full space-y-4 pb-6 relative overflow-x-hidden max-w-full px-0 sm:px-0">
+        {loading && hasLoadedOnce && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/40 backdrop-blur-sm">
+            <div className="flex flex-col items-center gap-3 rounded-xl bg-white/80 px-5 py-4 shadow-lg border border-slate-200">
+              <div className="h-8 w-8 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+              <p className="text-sm text-slate-600">Loading data…</p>
+            </div>
+          </div>
+        )}
         {mainSectionContent}
       </div>
 

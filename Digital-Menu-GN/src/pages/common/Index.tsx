@@ -51,6 +51,7 @@ function OrderCartDialog({
   isSubmittingOrder,
   lastCustomerName,
   lastCustomerMobile,
+  showTotalAmount,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -68,6 +69,7 @@ function OrderCartDialog({
   isSubmittingOrder: boolean;
   lastCustomerName: string;
   lastCustomerMobile: string;
+  showTotalAmount: boolean;
 }) {
   const [customerName, setCustomerName] = useState("");
   const [customerMobile, setCustomerMobile] = useState("");
@@ -211,10 +213,12 @@ function OrderCartDialog({
               <span>Packaging required (takeaway)</span>
             </label>
           </div>
-          <div className="flex items-center justify-between text-sm">
-            <span className="font-semibold">Total</span>
-            <span className="font-bold">₹{cartTotal.toFixed(0)}</span>
-          </div>
+          {showTotalAmount && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="font-semibold">Total</span>
+              <span className="font-bold">₹{cartTotal.toFixed(0)}</span>
+            </div>
+          )}
           <Button
             className="w-full bg-emerald-700 hover:bg-emerald-800"
             disabled={
@@ -740,7 +744,10 @@ const Index = () => {
     location: string | null;
     googleReviewUrl: string | null;
     logoUrl: string | null;
+    showTotalAmountToCustomers?: boolean;
   } | null>(null);
+  const showTotalAmountToCustomers =
+    branchContact?.showTotalAmountToCustomers ?? true;
   const [contactDialogOpen, setContactDialogOpen] = useState(false);
   const [issueDialogOpen, setIssueDialogOpen] = useState(false);
   const [issueForm, setIssueForm] = useState({
@@ -846,6 +853,7 @@ const Index = () => {
             location: data.location ?? null,
             googleReviewUrl: data.googleReviewUrl ?? null,
             logoUrl: data.logoUrl ?? null,
+            showTotalAmountToCustomers: data.showTotalAmountToCustomers ?? true,
           });
         }
       } catch (_) {
@@ -856,6 +864,7 @@ const Index = () => {
           location: null,
           googleReviewUrl: null,
           logoUrl: null,
+          showTotalAmountToCustomers: true,
         });
       }
     };
@@ -1308,7 +1317,9 @@ const Index = () => {
                         </span>
                       </div>
                       <div className="text-xs text-emerald-100">
-                        Total: ₹{cartTotal.toFixed(0)}
+                        {showTotalAmountToCustomers
+                          ? `Total: ₹${cartTotal.toFixed(0)}`
+                          : "Total: —"}
                       </div>
                     </div>
                     <Button
@@ -1337,6 +1348,7 @@ const Index = () => {
             isSubmittingOrder={isSubmittingOrder}
             lastCustomerName={lastCustomerName}
             lastCustomerMobile={lastCustomerMobile}
+            showTotalAmount={showTotalAmountToCustomers}
           />
 
           {/* Contact dialog: only shown when branch has phone (button only renders then) */}

@@ -74,6 +74,7 @@ import {
   BREAK_TIME_MINUTES,
   formatBreakTime,
 } from "@/constants";
+import { useGlobalLoading } from "@/components/GlobalLoadingProvider";
 
 const apiBase = API_BASE_URL;
 
@@ -906,6 +907,7 @@ const EmployeeDashboard = () => {
   };
   const [apiPerfWindowMinutes, setApiPerfWindowMinutes] = useState<number>(60);
   const [apiPerfLoading, setApiPerfLoading] = useState(false);
+  const { stopGlobalLoading } = useGlobalLoading();
   const [apiPerf, setApiPerf] = useState<ApiPerfSummary | null>(null);
 
   const loadApiPerf = useCallback(async () => {
@@ -1116,9 +1118,11 @@ const EmployeeDashboard = () => {
         });
       } catch {
         setOrders((prev) => (prev.length ? prev : []));
-      } finally {
+    } finally {
         setLoading(false);
         setHasLoadedOnce(true);
+        // First employee dashboard load can clear the global loader from login
+        stopGlobalLoading();
       }
     }
 

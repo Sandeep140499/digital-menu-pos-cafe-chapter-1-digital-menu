@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Link } from "react-router-dom";
 import { API_BASE_URL } from "@/constants";
 import cafeLogo from "@/assets/logo.png";
+import { useGlobalLoading } from "@/components/GlobalLoadingProvider";
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -16,10 +17,13 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { startGlobalLoading, stopGlobalLoading } = useGlobalLoading();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    // Show global loader so navigation + first dashboard load never shows a white gap
+    startGlobalLoading("Signing you in…");
     try {
       const apiBase = API_BASE_URL;
       const res = await fetch(`${apiBase}/auth/login`, {
@@ -49,12 +53,15 @@ const Login = () => {
           "border-emerald-500 bg-emerald-50 text-emerald-900 font-medium",
       });
 
+      // Keep global loader active while dashboard bootstraps;
+      // the respective dashboard will stop it after first data load.
       if (data.role === "ADMIN") {
         navigate("/admin");
       } else {
         navigate("/employee");
       }
     } catch (error: any) {
+      stopGlobalLoading();
       toast({
         title: "Login failed",
         description: error.message ?? "Unable to login. Check credentials.",

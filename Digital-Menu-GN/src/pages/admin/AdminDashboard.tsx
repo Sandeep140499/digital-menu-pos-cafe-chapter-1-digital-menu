@@ -44,6 +44,7 @@ import {
   X,
   Lock,
 } from "lucide-react";
+import { useGlobalLoading } from "@/components/GlobalLoadingProvider";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip as RechartsTooltip, Legend as RechartsLegend, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -3502,6 +3503,7 @@ const AdminDashboard = () => {
   } | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const { stopGlobalLoading } = useGlobalLoading();
 
   // Persist active section to localStorage
   useEffect(() => {
@@ -3567,6 +3569,8 @@ const AdminDashboard = () => {
   const [orderDateFilter, setOrderDateFilter] = useState<string>(() =>
     getBusinessDateString(),
   );
+  const [orderStartDate, setOrderStartDate] = useState<string>("");
+  const [orderEndDate, setOrderEndDate] = useState<string>("");
   const [orderTableFilter, setOrderTableFilter] = useState<string>("all");
 
   // Customer leaderboard state (aggregated from orders)
@@ -4118,6 +4122,8 @@ const AdminDashboard = () => {
     } finally {
       setLoading(false);
       setHasLoadedOnce(true);
+      // First dashboard load (admin) can clear the global loader shown from login
+      stopGlobalLoading();
     }
   };
 
@@ -4611,11 +4617,16 @@ const AdminDashboard = () => {
     if (!token) return;
     try {
       const params = new URLSearchParams();
-      if (orderDateFilter) params.append("date", orderDateFilter);
+      // If a custom range is provided, use start/end; otherwise fall back to single business date
+      if (orderStartDate) params.append("startDate", orderStartDate);
+      if (orderEndDate) params.append("endDate", orderEndDate);
+      if (!orderStartDate && !orderEndDate && orderDateFilter) {
+        params.append("date", orderDateFilter);
+      }
       if (orderTableFilter !== "all")
         params.append("tableId", orderTableFilter);
 
-      const res = await fetch(`${apiBase}/orders/all?${params}`, {
+      const res = await fetch(`${apiBase}/orders/all?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -6971,12 +6982,22 @@ const AdminDashboard = () => {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-          <Input
-            type="date"
-            className="w-full min-w-0 sm:w-36 min-h-[44px] sm:min-h-0"
-            value={orderDateFilter}
-            onChange={(e) => setOrderDateFilter(e.target.value)}
-          />
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <Input
+              type="date"
+              className="w-full min-w-0 sm:w-36 min-h-[44px] sm:min-h-0"
+              value={orderStartDate}
+              onChange={(e) => setOrderStartDate(e.target.value)}
+              placeholder="Start date"
+            />
+            <Input
+              type="date"
+              className="w-full min-w-0 sm:w-36 min-h-[44px] sm:min-h-0"
+              value={orderEndDate}
+              onChange={(e) => setOrderEndDate(e.target.value)}
+              placeholder="End date"
+            />
+          </div>
           <Select value={orderTableFilter} onValueChange={setOrderTableFilter}>
             <SelectTrigger className="w-full sm:w-36 min-h-[44px] sm:min-h-0">
               <SelectValue placeholder="All Tables" />
@@ -7022,6 +7043,17 @@ const AdminDashboard = () => {
                   .filter((o) => o.paymentStatus === "PAID")
                   .reduce((sum, o) => sum + o.totalAmount, 0),
               )}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="bg-amber-50 border-amber-100 min-w-0">
+          <CardContent className="p-2 sm:p-3">
+            <p className="text-xs text-muted-foreground">Pending Orders</p>
+            <p className="text-lg sm:text-xl font-bold text-amber-700 truncate">
+              {
+                allOrders.filter((o) => o.paymentStatus !== "PAID")
+                  .length
+              }
             </p>
           </CardContent>
         </Card>

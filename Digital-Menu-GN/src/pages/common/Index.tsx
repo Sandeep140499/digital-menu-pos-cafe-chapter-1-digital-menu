@@ -268,7 +268,7 @@ function OrderCartDialog({
             </div>
           )}
           <Button
-            className="w-full bg-emerald-700 hover:bg-emerald-800"
+            className="w-full bg-emerald-700 hover:bg-emerald-800 shadow-none"
             disabled={
               !cart.length ||
               isSubmittingOrder ||

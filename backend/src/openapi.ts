@@ -1,3 +1,34 @@
+// Build servers list dynamically so we can include Railway / other deployments
+// without hardcoding a single URL.
+const servers = [
+  {
+    url: "/api",
+    description: "Same host (default: current backend URL)",
+  },
+  {
+    url: "http://localhost:4000/api",
+    description: "Local development (Node backend on :4000)",
+  },
+  {
+    url: "https://digital-menu-pos-cafe-chapter-1-digital.onrender.com/api",
+    description: "Deployed Render backend",
+  },
+  {
+    url: "https://digital-menu-pos-cafe-chapter-1-digital-menu-production.up.railway.app/api",
+    description: "Deployed Railway backend (production)",
+  },
+] as { url: string; description: string }[];
+
+// Railway exposes the public domain via RAILWAY_PUBLIC_DOMAIN by default, e.g.
+// RAILWAY_PUBLIC_DOMAIN=your-app.up.railway.app
+// If present, add it as a Swagger server entry.
+if (process.env.RAILWAY_PUBLIC_DOMAIN) {
+  servers.push({
+    url: `https://${process.env.RAILWAY_PUBLIC_DOMAIN}/api`,
+    description: "Deployed Railway backend",
+  });
+}
+
 export const openApiSpec = {
   openapi: "3.0.0",
   info: {
@@ -7,21 +38,8 @@ export const openApiSpec = {
       "REST API for the Gautam Nagar Digital Menu POS system (auth, employees, shifts, orders, reports, menu, config, notifications, etc.).",
   },
   // Multiple servers so Swagger UI lets the user choose
-  // between local dev and the deployed backend.
-  servers: [
-    {
-      url: "/api",
-      description: "Same host (default: current backend URL)",
-    },
-    {
-      url: "http://localhost:4000/api",
-      description: "Local development (Node backend on :4000)",
-    },
-    {
-      url: "https://digital-menu-pos-cafe-chapter-1-digital.onrender.com/api",
-      description: "Deployed Render backend",
-    },
-  ],
+  // between local dev and the deployed backends.
+  servers,
   tags: [
     { name: "Health", description: "Health checks" },
     { name: "Auth", description: "Authentication and passwords" },
@@ -286,5 +304,23 @@ export const openApiSpec = {
       },
     },
   },
+  components: {
+    securitySchemes: {
+      bearerAuth: {
+        type: "http",
+        scheme: "bearer",
+        bearerFormat: "JWT",
+        description:
+          "Paste your JWT as: **Bearer &lt;token&gt;**. Obtain it from the `/auth/login` endpoint.",
+      },
+    },
+  },
+  // Global auth: by default, all endpoints require bearerAuth unless they
+  // explicitly override `security: []` at the operation level.
+  security: [
+    {
+      bearerAuth: [],
+    },
+  ],
 };
 

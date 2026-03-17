@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { OrderStatus as OrderStatusEnum } from "@prisma/client";
 import { prisma } from "../../config/prisma.js";
+import { getBusinessDayRange as getBusinessDayRangeForDate } from "../../utils/businessDay.js";
 import { authenticate, requireRole } from "../../middleware/auth.js";
 import { buildOrderInvoice, buildStatusMessage, getWaMeLink } from "../../services/whatsapp.js";
 import { generateOrderInvoicePdf, getInvoiceFileName } from "../../services/invoicePdf.js";
@@ -537,15 +538,32 @@ orderRouter.get(
   authenticate,
   requireRole("ADMIN"),
   async (req, res) => {
-    const { date, status, tableId } = req.query;
-    
+    const { date, status, tableId, startDate, endDate } = req.query;
+
     let dateFilter = {};
     if (date) {
-      const start = new Date(date as string);
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(date as string);
-      end.setHours(23, 59, 59, 999);
+      // Single "business day" filter: 4 AM → 3:59 AM in branch timezone
+      const { start, end } = getBusinessDayRangeForDate({
+        date: new Date(date as string),
+        boundaryHour: 4,
+      });
       dateFilter = { createdAt: { gte: start, lte: end } };
+    } else if (startDate || endDate) {
+      // Explicit calendar range filter: startDate 00:00 → endDate 23:59
+      const createdAt: { gte?: Date; lte?: Date } = {};
+      if (startDate) {
+        const start = new Date(startDate as string);
+        start.setHours(0, 0, 0, 0);
+        createdAt.gte = start;
+      }
+      if (endDate) {
+        const end = new Date(endDate as string);
+        end.setHours(23, 59, 59, 999);
+        createdAt.lte = end;
+      }
+      dateFilter = Object.keys(createdAt).length
+        ? { createdAt }
+        : {};
     }
 
     const where: any = {
@@ -588,10 +606,23 @@ orderRouter.get(
       table.totalAmount += order.totalAmount;
     }
 
+    const totalOrders = orders.length;
+    const pendingOrders = orders.filter(
+      (o) => o.paymentStatus !== "PAID",
+    ).length;
+    const totalRevenue = orders
+      .filter((o) => o.paymentStatus === "PAID")
+      .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+
     return res.json({
       orders,
       byTable: Array.from(byTable.values()),
       count: orders.length,
+      summary: {
+        totalOrders,
+        pendingOrders,
+        totalRevenue,
+      },
     });
   },
 );

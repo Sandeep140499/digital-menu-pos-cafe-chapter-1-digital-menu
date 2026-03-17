@@ -15,6 +15,7 @@ export type BranchInfo = {
   logoUrl?: string | null;
   phone?: string | null;
   googleReviewUrl?: string | null;
+  showTotalAmountToCustomers?: boolean | null;
 };
 
 function normalizeMobile(mobile: string): string {
@@ -54,7 +55,9 @@ export function buildOrderInvoice(params: {
   if (acceptedBy?.name) {
     msg += `Order accepted by: ${acceptedBy.name}${acceptedBy.role ? ` (${acceptedBy.role})` : ""}\n`;
   }
-  msg += `Total Amount: ₹${totalAmount.toFixed(0)}\n`;
+  if (branch?.showTotalAmountToCustomers !== false) {
+    msg += `Total Amount: ₹${totalAmount.toFixed(0)}\n`;
+  }
   msg += `Status: Preparing 👨‍🍳\n\n`;
   if (invoicePdfUrl) {
     msg += `Your invoice is attached with this message.\n\n`;
@@ -89,13 +92,15 @@ export function buildStatusMessage(params: {
     let msg = `Hello ${customerName} 🔔\n\n`;
     msg += `Your order ${orderIdStr} is READY.\n\n`;
     if (tableNumber) msg += `Please collect from Table ${tableNumber}.\n\n`;
-    if (totalAmount != null) msg += `Amount: ₹${totalAmount.toFixed(0)}\n`;
+    if (branch?.showTotalAmountToCustomers !== false && totalAmount != null)
+      msg += `Amount: ₹${totalAmount.toFixed(0)}\n`;
     msg += `Payment: Pending`;
     return msg;
   }
   if (status === "Completed" || status.toLowerCase().includes("complete")) {
     let msg = `Order Completed ✅\n\n`;
-    if (totalAmount != null) msg += `Total Paid: ₹${totalAmount.toFixed(0)}\n\n`;
+    if (branch?.showTotalAmountToCustomers !== false && totalAmount != null)
+      msg += `Total Paid: ₹${totalAmount.toFixed(0)}\n\n`;
     msg += `Thank you ❤️`;
     return msg;
   }
@@ -123,7 +128,9 @@ export function buildPaymentMessage(params: {
   if (paymentStatus === "PAID") {
     let msg = `Payment Received 💳\n\n`;
     msg += `Order: ${orderIdStr}\n`;
-    msg += `Amount: ₹${totalAmount.toFixed(0)}\n\n`;
+    if (branch?.showTotalAmountToCustomers !== false) {
+      msg += `Amount: ₹${totalAmount.toFixed(0)}\n\n`;
+    }
     msg += `Visit again ❤️\n\n`;
     if (includeReviewLink && reviewUrl) msg += `Please review us:\n${reviewUrl}\n`;
     return msg;
@@ -131,7 +138,9 @@ export function buildPaymentMessage(params: {
   let msg = `Payment Pending ⚠️\n\n`;
   msg += `Hello ${customerName},\n\n`;
   msg += `Order ID: ${orderIdStr}\n`;
-  msg += `Amount: ₹${totalAmount.toFixed(0)}\n\n`;
+  if (branch?.showTotalAmountToCustomers !== false) {
+    msg += `Amount: ₹${totalAmount.toFixed(0)}\n\n`;
+  }
   msg += `Please pay at the counter.\n`;
   return msg;
 }

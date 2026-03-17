@@ -13,6 +13,10 @@ export const mailer = nodemailer.createTransport({
   host: (process.env.EMAIL_SMTP_HOST || "").trim() || undefined,
   port,
   secure,
+  // Avoid requests hanging forever when SMTP is unreachable/misconfigured
+  connectionTimeout: Number(process.env.EMAIL_SMTP_CONNECTION_TIMEOUT_MS) || 10_000,
+  greetingTimeout: Number(process.env.EMAIL_SMTP_GREETING_TIMEOUT_MS) || 10_000,
+  socketTimeout: Number(process.env.EMAIL_SMTP_SOCKET_TIMEOUT_MS) || 20_000,
   auth: {
     user: (process.env.EMAIL_SMTP_USER || "").trim() || undefined,
     pass: normalizePassword(process.env.EMAIL_SMTP_PASS),

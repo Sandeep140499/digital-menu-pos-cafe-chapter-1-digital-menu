@@ -8,6 +8,7 @@ import { Server as SocketIOServer } from "socket.io";
 import "./utils/asyncErrors.js";
 import { router } from "./routes/index.js";
 import { errorHandler } from "./middleware/errorHandler.js";
+import { performanceMiddleware } from "./middleware/performance.js";
 import { isMailConfigured, verifyMailConnection } from "./config/mailer.js";
 import { openApiSpec } from "./openapi.js";
 import net from "net";
@@ -122,6 +123,8 @@ app.get("/api/docs", (_req, res) => {
   res.type("html").send(html);
 });
 
+// Record API performance (latency + traffic) for dashboard
+app.use("/api", performanceMiddleware);
 app.use("/api", router);
 
 app.use(errorHandler);

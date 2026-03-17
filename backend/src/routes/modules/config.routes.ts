@@ -16,6 +16,7 @@ const branchSchema = z.object({
   googleReviewUrl: z.union([z.string().url(), z.literal("")]).optional().nullable(),
   pincode: z.string().optional().nullable(),
   directorsEmail: z.string().optional().nullable(),
+  showTotalAmountToCustomers: z.boolean().optional(),
 });
 
 const notificationSchema = z.object({
@@ -44,7 +45,15 @@ configRouter.get(
 // Public: branch contact for menu (Call / WhatsApp) and branch id for placing orders
 configRouter.get("/branch-contact", async (_req, res) => {
   const branch = await prisma.branch.findFirst({
-    select: { id: true, name: true, phone: true, location: true, googleReviewUrl: true, logoUrl: true },
+    select: {
+      id: true,
+      name: true,
+      phone: true,
+      location: true,
+      googleReviewUrl: true,
+      logoUrl: true,
+      showTotalAmountToCustomers: true,
+    },
   });
   return res.json({
     id: branch?.id ?? null,
@@ -53,6 +62,17 @@ configRouter.get("/branch-contact", async (_req, res) => {
     location: branch?.location ?? process.env.RESTAURANT_ADDRESS ?? null,
     googleReviewUrl: branch?.googleReviewUrl ?? process.env.GOOGLE_REVIEW_URL ?? null,
     logoUrl: branch?.logoUrl ?? null,
+    showTotalAmountToCustomers: branch?.showTotalAmountToCustomers ?? true,
+  });
+});
+
+// Public: lightweight settings for customer UI
+configRouter.get("/public-settings", async (_req, res) => {
+  const branch = await prisma.branch.findFirst({
+    select: { showTotalAmountToCustomers: true },
+  });
+  return res.json({
+    showTotalAmountToCustomers: branch?.showTotalAmountToCustomers ?? true,
   });
 });
 

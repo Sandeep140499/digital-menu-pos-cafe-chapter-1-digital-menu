@@ -14,6 +14,7 @@ import { customerQueryRouter } from "./modules/customerQuery.routes.js";
 import { overtimeRouter } from "./modules/overtime.routes.js";
 import { lateRouter } from "./modules/late.routes.js";
 import { notificationRouter } from "./modules/notification.routes.js";
+import { performanceRouter } from "./modules/performance.routes.js";
 
 export const router = Router();
 
@@ -35,4 +36,5 @@ router.use("/customer-queries", customerQueryRouter);
 router.use("/overtime", overtimeRouter);
 router.use("/late", lateRouter);
 router.use("/notifications", notificationRouter);
+router.use("/performance", performanceRouter);
 

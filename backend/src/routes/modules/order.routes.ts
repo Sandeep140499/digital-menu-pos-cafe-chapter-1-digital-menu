@@ -206,6 +206,7 @@ orderRouter.post("/", async (req, res) => {
         logoUrl: order.branch.logoUrl,
         phone: order.branch.phone,
         googleReviewUrl: order.branch.googleReviewUrl,
+        showTotalAmountToCustomers: (order.branch as any).showTotalAmountToCustomers,
       }
     : null;
 

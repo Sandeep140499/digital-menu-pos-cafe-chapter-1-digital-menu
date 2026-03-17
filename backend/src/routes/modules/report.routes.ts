@@ -13,6 +13,25 @@ const sendEmailSchema = z.object({
   html: z.string().min(1, "HTML body required"),
 });
 
+const salaryRowSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(1),
+  amount: z.union([z.number(), z.string()]).transform((v) => Number(v) || 0),
+});
+
+const createSalarySlipSchema = z.object({
+  employeeId: z.number().int(),
+  salaryNumber: z.string().min(1).optional(),
+  month: z.number().int().min(1).max(12),
+  year: z.number().int().min(2000).max(2100),
+  paidDays: z.number().int().min(0).max(31).optional(),
+  lopDays: z.number().int().min(0).max(31).optional(),
+  basicSalary: z.union([z.number(), z.string()]).transform((v) => Number(v) || 0),
+  netSalary: z.union([z.number(), z.string()]).transform((v) => Number(v) || 0),
+  allowances: z.array(salaryRowSchema).optional(),
+  deductions: z.array(salaryRowSchema).optional(),
+});
+
 // Admin: send email (e.g. salary slip HTML) to given addresses
 reportRouter.post(
   "/send-email",
@@ -43,6 +62,95 @@ reportRouter.post(
         message: "Failed to send email. Check SMTP settings (e.g. Gmail app password in .env).",
       });
     }
+  },
+);
+
+// Admin: create salary slip (stored in DB)
+reportRouter.post(
+  "/salary-slips",
+  authenticate,
+  requireRole("ADMIN"),
+  async (req, res) => {
+    const parsed = createSalarySlipSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid input", errors: parsed.error.issues });
+    }
+    const data = parsed.data;
+
+    const employee = await prisma.employee.findUnique({
+      where: { id: data.employeeId },
+      select: { id: true },
+    });
+    if (!employee) return res.status(404).json({ message: "Employee not found" });
+
+    const slip = await prisma.salarySlip.create({
+      data: {
+        employeeId: data.employeeId,
+        salaryNumber: data.salaryNumber,
+        month: data.month,
+        year: data.year,
+        paidDays: data.paidDays,
+        lopDays: data.lopDays,
+        basicSalary: data.basicSalary,
+        netSalary: data.netSalary,
+        allowances: data.allowances ?? [],
+        deductions: data.deductions ?? [],
+      },
+      include: {
+        employee: { select: { id: true, name: true, employeeCode: true, email: true } },
+      },
+    });
+
+    return res.status(201).json(slip);
+  },
+);
+
+// Admin: list salary slips (filter by month/year)
+reportRouter.get(
+  "/salary-slips",
+  authenticate,
+  requireRole("ADMIN"),
+  async (req, res) => {
+    const monthParam = typeof req.query.month === "string" ? req.query.month : "";
+    const employeeIdParam = typeof req.query.employeeId === "string" ? req.query.employeeId : "";
+    const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+
+    let year: number | undefined;
+    let month: number | undefined;
+    if (monthParam) {
+      const [y, m] = monthParam.split("-").map(Number);
+      if (Number.isFinite(y) && Number.isFinite(m) && m >= 1 && m <= 12) {
+        year = y;
+        month = m;
+      }
+    }
+
+    const employeeId = employeeIdParam ? Number(employeeIdParam) : undefined;
+
+    const slips = await prisma.salarySlip.findMany({
+      where: {
+        ...(employeeId ? { employeeId } : {}),
+        ...(year && month ? { year, month } : {}),
+        ...(q
+          ? {
+              employee: {
+                OR: [
+                  { name: { contains: q, mode: "insensitive" } },
+                  { employeeCode: { contains: q, mode: "insensitive" } },
+                  { email: { contains: q, mode: "insensitive" } },
+                ],
+              },
+            }
+          : {}),
+      },
+      orderBy: { createdAt: "desc" },
+      include: {
+        employee: { select: { id: true, name: true, employeeCode: true, email: true } },
+      },
+      take: 2000,
+    });
+
+    return res.json({ slips, count: slips.length });
   },
 );
 
@@ -299,6 +407,68 @@ reportRouter.get(
       trend,
       routes,
     });
+  },
+);
+
+// Admin: average order completion time per employee (minutes)
+reportRouter.get(
+  "/order-completion-times",
+  authenticate,
+  requireRole("ADMIN"),
+  async (req, res) => {
+    const days = Math.min(Math.max(Number(req.query.days) || 1, 1), 30);
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    const orders = await prisma.order.findMany({
+      where: {
+        completedAt: { not: null, gte: since },
+        acceptedAt: { not: null },
+        employeeId: { not: null },
+      },
+      select: {
+        employeeId: true,
+        acceptedAt: true,
+        completedAt: true,
+      },
+      take: 50_000,
+    });
+
+    const employees = await prisma.employee.findMany({
+      select: { id: true, name: true, employeeCode: true },
+    });
+    const empMap = new Map(employees.map((e) => [e.id, e]));
+
+    const byEmp = new Map<number, { count: number; sumMins: number; minMins: number; maxMins: number }>();
+    for (const o of orders) {
+      if (!o.employeeId || !o.acceptedAt || !o.completedAt) continue;
+      const ms = new Date(o.completedAt).getTime() - new Date(o.acceptedAt).getTime();
+      if (!Number.isFinite(ms) || ms < 0) continue;
+      const mins = ms / 60000;
+      const cur = byEmp.get(o.employeeId) ?? { count: 0, sumMins: 0, minMins: Number.POSITIVE_INFINITY, maxMins: 0 };
+      cur.count += 1;
+      cur.sumMins += mins;
+      cur.minMins = Math.min(cur.minMins, mins);
+      cur.maxMins = Math.max(cur.maxMins, mins);
+      byEmp.set(o.employeeId, cur);
+    }
+
+    const rows = Array.from(byEmp.entries()).map(([employeeId, s]) => {
+      const emp = empMap.get(employeeId);
+      const avg = s.count ? s.sumMins / s.count : 0;
+      return {
+        employeeId,
+        employeeName: emp?.name ?? "—",
+        employeeCode: emp?.employeeCode ?? null,
+        ordersCompleted: s.count,
+        avgMinutes: Math.round(avg * 10) / 10,
+        minMinutes: s.minMins === Number.POSITIVE_INFINITY ? 0 : Math.round(s.minMins * 10) / 10,
+        maxMinutes: Math.round(s.maxMins * 10) / 10,
+      };
+    });
+
+    rows.sort((a, b) => b.ordersCompleted - a.ordersCompleted || a.avgMinutes - b.avgMinutes);
+
+    return res.json({ since: since.toISOString(), days, rows });
   },
 );
 

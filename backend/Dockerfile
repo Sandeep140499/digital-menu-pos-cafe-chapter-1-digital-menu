@@ -21,6 +21,6 @@ COPY --from=builder /app/dist ./dist/
 # Do not override PORT here. Railway may inject it at runtime via env vars.
 # Keep EXPOSE so Railway/routers can infer the container port if needed.
 EXPOSE 4000
-# Start server immediately so healthchecks can pass, then run migrations in parallel.
-# If the DB is temporarily unreachable, migrations will fail but the server stays up (check logs).
-CMD ["sh", "-c", "node dist/index.js & (npx prisma migrate deploy || true); wait"]
+# Debug-friendly startup for Railway: print dist contents and PORT, then run server.
+# (Once stable, we can re-add `prisma migrate deploy` without blocking healthchecks.)
+CMD ["sh", "-c", "echo \"[startup] PORT=${PORT}\" && echo \"[startup] dist contents:\" && ls -la dist && node dist/index.js"]

@@ -33,6 +33,17 @@ const upsertMenuItemSchema = z.object({
 
 export const menuRouter = Router();
 
+type PublicMenuResponse = { categories: any[]; bestSellerItemIds: number[] };
+
+// Simple in-memory cache to protect DB under high traffic.
+// - categories change rarely; best-sellers can lag a little.
+// - If DB temporarily fails, we serve last known good menu instead of crashing customer UX.
+let publicMenuCache:
+  | { data: PublicMenuResponse; ts: number; bestTs: number }
+  | null = null;
+const MENU_CACHE_MS = 15_000;
+const BEST_SELLER_CACHE_MS = 5 * 60_000;
+
 // Last week (Monday 00:00 to Sunday 23:59) for best-seller calculation
 function getLastWeekRange(): { start: Date; end: Date } {
   const now = new Date();
@@ -52,6 +63,11 @@ function getLastWeekRange(): { start: Date; end: Date } {
 // Public: get menu for QR customer (only active items) + bestSellerItemIds (top 5 from last week)
 menuRouter.get("/", async (_req, res) => {
   incrementPublicMenuViews();
+  const now = Date.now();
+  if (publicMenuCache && now - publicMenuCache.ts < MENU_CACHE_MS) {
+    res.setHeader("Cache-Control", "public, max-age=5, stale-while-revalidate=30");
+    return res.json(publicMenuCache.data);
+  }
   try {
     const categories = await prisma.menuCategory.findMany({
       include: {
@@ -63,27 +79,43 @@ menuRouter.get("/", async (_req, res) => {
       orderBy: { createdAt: "asc" },
     });
 
-    const { start, end } = getLastWeekRange();
-    const lastWeekOrderItems = await prisma.orderItem.groupBy({
-      by: ["menuItemId"],
-      where: {
-        menuItemId: { not: null },
-        order: {
-          createdAt: { gte: start, lte: end },
+    let bestSellerItemIds: number[] = publicMenuCache?.data.bestSellerItemIds ?? [];
+    const bestStale = !publicMenuCache || now - publicMenuCache.bestTs > BEST_SELLER_CACHE_MS;
+    if (bestStale) {
+      const { start, end } = getLastWeekRange();
+      const lastWeekOrderItems = await prisma.orderItem.groupBy({
+        by: ["menuItemId"],
+        where: {
+          menuItemId: { not: null },
+          order: {
+            createdAt: { gte: start, lte: end },
+          },
         },
-      },
-      _sum: { quantity: true },
-    });
+        _sum: { quantity: true },
+      });
+      const sorted = lastWeekOrderItems
+        .filter((r) => r.menuItemId != null)
+        .sort((a, b) => (b._sum.quantity ?? 0) - (a._sum.quantity ?? 0))
+        .slice(0, 5);
+      bestSellerItemIds = sorted.map((r) => r.menuItemId as number);
+    }
 
-    const sorted = lastWeekOrderItems
-      .filter((r) => r.menuItemId != null)
-      .sort((a, b) => (b._sum.quantity ?? 0) - (a._sum.quantity ?? 0))
-      .slice(0, 5);
-    const bestSellerItemIds = sorted.map((r) => r.menuItemId as number);
-
-    return res.json({ categories, bestSellerItemIds });
+    const data: PublicMenuResponse = { categories, bestSellerItemIds };
+    publicMenuCache = {
+      data,
+      ts: now,
+      bestTs: bestStale ? now : publicMenuCache?.bestTs ?? now,
+    };
+    res.setHeader("Cache-Control", "public, max-age=5, stale-while-revalidate=30");
+    return res.json(data);
   } catch (err) {
     console.error("Menu API error:", err);
+    // Serve last known good menu to avoid customer-facing crash.
+    if (publicMenuCache?.data) {
+      res.setHeader("X-Menu-Cache", "stale");
+      res.setHeader("Cache-Control", "public, max-age=2, stale-while-revalidate=30");
+      return res.json(publicMenuCache.data);
+    }
     return res.status(500).json({
       message: "Failed to load menu",
       categories: [],

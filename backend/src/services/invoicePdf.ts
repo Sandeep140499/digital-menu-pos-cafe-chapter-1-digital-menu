@@ -175,11 +175,29 @@ export async function generateOrderInvoicePdf(order: OrderForPdf): Promise<Uint8
   y -= lineHeight;
 
   const items = order.items.filter((i) => !i.isRemoved);
-  const variantLabel = (v: string | null | undefined) =>
-    v === "HALF" ? "5pc" : v === "FULL" ? "8pc" : v || "";
+
+  const stripVariantMarkers = (name: string): string =>
+    (name || "")
+      .replace(/\s*\(5pc\s*\/\s*8pc\)\s*/gi, " ")
+      .replace(/\s*\(half\s*\/\s*full\)\s*/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim() || name;
+
+  // We do not store category on order items. Use a conservative heuristic:
+  // - Momos are the only items that should show 5pc/8pc labels.
+  const isPcItemName = (name: string): boolean => /\bmomos?\b/i.test(name || "");
+
+  const variantLabel = (itemName: string, v: string | null | undefined) => {
+    if (!v) return "";
+    const pc = isPcItemName(itemName);
+    if (v === "HALF") return pc ? "5pc" : "Half";
+    if (v === "FULL") return pc ? "8pc" : "Full";
+    return v;
+  };
   for (const item of items) {
-    const suffix = variantLabel(item.variant);
-    const label = suffix ? `${item.name} (${suffix})` : item.name;
+    const baseName = stripVariantMarkers(item.name);
+    const suffix = variantLabel(baseName, item.variant);
+    const label = suffix ? `${baseName} (${suffix})` : baseName;
     const total = item.price * item.quantity;
     const labelShort = label.length > 32 ? label.slice(0, 29) + "..." : label;
     page.drawText(labelShort, { x: colItem, y, size: 9, font: fontSmall });

@@ -37,7 +37,40 @@ type CartItem = {
   price: number;
   quantity: number;
   variant?: "HALF" | "FULL";
+  category?: string;
 };
+
+const PC_VARIANT_MARKER_RE = /\(\s*5pc\s*\/\s*8pc\s*\)/i;
+const HALF_FULL_VARIANT_MARKER_RE = /\(\s*half\s*\/\s*full\s*\)/i;
+
+function getBaseItemName(name: string): string {
+  return (
+    (name || "")
+      .replace(PC_VARIANT_MARKER_RE, "")
+      .replace(HALF_FULL_VARIANT_MARKER_RE, "")
+      .replace(/\s+/g, " ")
+      .trim() || name
+  );
+}
+
+function isPcVariantItem(params: { name: string; category?: string }): boolean {
+  const name = params.name || "";
+  const cat = (params.category || "").toLowerCase();
+  if (PC_VARIANT_MARKER_RE.test(name)) return true;
+  if (cat.includes("momos")) return true;
+  return false;
+}
+
+function getDisplayVariant(params: {
+  name: string;
+  variant?: "HALF" | "FULL";
+  category?: string;
+}): string {
+  if (!params.variant) return "";
+  const pc = isPcVariantItem({ name: params.name, category: params.category });
+  if (pc) return params.variant === "HALF" ? "5pc" : "8pc";
+  return params.variant === "HALF" ? "Half" : "Full";
+}
 
 function OrderCartDialog({
   open,
@@ -102,10 +135,10 @@ function OrderCartDialog({
               >
                 <div className="min-w-0">
                   <div className="text-sm font-semibold truncate">
-                    {item.name}{" "}
+                    {getBaseItemName(item.name)}{" "}
                     {item.variant && (
                       <span className="text-xs text-emerald-700">
-                        ({item.variant === "HALF" ? "Half" : "Full"})
+                        ({getDisplayVariant(item)})
                       </span>
                     )}
                   </div>
@@ -303,6 +336,7 @@ const MenuCategoriesSection = memo(function MenuCategoriesSection({
     itemName: string,
     price: number,
     variant?: "HALF" | "FULL",
+    category?: string,
   ) => void;
   isLoadingMenu: boolean;
   menuLoadError: string | null;
@@ -561,6 +595,7 @@ function MenuCategoryItemsPanel({
     itemName: string,
     price: number,
     variant?: "HALF" | "FULL",
+    category?: string,
   ) => void;
 }) {
   return (
@@ -609,6 +644,12 @@ function MenuCategoryItemsPanel({
             const isAddon = item.name.toLowerCase().startsWith("add-on");
             const priceText = String(item.price);
             const hasHalfFull = priceText.includes("/");
+            const pcVariant = isPcVariantItem({
+              name: item.name,
+              category: section.title,
+            });
+            const halfBtnLabel = pcVariant ? "5pc" : "Half";
+            const fullBtnLabel = pcVariant ? "8pc" : "Full";
             let fullPrice = 0;
             let halfPrice: number | undefined;
             if (hasHalfFull) {
@@ -667,17 +708,21 @@ function MenuCategoryItemsPanel({
                       variant="outline"
                       size="sm"
                       className="min-h-[44px] min-w-0 flex-1 sm:flex-initial sm:min-w-[72px] px-3 touch-manipulation border-emerald-600 text-emerald-700 hover:bg-emerald-50"
-                      onClick={() => addToCart(item.name, halfPrice!, "HALF")}
+                      onClick={() =>
+                        addToCart(item.name, halfPrice!, "HALF", section.title)
+                      }
                     >
-                      Half
+                      {halfBtnLabel}
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
                       className="min-h-[44px] min-w-0 flex-1 sm:flex-initial sm:min-w-[72px] px-3 touch-manipulation border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-700"
-                      onClick={() => addToCart(item.name, fullPrice, "FULL")}
+                      onClick={() =>
+                        addToCart(item.name, fullPrice, "FULL", section.title)
+                      }
                     >
-                      Full
+                      {fullBtnLabel}
                     </Button>
                   </div>
                 </li>
@@ -707,7 +752,9 @@ function MenuCategoryItemsPanel({
                     variant="outline"
                     size="sm"
                     className="min-h-[44px] min-w-0 px-3 sm:min-w-0 touch-manipulation border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-700"
-                    onClick={() => addToCart(item.name, fullPrice, "FULL")}
+                    onClick={() =>
+                      addToCart(item.name, fullPrice, "FULL", section.title)
+                    }
                   >
                     Add
                   </Button>
@@ -784,6 +831,7 @@ const Index = () => {
   }, []);
 
   const [menuLoadError, setMenuLoadError] = useState<string | null>(null);
+  const MENU_CACHE_KEY = "dm_public_menu_cache_v1";
 
   const fetchMenu = useCallback(async () => {
     setMenuLoadError(null);
@@ -803,16 +851,50 @@ const Index = () => {
       const ids = Array.isArray(data) ? [] : (data?.bestSellerItemIds ?? []);
       setMenuCategories(categories);
       setBestSellerItemIds(ids);
+      try {
+        window.localStorage.setItem(
+          MENU_CACHE_KEY,
+          JSON.stringify({ ts: Date.now(), categories, bestSellerItemIds: ids }),
+        );
+      } catch {
+        // ignore
+      }
     } catch (error) {
       console.error("Failed to load menu:", error);
       const isTimeout = error instanceof Error && error.name === "AbortError";
-      setMenuLoadError(
-        isTimeout
-          ? "Request timed out. Please try again."
-          : `Could not reach the server at ${apiBase}. Make sure the backend is running (e.g. npm run dev in the backend folder) and the URL is correct.`,
-      );
-      setMenuCategories([]);
-      setBestSellerItemIds([]);
+      // If network fails, fall back to last known good cached menu so customers can still order.
+      let usedCache = false;
+      try {
+        const raw = window.localStorage.getItem(MENU_CACHE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw) as {
+            ts?: number;
+            categories?: any[];
+            bestSellerItemIds?: number[];
+          };
+          if (Array.isArray(parsed.categories) && parsed.categories.length > 0) {
+            setMenuCategories(parsed.categories);
+            setBestSellerItemIds(
+              Array.isArray(parsed.bestSellerItemIds) ? parsed.bestSellerItemIds : [],
+            );
+            usedCache = true;
+            setMenuLoadError(
+              "Connection issue detected. Showing last saved menu — you can still place an order.",
+            );
+          }
+        }
+      } catch {
+        // ignore cache parse
+      }
+      if (!usedCache) {
+        setMenuLoadError(
+          isTimeout
+            ? "Request timed out. Please try again."
+            : `Could not reach the server at ${apiBase}. Please try again in a moment.`,
+        );
+        setMenuCategories([]);
+        setBestSellerItemIds([]);
+      }
       toast({
         title: "Error",
         description: "Failed to load menu. Check that the backend is running.",
@@ -874,8 +956,13 @@ const Index = () => {
   // No welcome/visiting page — splash only, then straight to menu
 
   const addToCart = useCallback(
-    (itemName: string, price: number, variant?: "HALF" | "FULL") => {
-      const id = `${itemName}-${variant ?? "FULL"}`;
+    (
+      itemName: string,
+      price: number,
+      variant?: "HALF" | "FULL",
+      category?: string,
+    ) => {
+      const id = `${itemName}-${variant ?? "FULL"}-${category ?? ""}`;
       setCart((prev) => {
         const existing = prev.find((i) => i.id === id);
         if (existing) {
@@ -891,6 +978,7 @@ const Index = () => {
             price,
             quantity: 1,
             variant,
+            category,
           },
         ];
       });
@@ -1099,22 +1187,15 @@ const Index = () => {
                   onClick={async () => {
                     const url = `${API_BASE_URL}/orders/${lastOrderId}/invoice-pdf`;
                     try {
-                      const res = await fetch(url, { credentials: "include" });
-                      if (!res.ok) {
-                        const err = await res.json().catch(() => ({}));
-                        toast({
-                          title: "Invoice unavailable",
-                          description:
-                            err?.message ||
-                            "Failed to generate invoice PDF. Please try again or contact staff.",
-                          variant: "destructive",
-                        });
-                        return;
-                      }
-                      const blob = await res.blob();
-                      const blobUrl = URL.createObjectURL(blob);
-                      window.open(blobUrl, "_blank");
-                      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+                      // Prefer direct navigation (best for iOS / WhatsApp in-app browser; backend sets Content-Disposition).
+                      // Fallback to blob if popup blocked.
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.target = "_blank";
+                      a.rel = "noopener noreferrer";
+                      document.body.appendChild(a);
+                      a.click();
+                      a.remove();
                     } catch {
                       toast({
                         title: "Invoice unavailable",

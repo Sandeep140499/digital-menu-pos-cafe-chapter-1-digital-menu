@@ -447,17 +447,27 @@ type DailyRemovalSummary = {
 };
 
 // INR Currency formatter
-/** Show selected size only: HALF → (5pc), FULL → (8pc). Strip "(5pc / 8pc)" from name for display. */
+/** Variant display:
+ * - Items named like "(5pc / 8pc)" → HALF=5pc, FULL=8pc
+ * - Otherwise → HALF=Half, FULL=Full
+ * Also strips "(5pc / 8pc)" and "(Half / Full)" from base name for display.
+ */
 const formatItemDisplayName = (
   name: string,
   variant?: string | null,
 ): string => {
+  const raw = name || "";
+  const isPc = /\(\s*5pc\s*\/\s*8pc\s*\)/i.test(raw);
   const base =
-    (name || "").replace(/\s*\(5pc\s*\/\s*8pc\)\s*/gi, "").trim() || name;
-  if (variant === "HALF") return `${base} (5pc)`;
-  if (variant === "FULL") return `${base} (8pc)`;
-  if (variant) return `${base} (${variant})`;
-  return base;
+    raw
+      .replace(/\s*\(5pc\s*\/\s*8pc\)\s*/gi, " ")
+      .replace(/\s*\(half\s*\/\s*full\)\s*/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim() || raw;
+  if (!variant) return base;
+  if (variant === "HALF") return `${base} (${isPc ? "5pc" : "Half"})`;
+  if (variant === "FULL") return `${base} (${isPc ? "8pc" : "Full"})`;
+  return `${base} (${variant})`;
 };
 
 const formatINR = (amount: number) => {
@@ -576,6 +586,7 @@ type SettingsSectionContentProps = {
     googleReviewUrl: string;
     pincode: string;
     directorsEmail: string;
+    showTotalAmountToCustomers: boolean;
   };
   setBranchForm: React.Dispatch<
     React.SetStateAction<{
@@ -587,6 +598,7 @@ type SettingsSectionContentProps = {
       googleReviewUrl: string;
       pincode: string;
       directorsEmail: string;
+      showTotalAmountToCustomers: boolean;
     }>
   >;
   branch: any;
@@ -603,6 +615,7 @@ type SettingsSectionContentProps = {
     googleReviewUrl: string;
     pincode: string;
     directorsEmail: string;
+    showTotalAmountToCustomers: boolean;
   };
   setCreateBranchForm: React.Dispatch<
     React.SetStateAction<{
@@ -614,6 +627,7 @@ type SettingsSectionContentProps = {
       googleReviewUrl: string;
       pincode: string;
       directorsEmail: string;
+      showTotalAmountToCustomers: boolean;
     }>
   >;
   handleCreateBranch: () => Promise<void>;
@@ -674,7 +688,25 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
+  const [orderNotificationsEnabled, setOrderNotificationsEnabled] = useState(true);
+  const [soundAlertsEnabled, setSoundAlertsEnabled] = useState(true);
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+  const [savingSystemPrefs, setSavingSystemPrefs] = useState(false);
   const branchId = branch?.id ?? branches[0]?.id;
+
+  useEffect(() => {
+    try {
+      const on = window.localStorage.getItem("dm_admin_order_notifications");
+      const sound = window.localStorage.getItem("dm_admin_sound_alerts");
+      const auto = window.localStorage.getItem("dm_admin_auto_refresh");
+      if (on !== null) setOrderNotificationsEnabled(on === "true");
+      if (sound !== null) setSoundAlertsEnabled(sound === "true");
+      if (auto !== null) setAutoRefreshEnabled(auto === "true");
+    } catch {
+      // ignore (storage blocked)
+    }
+  }, []);
+
   return (
     <div className="space-y-6 min-w-0">
       <div className="min-w-0">
@@ -729,6 +761,10 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
                         googleReviewUrl: b.googleReviewUrl || "",
                         pincode: b.pincode || "",
                         directorsEmail: b.directorsEmail || "",
+                        showTotalAmountToCustomers:
+                          typeof (b as any).showTotalAmountToCustomers === "boolean"
+                            ? (b as any).showTotalAmountToCustomers
+                            : true,
                       });
                       setBranch(b);
                     }}
@@ -1023,6 +1059,23 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
                 }
               />
             </div>
+            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+              <div className="space-y-0.5 pr-4">
+                <Label className="text-sm">Show total amount to customers</Label>
+                <p className="text-xs text-muted-foreground">
+                  Controls whether the customer menu/checkout displays the order total
+                </p>
+              </div>
+              <Switch
+                checked={!!branchForm.showTotalAmountToCustomers}
+                onCheckedChange={(checked) =>
+                  setBranchForm((prev) => ({
+                    ...prev,
+                    showTotalAmountToCustomers: !!checked,
+                  }))
+                }
+              />
+            </div>
             {branchForm.logoUrl && (
               <div className="flex items-center gap-4 p-3 bg-slate-50 rounded-lg">
                 <img
@@ -1218,7 +1271,10 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
                   Show alerts for new orders
                 </p>
               </div>
-              <Switch defaultChecked />
+              <Switch
+                checked={orderNotificationsEnabled}
+                onCheckedChange={(v) => setOrderNotificationsEnabled(!!v)}
+              />
             </div>
             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
               <div className="space-y-0.5">
@@ -1227,7 +1283,10 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
                   Play sound on new orders
                 </p>
               </div>
-              <Switch defaultChecked />
+              <Switch
+                checked={soundAlertsEnabled}
+                onCheckedChange={(v) => setSoundAlertsEnabled(!!v)}
+              />
             </div>
             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
               <div className="space-y-0.5">
@@ -1236,10 +1295,48 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
                   Auto refresh data every 10s
                 </p>
               </div>
-              <Switch defaultChecked />
+              <Switch
+                checked={autoRefreshEnabled}
+                onCheckedChange={(v) => setAutoRefreshEnabled(!!v)}
+              />
             </div>
           </div>
-          <Button size="sm">Save System Settings</Button>
+          <Button
+            size="sm"
+            disabled={savingSystemPrefs}
+            onClick={async () => {
+              setSavingSystemPrefs(true);
+              try {
+                window.localStorage.setItem(
+                  "dm_admin_order_notifications",
+                  String(!!orderNotificationsEnabled),
+                );
+                window.localStorage.setItem(
+                  "dm_admin_sound_alerts",
+                  String(!!soundAlertsEnabled),
+                );
+                window.localStorage.setItem(
+                  "dm_admin_auto_refresh",
+                  String(!!autoRefreshEnabled),
+                );
+                toast({
+                  title: "Saved",
+                  description: "System preferences updated for this browser.",
+                });
+              } catch {
+                toast({
+                  title: "Could not save",
+                  description:
+                    "Your browser blocked storage. Try allowing site storage and retry.",
+                  variant: "destructive",
+                });
+              } finally {
+                setSavingSystemPrefs(false);
+              }
+            }}
+          >
+            {savingSystemPrefs ? "Saving..." : "Save System Settings"}
+          </Button>
         </CardContent>
       </Card>
       <Card>
@@ -3559,6 +3656,7 @@ const AdminDashboard = () => {
     googleReviewUrl: "",
     pincode: "",
     directorsEmail: "",
+    showTotalAmountToCustomers: true,
   });
   const [createBranchOpen, setCreateBranchOpen] = useState(false);
   const [createBranchForm, setCreateBranchForm] = useState({
@@ -3570,6 +3668,7 @@ const AdminDashboard = () => {
     googleReviewUrl: "",
     pincode: "",
     directorsEmail: "",
+    showTotalAmountToCustomers: true,
   });
   const [savingBranch, setSavingBranch] = useState(false);
   const [directorsData, setDirectorsData] = useState<{
@@ -4637,6 +4736,10 @@ const AdminDashboard = () => {
           googleReviewUrl: branchData?.googleReviewUrl || "",
           pincode: branchData?.pincode || "",
           directorsEmail: branchData?.directorsEmail || "",
+          showTotalAmountToCustomers:
+            typeof branchData?.showTotalAmountToCustomers === "boolean"
+              ? branchData.showTotalAmountToCustomers
+              : true,
         });
       } else {
         setBranch(null);
@@ -4699,6 +4802,7 @@ const AdminDashboard = () => {
           googleReviewUrl: createBranchForm.googleReviewUrl.trim() || undefined,
           pincode: createBranchForm.pincode.trim() || undefined,
           directorsEmail: createBranchForm.directorsEmail.trim() || undefined,
+          showTotalAmountToCustomers: !!createBranchForm.showTotalAmountToCustomers,
         }),
       });
       if (res.ok) {
@@ -4714,6 +4818,7 @@ const AdminDashboard = () => {
           googleReviewUrl: "",
           pincode: "",
           directorsEmail: "",
+          showTotalAmountToCustomers: true,
         });
         toast({ title: "Success", description: "Branch created" });
       } else {
@@ -4774,6 +4879,10 @@ const AdminDashboard = () => {
           googleReviewUrl: updated?.googleReviewUrl || "",
           pincode: updated?.pincode || "",
           directorsEmail: updated?.directorsEmail || "",
+          showTotalAmountToCustomers:
+            typeof updated?.showTotalAmountToCustomers === "boolean"
+              ? updated.showTotalAmountToCustomers
+              : true,
         });
         if (typeof window !== "undefined") {
           if (updated?.name)

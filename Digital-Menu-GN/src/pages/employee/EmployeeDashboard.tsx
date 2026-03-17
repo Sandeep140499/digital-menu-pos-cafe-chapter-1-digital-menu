@@ -139,13 +139,24 @@ function getElapsedHours(
   return Math.max(0, (end - start) / 3600000);
 }
 
-/** Show only selected size: HALF → 5pc, FULL → 8pc. Strip "(5pc / 8pc)" from name so staff see e.g. "Paneer Fried Momos (8pc)". */
+/** Variant display:
+ * - Items named like "(5pc / 8pc)" → HALF=5pc, FULL=8pc
+ * - Otherwise → HALF=Half, FULL=Full
+ * Also strips "(5pc / 8pc)" and "(Half / Full)" from base name for display.
+ */
 function formatItemDisplayName(name: string, variant?: string | null): string {
-  const base = name.replace(/\s*\(5pc\s*\/\s*8pc\)\s*/gi, "").trim() || name;
-  if (variant === "HALF") return `${base} (5pc)`;
-  if (variant === "FULL") return `${base} (8pc)`;
-  if (variant) return `${base} (${variant})`;
-  return base;
+  const raw = name || "";
+  const isPc = /\(\s*5pc\s*\/\s*8pc\s*\)/i.test(raw);
+  const base =
+    raw
+      .replace(/\s*\(5pc\s*\/\s*8pc\)\s*/gi, " ")
+      .replace(/\s*\(half\s*\/\s*full\)\s*/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim() || raw;
+  if (!variant) return base;
+  if (variant === "HALF") return `${base} (${isPc ? "5pc" : "Half"})`;
+  if (variant === "FULL") return `${base} (${isPc ? "8pc" : "Full"})`;
+  return `${base} (${variant})`;
 }
 
 /** Format duration in ms as "X min" or "X hr Y min" for time-to-complete display. */
@@ -160,22 +171,119 @@ function formatTimeToComplete(acceptedAt: string, completedAt: string): string {
 }
 
 /** Play a short new-order alert sound (Web Audio beep) */
-function playNewOrderSound() {
+let sharedAudioCtx: AudioContext | null = null;
+async function ensureAudioUnlocked(): Promise<AudioContext | null> {
   try {
-    const ctx = new (
-      window.AudioContext || (window as any).webkitAudioContext
-    )();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.frequency.value = 880;
-    osc.type = "sine";
-    gain.gain.setValueAtTime(0.15, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.15);
-  } catch (_) {}
+    if (typeof window === "undefined") return null;
+    const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!Ctx) return null;
+    if (!sharedAudioCtx) sharedAudioCtx = new Ctx();
+    if (sharedAudioCtx.state === "suspended") {
+      await sharedAudioCtx.resume();
+    }
+    return sharedAudioCtx;
+  } catch {
+    return null;
+  }
+}
+
+type NewOrderSoundPreset = "beep" | "ring" | "siren" | "chime";
+
+const NEW_ORDER_SOUND_PRESET_KEY = "dm_new_order_sound_preset";
+const NEW_ORDER_SOUND_VOLUME_KEY = "dm_new_order_sound_volume";
+
+function clamp01(v: number): number {
+  if (!Number.isFinite(v)) return 0;
+  return Math.min(1, Math.max(0, v));
+}
+
+function playTone(params: {
+  ctx: AudioContext;
+  at: number;
+  freq: number;
+  durationMs: number;
+  volume: number;
+  type?: OscillatorType;
+}) {
+  const { ctx, at, freq, durationMs, volume, type = "sine" } = params;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.frequency.setValueAtTime(freq, at);
+  osc.type = type;
+  const attack = 0.008;
+  const release = 0.06;
+  const dur = Math.max(0.04, durationMs / 1000);
+  gain.gain.setValueAtTime(0.0001, at);
+  gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, volume), at + attack);
+  gain.gain.exponentialRampToValueAtTime(
+    0.0001,
+    at + Math.max(attack + release, dur),
+  );
+  osc.start(at);
+  osc.stop(at + dur + 0.02);
+}
+
+function playSiren(params: { ctx: AudioContext; at: number; volume: number }) {
+  const { ctx, at, volume } = params;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.type = "sawtooth";
+  gain.gain.setValueAtTime(0.0001, at);
+  gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, volume), at + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.65);
+  osc.frequency.setValueAtTime(650, at);
+  osc.frequency.linearRampToValueAtTime(1250, at + 0.32);
+  osc.frequency.linearRampToValueAtTime(650, at + 0.64);
+  osc.start(at);
+  osc.stop(at + 0.68);
+}
+
+function playNewOrderSound(preset?: NewOrderSoundPreset, volume?: number) {
+  ensureAudioUnlocked()
+    .then((ctx) => {
+      if (!ctx) return;
+      const selectedPreset: NewOrderSoundPreset =
+        preset ||
+        ((window?.localStorage?.getItem(
+          NEW_ORDER_SOUND_PRESET_KEY,
+        ) as NewOrderSoundPreset | null) ??
+          "ring");
+      const volRaw = volume ?? Number(window?.localStorage?.getItem(NEW_ORDER_SOUND_VOLUME_KEY) ?? "0.85");
+      const vol = clamp01(volRaw);
+
+      const t = ctx.currentTime;
+      const loud = Math.max(0.15, vol); // keep minimum audible
+
+      if (selectedPreset === "beep") {
+        playTone({ ctx, at: t, freq: 880, durationMs: 220, volume: loud, type: "sine" });
+        return;
+      }
+
+      if (selectedPreset === "ring") {
+        // Classic noisy ring: two quick beeps, slight pitch drop, repeated once.
+        playTone({ ctx, at: t, freq: 1050, durationMs: 140, volume: loud, type: "square" });
+        playTone({ ctx, at: t + 0.16, freq: 850, durationMs: 140, volume: loud, type: "square" });
+        playTone({ ctx, at: t + 0.40, freq: 1050, durationMs: 140, volume: loud, type: "square" });
+        playTone({ ctx, at: t + 0.56, freq: 850, durationMs: 140, volume: loud, type: "square" });
+        return;
+      }
+
+      if (selectedPreset === "chime") {
+        // Pleasant but audible 3-tone chime.
+        playTone({ ctx, at: t, freq: 1046, durationMs: 140, volume: loud * 0.95, type: "sine" });
+        playTone({ ctx, at: t + 0.16, freq: 1318, durationMs: 140, volume: loud * 0.9, type: "sine" });
+        playTone({ ctx, at: t + 0.32, freq: 1567, durationMs: 180, volume: loud * 0.85, type: "sine" });
+        return;
+      }
+
+      // siren (very noticeable)
+      playSiren({ ctx, at: t, volume: loud });
+    })
+    .catch(() => {});
 }
 
 function notifyNewOrders(count: number) {
@@ -737,6 +845,29 @@ const EmployeeDashboard = () => {
   >([]);
   const [showStartShiftPrompt, setShowStartShiftPrompt] = useState(false);
   const prevNewOrderCountRef = useRef(0);
+  const [newOrderSoundPreset, setNewOrderSoundPreset] =
+    useState<NewOrderSoundPreset>(() => {
+      try {
+        const raw = window.localStorage.getItem(NEW_ORDER_SOUND_PRESET_KEY);
+        if (
+          raw === "beep" ||
+          raw === "ring" ||
+          raw === "siren" ||
+          raw === "chime"
+        )
+          return raw;
+      } catch (_) {}
+      return "ring";
+    });
+  const [newOrderSoundVolume, setNewOrderSoundVolume] = useState<number>(() => {
+    try {
+      const raw = Number(
+        window.localStorage.getItem(NEW_ORDER_SOUND_VOLUME_KEY) ?? "0.85",
+      );
+      return clamp01(raw);
+    } catch (_) {}
+    return 0.85;
+  });
 
   const token = window.sessionStorage.getItem("dm_auth_token");
 
@@ -840,24 +971,60 @@ const EmployeeDashboard = () => {
     return () => clearInterval(timer);
   }, []);
 
+  // Unlock audio on first user interaction (required by many browsers, especially iOS).
+  useEffect(() => {
+    const unlock = () => {
+      ensureAudioUnlocked().catch(() => {});
+    };
+    window.addEventListener("pointerdown", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlock as any);
+      window.removeEventListener("keydown", unlock as any);
+    };
+  }, []);
+
   // New order sound when popup gets new orders (real-time notification)
   useEffect(() => {
     const n = newOrderPopupOrders.length;
     if (n > prevNewOrderCountRef.current) {
-      playNewOrderSound();
+      playNewOrderSound(newOrderSoundPreset, newOrderSoundVolume);
     }
     prevNewOrderCountRef.current = n;
-  }, [newOrderPopupOrders.length]);
+  }, [newOrderPopupOrders.length, newOrderSoundPreset, newOrderSoundVolume]);
 
   // Keep ringing (beep) until staff accepts/clears, unless paused.
   useEffect(() => {
     if (pauseNewOrderPopup) return;
     if (newOrderPopupOrders.length === 0) return;
     const id = window.setInterval(() => {
-      playNewOrderSound();
+      playNewOrderSound(newOrderSoundPreset, newOrderSoundVolume);
     }, 3000);
     return () => window.clearInterval(id);
-  }, [newOrderPopupOrders.length, pauseNewOrderPopup]);
+  }, [
+    newOrderPopupOrders.length,
+    pauseNewOrderPopup,
+    newOrderSoundPreset,
+    newOrderSoundVolume,
+  ]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        NEW_ORDER_SOUND_PRESET_KEY,
+        newOrderSoundPreset,
+      );
+    } catch (_) {}
+  }, [newOrderSoundPreset]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        NEW_ORDER_SOUND_VOLUME_KEY,
+        String(clamp01(newOrderSoundVolume)),
+      );
+    } catch (_) {}
+  }, [newOrderSoundVolume]);
 
   const [profile, setProfile] = useState<{
     name: string;
@@ -3632,6 +3799,61 @@ const EmployeeDashboard = () => {
           <ScrollArea className="max-h-[280px] pr-2">
             <div className="space-y-3">{newOrderPopupCards}</div>
           </ScrollArea>
+          <div className="mt-3 rounded-lg border bg-slate-50 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-slate-900">
+                  New order sound
+                </div>
+                <div className="text-xs text-slate-600">
+                  Choose a louder ringtone and volume.
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  playNewOrderSound(newOrderSoundPreset, newOrderSoundVolume)
+                }
+              >
+                Test
+              </Button>
+            </div>
+            <div className="mt-3 grid grid-cols-1 gap-3">
+              <label className="grid gap-1">
+                <span className="text-xs font-medium text-slate-700">
+                  Sound
+                </span>
+                <select
+                  className="h-10 rounded-md border bg-white px-3 text-sm"
+                  value={newOrderSoundPreset}
+                  onChange={(e) =>
+                    setNewOrderSoundPreset(
+                      e.target.value as NewOrderSoundPreset,
+                    )
+                  }
+                >
+                  <option value="ring">Ring (loud)</option>
+                  <option value="siren">Siren (very loud)</option>
+                  <option value="chime">Chime</option>
+                  <option value="beep">Beep</option>
+                </select>
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs font-medium text-slate-700">
+                  Volume: {Math.round(newOrderSoundVolume * 100)}%
+                </span>
+                <input
+                  type="range"
+                  min={0.1}
+                  max={1}
+                  step={0.05}
+                  value={newOrderSoundVolume}
+                  onChange={(e) => setNewOrderSoundVolume(Number(e.target.value))}
+                />
+              </label>
+            </div>
+          </div>
           <div className="flex gap-2 justify-end pt-2">
             <Button
               variant="outline"

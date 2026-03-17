@@ -11,9 +11,10 @@ const branchSchema = z.object({
   name: z.string().min(1),
   location: z.string().optional(),
   timezone: z.string().optional(),
-  logoUrl: z.union([z.string().url(), z.literal("")]).optional().nullable(),
+  // Be forgiving: allow non-URL strings (some users paste relative/cdn links). Frontend can validate if needed.
+  logoUrl: z.union([z.string(), z.literal("")]).optional().nullable(),
   phone: z.string().optional().nullable(),
-  googleReviewUrl: z.union([z.string().url(), z.literal("")]).optional().nullable(),
+  googleReviewUrl: z.union([z.string(), z.literal("")]).optional().nullable(),
   pincode: z.string().optional().nullable(),
   directorsEmail: z.string().optional().nullable(),
   showTotalAmountToCustomers: z.boolean().optional(),

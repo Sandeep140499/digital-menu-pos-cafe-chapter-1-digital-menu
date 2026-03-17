@@ -164,6 +164,8 @@ async function startServer() {
     if (!HAS_PLATFORM_PORT && port !== DEFAULT_PORT) {
       console.log(`⚠️  Port ${DEFAULT_PORT} is in use. Using port ${port} instead.`);
     }
+
+    console.log("🚀 Starting server with env PORT =", process.env.PORT, "-> listening on", port);
     
     server.listen(port, "0.0.0.0", async () => {
       console.log(`✅ Backend server listening on port ${port}`);

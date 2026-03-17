@@ -18,7 +18,9 @@ RUN npm ci --omit=dev && npm install prisma --save
 COPY prisma ./prisma/
 RUN npx prisma generate
 COPY --from=builder /app/dist ./dist/
-# Railway (and most PaaS) injects PORT at runtime; don't override it here.
-# EXPOSE is optional on Railway; keep container flexible.
-# Run migrations; if DB unreachable, still start server so health check can pass (check logs for migrate errors)
-CMD ["sh", "-c", "npx prisma migrate deploy || true && node dist/index.js"]
+# Do not override PORT here. Railway may inject it at runtime via env vars.
+# Keep EXPOSE so Railway/routers can infer the container port if needed.
+EXPOSE 4000
+# Start server immediately so healthchecks can pass, then run migrations in parallel.
+# If the DB is temporarily unreachable, migrations will fail but the server stays up (check logs).
+CMD ["sh", "-c", "node dist/index.js & (npx prisma migrate deploy || true); wait"]

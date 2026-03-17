@@ -7,8 +7,8 @@ services:
     runtime: node
     rootDir: backend
     buildCommand: "npm ci && npx prisma generate && npm run build"
-    # Ensure the server starts even when migrate succeeds.
-    startCommand: "npx prisma migrate deploy || true; npm start"
+    # Migrations run via backend/package.json "prestart".
+    startCommand: "npm start"
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV

@@ -28,7 +28,7 @@ Database (PostgreSQL)  →  Railway
 2. **New** → **Project** → **Deploy from GitHub repo**, and select this project’s repo.
 3. In the new service, open **Settings**:
    - Set **Root Directory** to **`backend`** (required so Prisma finds `prisma/schema.prisma`).
-   - Build and start commands are read from `backend/railway.toml` (or set **Build Command:** `npm ci && npx prisma generate && npm run build`, **Start Command:** `npx prisma migrate deploy || true; npm start`).
+   - Build and start commands are read from `backend/railway.toml` (or set **Build Command:** `npm ci && npx prisma generate && npm run build`, **Start Command:** `npm start`).
 4. **Variables:** Add `DATABASE_URL` (Railway PostgreSQL URL), `JWT_SECRET`, `JWT_EXPIRES_IN` (e.g. `7d`). Optional: `NODE_ENV=production`, `FRONTEND_CUSTOMER_URL`, `FRONTEND_DASHBOARD_URL`, etc. (see `backend/.env.example`).
 5. **Deploy.** Copy the generated backend URL (e.g. `https://your-app.up.railway.app`). The API base for the frontend is **`https://your-app.up.railway.app/api`**.
 
@@ -48,7 +48,8 @@ Railway backend: no cold start; uses monthly credits. When credits run out, use 
    - **Build Command:**  
      `npm ci && npx prisma generate && npm run build`
    - **Start Command:**  
-    `npx prisma migrate deploy || true; npm start`
+    `npm start`  
+    (migrations run automatically via the backend `prestart` script)
    - **Instance type:** Free (or paid if you prefer).
 5. **Environment variables** (Add environment variable):
    - `NODE_ENV` = `production`

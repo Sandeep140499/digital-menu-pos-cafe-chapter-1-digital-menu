@@ -6,9 +6,7 @@ builder = "nixpacks"
 buildCommand = "npm ci && npx prisma generate && npm run build"
 
 [deploy]
-# Important: ensure npm start always runs after migrate.
-# Use `;` so `npm start` runs even when migrate succeeds or fails.
-startCommand = "npx prisma migrate deploy || true; npm start"
+startCommand = "npm start"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 30
 restartPolicyType = "on_failure"

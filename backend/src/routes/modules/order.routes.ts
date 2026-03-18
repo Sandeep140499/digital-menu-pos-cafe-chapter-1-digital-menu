@@ -7,6 +7,7 @@ import { authenticate, requireRole } from "../../middleware/auth.js";
 import { buildOrderInvoice, buildStatusMessage, getWaMeLink } from "../../services/whatsapp.js";
 import { generateOrderInvoicePdf, getInvoiceFileName } from "../../services/invoicePdf.js";
 import { isMailConfigured, sendEmail } from "../../config/mailer.js";
+import { onOrderStatus, publishOrderStatus } from "../../utils/orderStatusEvents.js";
 
 const mobileRegex = /^[6-9]\d{9}$/;
 
@@ -300,6 +301,13 @@ orderRouter.post("/", async (req, res) => {
   }
 
   req.app.locals.io?.emit("order:new", order);
+  publishOrderStatus({
+    id: order.id,
+    status: order.status,
+    acceptedAt: (order as any).acceptedAt ?? null,
+    completedAt: (order as any).completedAt ?? null,
+    updatedAt: (order as any).updatedAt ?? null,
+  });
 
   // Send email notification to admin + branch directors for new orders
   if (isMailConfigured()) {
@@ -359,6 +367,63 @@ orderRouter.post("/", async (req, res) => {
     ...(invoiceMessage && waMeLink ? { invoiceMessage, waMeLink } : {}),
     invoicePdfUrl,
     invoiceFileName: getInvoiceFileName(order.id),
+  });
+});
+
+// Public: stream order status updates (SSE) for customer tracking (no auth)
+orderRouter.get("/:id/stream", async (req, res) => {
+  const id = Number(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ message: "Invalid order id" });
+
+  res.status(200);
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  // Helps nginx/proxies not buffer SSE.
+  res.setHeader("X-Accel-Buffering", "no");
+
+  // Flush headers early (if supported).
+  (res as any).flushHeaders?.();
+
+  const writeEvent = (event: string, data: unknown) => {
+    res.write(`event: ${event}\n`);
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  // Send initial snapshot immediately so UI can render without waiting.
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        status: true,
+        acceptedAt: true,
+        completedAt: true,
+        updatedAt: true,
+      },
+    });
+    if (!order) {
+      writeEvent("error", { message: "Order not found" });
+      return res.end();
+    }
+    writeEvent("snapshot", order);
+  } catch (err) {
+    writeEvent("error", { message: "Failed to load order snapshot" });
+    return res.end();
+  }
+
+  const unsubscribe = onOrderStatus(id, (payload) => {
+    writeEvent("status", payload);
+  });
+
+  // Keep-alive ping to prevent idle timeouts.
+  const ping = setInterval(() => {
+    res.write(`: ping ${Date.now()}\n\n`);
+  }, 25000);
+
+  req.on("close", () => {
+    clearInterval(ping);
+    unsubscribe();
   });
 });
 
@@ -813,6 +878,13 @@ orderRouter.post(
       include: { items: true, table: true, employee: true, branch: true },
     });
     req.app.locals.io?.emit("order:updated", updated);
+    publishOrderStatus({
+      id: updated.id,
+      status: updated.status,
+      acceptedAt: (updated as any).acceptedAt ?? null,
+      completedAt: (updated as any).completedAt ?? null,
+      updatedAt: (updated as any).updatedAt ?? null,
+    });
     let statusWaMeLink: string | null = null;
     const up = updated as typeof updated & { table?: { tableNumber: string } | null; branch?: { name: string; location: string | null; phone: string | null; googleReviewUrl: string | null } | null };
     if (up.customerMobile && up.customerName) {
@@ -859,6 +931,13 @@ orderRouter.patch(
     });
 
     req.app.locals.io?.emit("order:updated", order);
+    publishOrderStatus({
+      id: order.id,
+      status: order.status,
+      acceptedAt: (order as any).acceptedAt ?? null,
+      completedAt: (order as any).completedAt ?? null,
+      updatedAt: (order as any).updatedAt ?? null,
+    });
 
     type OrderWithRelations = typeof order & { table?: { tableNumber: string } | null; branch?: { name: string; location: string | null; phone: string | null; googleReviewUrl: string | null } | null };
     const o = order as OrderWithRelations;

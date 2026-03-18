@@ -6,6 +6,14 @@ import { prisma } from "../../config/prisma.js";
 import { jwtConfig } from "../../config/auth.js";
 import { isMailConfigured, sendEmail } from "../../config/mailer.js";
 import { authenticate, requireRole } from "../../middleware/auth.js";
+import {
+  clearAuthCookies,
+  generateCsrfToken,
+  generateOpaqueToken,
+  hashRefreshToken,
+  requireCsrfDoubleSubmit,
+  setAuthCookies,
+} from "../../utils/authTokens.js";
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -104,6 +112,73 @@ function getAdminPasswordChangeNotificationContent(
 
 export const authRouter = Router();
 
+function signAccessToken(payload: { id: number; role: "ADMIN" | "EMPLOYEE" }) {
+  return jwt.sign(payload, jwtConfig.secret as string, {
+    expiresIn: jwtConfig.accessExpiresIn,
+  } as SignOptions);
+}
+
+function parseExpiresToMs(expiresIn: string): number {
+  // Supports formats used in this repo: "15m", "7d", "1h", or seconds as string.
+  const trimmed = String(expiresIn).trim();
+  if (/^\d+$/.test(trimmed)) return Number(trimmed) * 1000;
+  const m = trimmed.match(/^(\d+)\s*([smhd])$/i);
+  if (!m) throw new Error(`Unsupported expiresIn format: ${expiresIn}`);
+  const n = Number(m[1]);
+  const unit = m[2].toLowerCase();
+  switch (unit) {
+    case "s":
+      return n * 1000;
+    case "m":
+      return n * 60_000;
+    case "h":
+      return n * 3_600_000;
+    case "d":
+      return n * 86_400_000;
+    default:
+      throw new Error(`Unsupported expiresIn format: ${expiresIn}`);
+  }
+}
+
+async function issueSession(
+  req: any,
+  res: any,
+  user: { id: number; role: "ADMIN" | "EMPLOYEE" },
+) {
+  const accessToken = signAccessToken({ id: user.id, role: user.role });
+
+  const refreshToken = generateOpaqueToken(32);
+  const csrfToken = generateCsrfToken();
+  const refreshExpiresAt = new Date(Date.now() + parseExpiresToMs(jwtConfig.refreshExpiresIn));
+
+  const tokenHash = hashRefreshToken(refreshToken);
+  try {
+    await prisma.refreshToken.create({
+      data: {
+        tokenHash,
+        role: user.role,
+        expiresAt: refreshExpiresAt,
+        ...(user.role === "ADMIN" ? { adminId: user.id } : { employeeId: user.id }),
+        userAgent: String(req.headers["user-agent"] || ""),
+        ip: (
+          (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ||
+          req.socket.remoteAddress
+        ) ?? undefined,
+      },
+    });
+
+    setAuthCookies(req as any, res as any, { refreshToken, csrfToken, refreshExpiresAt });
+  } catch (e: unknown) {
+    // If migrations haven't been applied yet, keep legacy behavior: access token only.
+    // This prevents login from breaking in existing deployments.
+    const code = (e as { code?: string } | null)?.code;
+    if (code !== "P2021") {
+      throw e;
+    }
+  }
+  return res.json({ accessToken, role: user.role });
+}
+
 authRouter.post("/login", async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -122,13 +197,8 @@ authRouter.post("/login", async (req, res) => {
       res.status(403).json({ message: "Please verify your email before logging in." });
       return "handled";
     }
-    const token = jwt.sign(
-      { id: employee.id, role: "EMPLOYEE" },
-      jwtConfig.secret as string,
-      { expiresIn: jwtConfig.expiresIn } as SignOptions,
-    );
-    res.json({ token, role: "EMPLOYEE" });
-    return "handled";
+    await issueSession(req as any, res as any, { id: employee.id, role: "EMPLOYEE" });
+    return "handled" as const;
   };
 
   // When loginAs === "employee", try only employee (so same email can log in as employee with employee password)
@@ -143,12 +213,7 @@ authRouter.post("/login", async (req, res) => {
   if (admin) {
     const ok = await bcrypt.compare(password, admin.passwordHash);
     if (ok) {
-      const token = jwt.sign(
-        { id: admin.id, role: "ADMIN" },
-        jwtConfig.secret as string,
-        { expiresIn: jwtConfig.expiresIn } as SignOptions,
-      );
-      return res.json({ token, role: "ADMIN" });
+      return await issueSession(req as any, res as any, { id: admin.id, role: "ADMIN" });
     }
   }
 
@@ -168,13 +233,65 @@ authRouter.post("/login", async (req, res) => {
       .json({ message: "Please verify your email before logging in." });
   }
 
-  const token = jwt.sign(
-    { id: employee.id, role: "EMPLOYEE" },
-    jwtConfig.secret as string,
-    { expiresIn: jwtConfig.expiresIn } as SignOptions,
-  );
+  return await issueSession(req as any, res as any, { id: employee.id, role: "EMPLOYEE" });
+});
 
-  return res.json({ token, role: "EMPLOYEE" });
+authRouter.post("/refresh", async (req, res) => {
+  if (!requireCsrfDoubleSubmit(req as any)) {
+    return res.status(403).json({ message: "CSRF check failed" });
+  }
+
+  const raw = (req as any).cookies?.rt as string | undefined;
+  if (!raw) {
+    return res.status(401).json({ message: "Missing refresh token" });
+  }
+
+  const tokenHash = hashRefreshToken(raw);
+  const existing = await prisma.refreshToken.findUnique({ where: { tokenHash } });
+  if (!existing || existing.revokedAt || existing.expiresAt <= new Date()) {
+    clearAuthCookies(req as any, res as any);
+    return res.status(401).json({ message: "Invalid refresh token" });
+  }
+
+  const role = existing.role as "ADMIN" | "EMPLOYEE";
+  const userId = role === "ADMIN" ? existing.adminId : existing.employeeId;
+  if (!userId) {
+    clearAuthCookies(req as any, res as any);
+    return res.status(401).json({ message: "Invalid refresh token" });
+  }
+
+  // Rotate refresh token
+  const newRefreshToken = generateOpaqueToken(32);
+  const newCsrfToken = generateCsrfToken();
+  const refreshExpiresAt = new Date(Date.now() + parseExpiresToMs(jwtConfig.refreshExpiresIn));
+
+  const created = await prisma.refreshToken.create({
+    data: {
+      tokenHash: hashRefreshToken(newRefreshToken),
+      role,
+      expiresAt: refreshExpiresAt,
+      ...(role === "ADMIN" ? { adminId: userId } : { employeeId: userId }),
+      userAgent: String(req.headers["user-agent"] || ""),
+      ip:
+        (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ||
+        req.socket.remoteAddress ||
+        null,
+    },
+  });
+
+  await prisma.refreshToken.update({
+    where: { id: existing.id },
+    data: { revokedAt: new Date(), replacedByTokenId: created.id },
+  });
+
+  setAuthCookies(req as any, res as any, {
+    refreshToken: newRefreshToken,
+    csrfToken: newCsrfToken,
+    refreshExpiresAt,
+  });
+
+  const accessToken = signAccessToken({ id: userId, role });
+  return res.json({ accessToken, role });
 });
 
 authRouter.post("/forgot-password", async (req, res) => {
@@ -223,7 +340,6 @@ authRouter.post("/forgot-password", async (req, res) => {
   )}/reset-password?token=${encodeURIComponent(token)}`;
 
   if (!isMailConfigured()) {
-    console.error("Forgot password: email not configured (set EMAIL_SMTP_* and EMAIL_FROM_ADDRESS in .env)");
     return res.status(503).json({
       message: "Email is not configured. Contact the administrator to set up SMTP in .env (EMAIL_SMTP_HOST, EMAIL_SMTP_USER, EMAIL_SMTP_PASS, EMAIL_FROM_ADDRESS).",
     });
@@ -242,7 +358,7 @@ ${resetUrl}
 `,
     });
   } catch (err) {
-    console.error("Forgot password: sendMail failed", err);
+    // ignore email errors (don't reveal internals)
   }
 
   return res.json({
@@ -344,7 +460,6 @@ authRouter.post(
           await sendEmail({ to: directorEmails, subject: "Admin dashboard password updated", text, html });
         }
       } catch (e: unknown) {
-        console.error("Admin change-password: failed to email directors:", (e as Error)?.message ?? e);
         // Password was updated; don't fail the request
       }
     }
@@ -354,7 +469,24 @@ authRouter.post(
 );
 
 // Placeholder logout – stateless JWT, so just let frontend clear token
-authRouter.post("/logout", async (_req, res) => {
+authRouter.post("/logout", async (req, res) => {
+  if (!requireCsrfDoubleSubmit(req as any)) {
+    return res.status(403).json({ message: "CSRF check failed" });
+  }
+
+  const raw = (req as any).cookies?.rt as string | undefined;
+  if (raw) {
+    const tokenHash = hashRefreshToken(raw);
+    const existing = await prisma.refreshToken.findUnique({ where: { tokenHash } });
+    if (existing && !existing.revokedAt) {
+      await prisma.refreshToken.update({
+        where: { id: existing.id },
+        data: { revokedAt: new Date() },
+      });
+    }
+  }
+
+  clearAuthCookies(req as any, res as any);
   return res.json({ message: "Logged out" });
 });
 

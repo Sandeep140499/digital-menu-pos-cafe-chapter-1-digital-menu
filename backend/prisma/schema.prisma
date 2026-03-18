@@ -13,6 +13,7 @@ model Admin {
   email        String   @unique
   passwordHash String
   createdAt    DateTime @default(now())
+  refreshTokens RefreshToken[]
 }
 
 model Branch {
@@ -91,6 +92,30 @@ model Employee {
   lateEntries           LateEntry[]
   salarySlips           SalarySlip[]
   leaves                EmployeeLeave[]
+  refreshTokens         RefreshToken[]
+}
+
+model RefreshToken {
+  id                Int       @id @default(autoincrement())
+  tokenHash          String    @unique
+  adminId            Int?
+  admin              Admin?    @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  employeeId         Int?
+  employee           Employee? @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  role               String
+  createdAt          DateTime  @default(now())
+  expiresAt          DateTime
+  revokedAt          DateTime?
+  replacedByTokenId  Int?      @unique
+  replacedByToken    RefreshToken? @relation("RefreshTokenRotation", fields: [replacedByTokenId], references: [id])
+  replacesToken      RefreshToken? @relation("RefreshTokenRotation")
+  userAgent          String?
+  ip                 String?
+
+  @@index([adminId])
+  @@index([employeeId])
+  @@index([expiresAt])
+  @@index([revokedAt])
 }
 
 enum LeaveStatus {

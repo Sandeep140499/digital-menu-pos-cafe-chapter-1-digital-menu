@@ -3,6 +3,7 @@ import express from "express";
 import http from "http";
 import cors from "cors";
 import helmet from "helmet";
+import cookieParser from "cookie-parser";
 import morgan from "morgan";
 import { Server as SocketIOServer } from "socket.io";
 import "./utils/asyncErrors.js";
@@ -32,10 +33,16 @@ const allowedOrigins = process.env.CORS_ORIGIN
   : undefined;
 app.use(
   cors({
-    origin: allowedOrigins ?? true,
+    origin: (origin, cb) => {
+      // Non-browser requests (no Origin) should pass.
+      if (!origin) return cb(null, true);
+      if (!allowedOrigins || allowedOrigins.length === 0) return cb(null, true);
+      if (allowedOrigins.includes(origin)) return cb(null, true);
+      return cb(new Error("CORS: origin not allowed"));
+    },
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: false,
+    allowedHeaders: ["Content-Type", "Authorization", "X-CSRF-Token"],
+    credentials: true,
   }),
 );
 // Helmet with relaxed CSP so Swagger UI docs can load external JS/CSS bundles.
@@ -63,6 +70,7 @@ app.use(
     },
   }),
 );
+app.use(cookieParser());
 app.use(express.json());
 app.use(morgan("dev"));
 
@@ -91,8 +99,9 @@ app.use("/api", (req, res, next) => {
     );
     res.setHeader(
       "Access-Control-Allow-Headers",
-      "Content-Type, Authorization",
+      "Content-Type, Authorization, X-CSRF-Token",
     );
+    res.setHeader("Access-Control-Allow-Credentials", "true");
     res.setHeader("Access-Control-Max-Age", "86400");
     return res.sendStatus(204);
   }

@@ -311,7 +311,9 @@ employeeRouter.post(
     });
 
     const baseUrl = (process.env.FRONTEND_URL || process.env.FRONTEND_DASHBOARD_URL || process.env.FRONTEND_CUSTOMER_URL || "http://localhost:5173").replace(/\/$/, "");
-    const confirmUrl = `${baseUrl}/employee/confirm-email?token=${encodeURIComponent(linkToken)}`;
+    // Public verification endpoints live in the backend under /api. Prefer PUBLIC_API_BASE_URL when set.
+    const apiBaseUrl = (process.env.PUBLIC_API_BASE_URL || baseUrl).replace(/\/$/, "");
+    const confirmUrl = `${apiBaseUrl}/api/employees/confirm-email?token=${encodeURIComponent(linkToken)}`;
     const fromName =
       process.env.EMAIL_FROM_NAME || "Cafe Chapter 1 Restro Private Limited";
 
@@ -495,14 +497,14 @@ employeeRouter.get(
   },
 );
 
-// Admin: list only ACTIVE employees (e.g. for salary slip dropdown). Case-insensitive status match.
+// Admin: list only ACTIVE + emailVerified employees (e.g. for salary slip dropdown).
 employeeRouter.get(
   "/active",
   authenticate,
   requireRole("ADMIN"),
   async (_req, res) => {
     const employees = await prisma.employee.findMany({
-      where: { status: "ACTIVE" },
+      where: { status: "ACTIVE", emailVerified: true },
       include: {
         branch: {
           select: { id: true, name: true, location: true, timezone: true },
@@ -560,7 +562,9 @@ employeeRouter.post(
     const token = randomBytes(16).toString("hex");
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
     const baseUrl = (process.env.FRONTEND_URL || process.env.FRONTEND_DASHBOARD_URL || process.env.FRONTEND_CUSTOMER_URL || "http://localhost:5173").replace(/\/$/, "");
-    const verifyLink = `${baseUrl}/employee/verify-email?token=${encodeURIComponent(token)}`;
+    // Public verification endpoints live in the backend under /api. Prefer PUBLIC_API_BASE_URL when set.
+    const apiBaseUrl = (process.env.PUBLIC_API_BASE_URL || baseUrl).replace(/\/$/, "");
+    const verifyLink = `${apiBaseUrl}/api/employees/verify-email-link?token=${encodeURIComponent(token)}`;
     const fromName = process.env.EMAIL_FROM_NAME || "Chapter One Cafe";
     if (!isMailConfigured()) {
       return res.status(503).json({ message: "Email is not configured. Set EMAIL_SMTP_* and EMAIL_FROM_ADDRESS in .env." });

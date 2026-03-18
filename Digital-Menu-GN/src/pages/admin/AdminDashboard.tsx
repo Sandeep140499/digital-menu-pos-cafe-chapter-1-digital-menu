@@ -2435,11 +2435,13 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
           ],
     );
   }, [open, prefillSlip, employees]);
-  // API /employees/active returns only ACTIVE; fallback filter if using full list
+  // API /employees/active returns only ACTIVE; also require emailVerified for "active employee" UX
   const activeEmployees = useMemo(
     () =>
       employees.filter(
-        (e) => String(e.status || "").toUpperCase() === "ACTIVE",
+        (e) =>
+          String(e.status || "").toUpperCase() === "ACTIVE" &&
+          e.emailVerified === true,
       ),
     [employees],
   );
@@ -3879,10 +3881,12 @@ const AdminDashboard = () => {
     return categories.find((c) => c.id === viewingCategory);
   }, [categories, viewingCategory]);
 
-  // Active employees for salary slips and certificates (case-insensitive status)
+  // Active employees for salary slips and certificates (case-insensitive status + verified email)
   const activeEmployees = useMemo(() => {
     return employees.filter(
-      (e) => String(e.status || "").toUpperCase() === "ACTIVE",
+      (e) =>
+        String(e.status || "").toUpperCase() === "ACTIVE" &&
+        e.emailVerified === true,
     );
   }, [employees]);
 
@@ -3947,7 +3951,9 @@ const AdminDashboard = () => {
     const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
     const activeEmps = employees.filter(
-      (e) => String(e.status || "").toUpperCase() === "ACTIVE",
+      (e) =>
+        String(e.status || "").toUpperCase() === "ACTIVE" &&
+        e.emailVerified === true,
     ).length;
 
     const totalItemsSold = itemSales.reduce(
@@ -6697,7 +6703,9 @@ const AdminDashboard = () => {
     [employees, searchQuery, statusFilter],
   );
   const activeCount = employees.filter(
-    (e) => String(e.status || "").toUpperCase() === "ACTIVE",
+    (e) =>
+      String(e.status || "").toUpperCase() === "ACTIVE" &&
+      e.emailVerified === true,
   ).length;
 
   const EmployeesSection = () => (
@@ -7253,7 +7261,9 @@ const AdminDashboard = () => {
               <SelectItem value="all">All Employees</SelectItem>
               {employees
                 .filter(
-                  (e) => String(e.status || "").toUpperCase() === "ACTIVE",
+                  (e) =>
+                    String(e.status || "").toUpperCase() === "ACTIVE" &&
+                    e.emailVerified === true,
                 )
                 .map((emp) => (
                   <SelectItem key={emp.id} value={String(emp.id)}>
@@ -7539,7 +7549,9 @@ const AdminDashboard = () => {
                   <SelectItem value="all">All Employees</SelectItem>
                   {employees
                     .filter(
-                      (e) => String(e.status || "").toUpperCase() === "ACTIVE",
+                      (e) =>
+                        String(e.status || "").toUpperCase() === "ACTIVE" &&
+                        e.emailVerified === true,
                     )
                     .map((emp) => (
                       <SelectItem key={emp.id} value={String(emp.id)}>
@@ -7905,7 +7917,9 @@ const AdminDashboard = () => {
                   <SelectItem value="all">All Employees</SelectItem>
                   {employees
                     .filter(
-                      (e) => String(e.status || "").toUpperCase() === "ACTIVE",
+                      (e) =>
+                        String(e.status || "").toUpperCase() === "ACTIVE" &&
+                        e.emailVerified === true,
                     )
                     .map((emp) => (
                       <SelectItem key={emp.id} value={String(emp.id)}>
@@ -9015,7 +9029,9 @@ const AdminDashboard = () => {
                 <SelectContent>
                   {employees
                     .filter(
-                      (e) => String(e.status || "").toUpperCase() === "ACTIVE",
+                      (e) =>
+                        String(e.status || "").toUpperCase() === "ACTIVE" &&
+                        e.emailVerified === true,
                     )
                     .map((emp) => (
                       <SelectItem key={emp.id} value={String(emp.id)}>

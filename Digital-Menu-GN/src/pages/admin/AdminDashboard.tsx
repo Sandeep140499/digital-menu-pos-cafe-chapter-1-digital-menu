@@ -3599,6 +3599,7 @@ const AdminDashboard = () => {
   const [orderStartDate, setOrderStartDate] = useState<string>("");
   const [orderEndDate, setOrderEndDate] = useState<string>("");
   const [orderTableFilter, setOrderTableFilter] = useState<string>("all");
+  const [ordersLoading, setOrdersLoading] = useState(false);
 
   // Customer leaderboard state (aggregated from orders)
   const [leaderboard, setLeaderboard] = useState<
@@ -3645,6 +3646,7 @@ const AdminDashboard = () => {
   const [hoursEmployeeFilter, setHoursEmployeeFilter] = useState<string>("all");
   const [hoursStartDate, setHoursStartDate] = useState<string>("");
   const [hoursEndDate, setHoursEndDate] = useState<string>("");
+  const [shiftHistoryLoading, setShiftHistoryLoading] = useState(false);
   const [hoursSummary, setHoursSummary] = useState({
     totalShifts: 0,
     totalHours: 0,
@@ -3793,6 +3795,7 @@ const AdminDashboard = () => {
   const [removedItemsDateFilter, setRemovedItemsDateFilter] = useState<string>(
     () => getBusinessDateString(),
   );
+  const [removedItemsLoading, setRemovedItemsLoading] = useState(false);
   const [totalLoss, setTotalLoss] = useState<number>(0);
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -4646,6 +4649,7 @@ const AdminDashboard = () => {
   // Load all orders with filters
   const loadAllOrders = async () => {
     if (!token) return;
+    setOrdersLoading(true);
     try {
       const params = new URLSearchParams();
       // If a custom range is provided, use start/end; otherwise fall back to single business date
@@ -4667,6 +4671,8 @@ const AdminDashboard = () => {
       }
     } catch (error) {
       console.error("Error loading orders:", error);
+    } finally {
+      setOrdersLoading(false);
     }
   };
 
@@ -4683,6 +4689,7 @@ const AdminDashboard = () => {
   // Load shift history
   const loadShiftHistory = async () => {
     if (!token) return;
+    setShiftHistoryLoading(true);
     try {
       const params = new URLSearchParams();
       if (hoursEmployeeFilter !== "all")
@@ -4701,6 +4708,8 @@ const AdminDashboard = () => {
       }
     } catch (error) {
       console.error("Error loading shifts:", error);
+    } finally {
+      setShiftHistoryLoading(false);
     }
   };
 
@@ -4985,6 +4994,7 @@ const AdminDashboard = () => {
   // Load removed items report
   const loadRemovedItems = async () => {
     if (!token) return;
+    setRemovedItemsLoading(true);
     try {
       const params = new URLSearchParams();
       if (removedItemsDateFilter) {
@@ -5017,6 +5027,8 @@ const AdminDashboard = () => {
       }
     } catch (error) {
       console.error("Error loading removed items:", error);
+    } finally {
+      setRemovedItemsLoading(false);
     }
   };
 
@@ -6394,8 +6406,8 @@ const AdminDashboard = () => {
                 )
               }
             >
-              <SelectTrigger className="w-[150px] min-h-[44px] sm:min-h-0">
-                <SelectValue />
+              <SelectTrigger className="w-full sm:w-[150px] min-w-0 min-h-[44px] sm:min-h-0">
+                <SelectValue placeholder="Actor" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">All</SelectItem>
@@ -6408,8 +6420,8 @@ const AdminDashboard = () => {
               value={String(apiPerfWindowMinutes)}
               onValueChange={(v) => setApiPerfWindowMinutes(Number(v) || 60)}
             >
-              <SelectTrigger className="w-[150px] min-h-[44px] sm:min-h-0">
-                <SelectValue />
+              <SelectTrigger className="w-full sm:w-[150px] min-w-0 min-h-[44px] sm:min-h-0">
+                <SelectValue placeholder="Window" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="15">Last 15 min</SelectItem>
@@ -7048,11 +7060,13 @@ const AdminDashboard = () => {
             size="sm"
             variant="outline"
             onClick={loadAllOrders}
-            disabled={loading}
+            disabled={ordersLoading}
             title="Refresh orders"
             className="min-h-[44px] sm:min-h-0 shrink-0"
           >
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw
+              className={`h-4 w-4 ${ordersLoading ? "animate-spin" : ""}`}
+            />
           </Button>
         </div>
       </div>
@@ -7130,7 +7144,7 @@ const AdminDashboard = () => {
             value={leaderboardSortBy}
             onValueChange={(v: "orders" | "amount") => setLeaderboardSortBy(v)}
           >
-            <SelectTrigger className="w-[180px] min-h-[44px] sm:min-h-0">
+            <SelectTrigger className="w-full sm:w-[180px] min-w-0 min-h-[44px] sm:min-h-0">
               <SelectValue placeholder="Sort by" />
             </SelectTrigger>
             <SelectContent>
@@ -7142,8 +7156,8 @@ const AdminDashboard = () => {
             value={String(leaderboardLimit)}
             onValueChange={(v) => setLeaderboardLimit(Number(v))}
           >
-            <SelectTrigger className="w-[100px] min-h-[44px] sm:min-h-0">
-              <SelectValue />
+            <SelectTrigger className="w-full sm:w-[120px] min-w-0 min-h-[44px] sm:min-h-0">
+              <SelectValue placeholder="Top" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="5">Top 5</SelectItem>
@@ -7297,8 +7311,22 @@ const AdminDashboard = () => {
               />
             </div>
           </div>
-          <Button size="sm" variant="outline" onClick={loadShiftHistory}>
-            <Search className="h-4 w-4" />
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={loadShiftHistory}
+            disabled={shiftHistoryLoading}
+            className="min-h-[44px] sm:min-h-0"
+            title="Search"
+          >
+            {shiftHistoryLoading ? (
+              <span
+                className="inline-block h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin"
+                aria-hidden
+              />
+            ) : (
+              <Search className="h-4 w-4" />
+            )}
           </Button>
         </div>
       </div>
@@ -8329,10 +8357,13 @@ const AdminDashboard = () => {
           <Button
             variant="outline"
             onClick={loadRemovedItems}
+            disabled={removedItemsLoading}
             className="min-h-[44px] sm:min-h-0 shrink-0"
           >
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
+            <RefreshCw
+              className={`h-4 w-4 mr-2 ${removedItemsLoading ? "animate-spin" : ""}`}
+            />
+            {removedItemsLoading ? "Refreshing..." : "Refresh"}
           </Button>
         </div>
       </div>

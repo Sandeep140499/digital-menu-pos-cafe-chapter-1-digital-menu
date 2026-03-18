@@ -2813,7 +2813,7 @@ const EmployeeDashboard = () => {
               </div>
             </div>
             <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 flex-wrap">
-              <div className="relative flex-1 min-w-[200px] max-w-md">
+              <div className="relative w-full sm:flex-1 min-w-0 sm:min-w-[200px] max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search by Order ID, Table, Employee..."
@@ -2832,8 +2832,8 @@ const EmployeeDashboard = () => {
                   setPage(1);
                 }}
               >
-                <SelectTrigger className="w-[140px] h-10">
-                  <SelectValue />
+                <SelectTrigger className="w-full sm:w-[140px] h-10 min-h-[44px] sm:min-h-0 min-w-0">
+                  <SelectValue placeholder="Date" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="today">Today</SelectItem>
@@ -2849,8 +2849,8 @@ const EmployeeDashboard = () => {
                     setPage(1);
                   }}
                 >
-                  <SelectTrigger className="w-[120px] h-10">
-                    <SelectValue />
+                  <SelectTrigger className="w-full sm:w-[120px] h-10 min-h-[44px] sm:min-h-0 min-w-0">
+                    <SelectValue placeholder="Payment" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All</SelectItem>
@@ -2866,8 +2866,8 @@ const EmployeeDashboard = () => {
                   setPage(1);
                 }}
               >
-                <SelectTrigger className="w-[100px] h-10">
-                  <SelectValue />
+                <SelectTrigger className="w-full sm:w-[120px] h-10 min-h-[44px] sm:min-h-0 min-w-0">
+                  <SelectValue placeholder="Page size" />
                 </SelectTrigger>
                 <SelectContent>
                   {PAGE_SIZE_OPTIONS.map((n) => (
@@ -4006,8 +4006,8 @@ const EmployeeDashboard = () => {
               value={String(apiPerfWindowMinutes)}
               onValueChange={(v) => setApiPerfWindowMinutes(Number(v) || 60)}
             >
-              <SelectTrigger className="w-[150px] min-h-[44px] sm:min-h-0">
-                <SelectValue />
+              <SelectTrigger className="w-full sm:w-[150px] min-w-0 min-h-[44px] sm:min-h-0">
+                <SelectValue placeholder="Window" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="15">Last 15 min</SelectItem>

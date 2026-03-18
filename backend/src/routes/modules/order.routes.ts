@@ -6,7 +6,7 @@ import { getBusinessDayRange as getBusinessDayRangeForDate } from "../../utils/b
 import { authenticate, requireRole } from "../../middleware/auth.js";
 import { buildOrderInvoice, buildStatusMessage, getWaMeLink } from "../../services/whatsapp.js";
 import { generateOrderInvoicePdf, getInvoiceFileName } from "../../services/invoicePdf.js";
-import { mailer, isMailConfigured, getFromAddress } from "../../config/mailer.js";
+import { isMailConfigured, sendEmail } from "../../config/mailer.js";
 
 const mobileRegex = /^[6-9]\d{9}$/;
 
@@ -343,9 +343,8 @@ orderRouter.post("/", async (req, res) => {
   </div>
 </div>`;
 
-        await mailer.sendMail({
-          from: `"${process.env.EMAIL_FROM_NAME || "Cafe Chapter 1"}" <${getFromAddress()}>`,
-          to: recipients.join(", "),
+        await sendEmail({
+          to: recipients,
           subject: `🛎️ New Order #${order.id} — ${order.customerName || "Walk-in"} (${tableLabel})`,
           html,
         });

@@ -7,7 +7,7 @@ import { getPublicMenuViewCount } from "../../services/publicTraffic.js";
 import {
   getFromAddress,
   isMailConfigured,
-  mailer,
+  sendEmail,
   verifyMailConnection,
 } from "../../config/mailer.js";
 
@@ -94,8 +94,7 @@ configRouter.post(
 
     const { to, subject, message } = parsed.data;
     try {
-      await mailer.sendMail({
-        from: `"${process.env.EMAIL_FROM_NAME || "Cafe Chapter 1"}" <${getFromAddress()}>`,
+      await sendEmail({
         to,
         subject: subject || "✅ Test email (Cafe Chapter 1 POS)",
         html: `<div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:16px;">

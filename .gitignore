@@ -3,6 +3,7 @@
 .env.local
 .env.*.local
 backend/.env
+backend/.env.production
 Digital-Menu-GN/.env
 
 # Dependencies

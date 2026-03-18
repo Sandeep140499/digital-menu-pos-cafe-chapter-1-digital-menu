@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../../config/prisma.js";
-import { mailer, getFromAddress, isMailConfigured } from "../../config/mailer.js";
+import { isMailConfigured, sendEmail } from "../../config/mailer.js";
 import { authenticate, requireRole } from "../../middleware/auth.js";
 import { getPublicMenuViewCount } from "../../services/publicTraffic.js";
 
@@ -49,12 +49,7 @@ reportRouter.post(
       });
     }
     try {
-      await mailer.sendMail({
-        to,
-        from: `"${process.env.EMAIL_FROM_NAME || "Cafe Chapter 1"}" <${getFromAddress()}>`,
-        subject,
-        html,
-      });
+      await sendEmail({ to, subject, html });
       return res.json({ message: "Email sent successfully" });
     } catch (e) {
       console.error("Send email failed:", e);

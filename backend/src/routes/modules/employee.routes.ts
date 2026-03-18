@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "../../config/prisma.js";
-import { mailer, getFromAddress, isMailConfigured } from "../../config/mailer.js";
+import { getFromAddress, isMailConfigured, sendEmail } from "../../config/mailer.js";
 import { authenticate, requireRole } from "../../middleware/auth.js";
 import path from "node:path";
 import fs from "node:fs/promises";
@@ -319,9 +319,8 @@ employeeRouter.post(
       try {
         const n = escapeHtml(name);
         const pass = escapeHtml(randomPassword);
-        await mailer.sendMail({
+        await sendEmail({
           to: email,
-          from: `"${fromName}" <${getFromAddress()}>`,
           subject: "Your employee account is ready – verify your email",
           text: `Hi ${name},
 
@@ -438,9 +437,8 @@ employeeRouter.post(
       return res.status(503).json({ message: "Email is not configured. Set EMAIL_SMTP_* and EMAIL_FROM_ADDRESS in .env." });
     }
     try {
-      await mailer.sendMail({
+      await sendEmail({
         to: employee.email,
-        from: `"${process.env.EMAIL_FROM_NAME || "Cafe Chapter 1"}" <${getFromAddress()}>`,
         subject: "Completion Certificate – Cafe Chapter 1",
         text: `Dear ${name},
 
@@ -576,9 +574,8 @@ employeeRouter.post(
     const html = `<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:560px;"><p>Hello <strong>${n}</strong>,</p><p>You have been invited as an employee for <strong>${brand}</strong>. To activate your account and receive your login password, you must verify your email by clicking the button below.</p><p><a href="${escapeHtml(verifyLink)}" style="display:inline-block;background:#047857;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;">Verify my email</a></p><p style="color:#666;font-size:14px;">Or copy this link: ${escapeHtml(verifyLink)}</p><p style="color:#999;font-size:12px;">This link expires in 24 hours. If you did not request this, ignore this email.</p></body></html>`;
     const text = `Hello ${employee.name},\n\nYou have been invited as an employee for ${fromName}. To activate your account and receive your login password, verify your email by opening this link:\n\n${verifyLink}\n\nThis link expires in 24 hours.`;
     try {
-      await mailer.sendMail({
+      await sendEmail({
         to: employee.email,
-        from: `"${fromName}" <${getFromAddress()}>`,
         subject: `Verify your email – ${fromName} Employee Account`,
         text,
         html,
@@ -626,9 +623,8 @@ employeeRouter.post(
       return res.status(503).json({ message: "Email is not configured. Set EMAIL_SMTP_* and EMAIL_FROM_ADDRESS in .env." });
     }
     try {
-      await mailer.sendMail({
+      await sendEmail({
         to: employee.email,
-        from: `"${process.env.EMAIL_FROM_NAME || "Cafe Chapter 1 Restro Private Limited"}" <${getFromAddress()}>`,
         subject: `Verify your email – ${process.env.EMAIL_FROM_NAME || "Cafe Chapter 1 Restro Private Limited"}`,
         text: `Hi ${employee.name},\n\nYour verification code: ${otp}\n\nYou can also verify by logging in and entering this code.\n\nDashboard: ${baseUrl}\n\nIf you did not request this, please ignore.`,
         html: `<!DOCTYPE html><html><body style="font-family:sans-serif;"><p>Hi ${employee.name},</p><p>Your <strong>verification code</strong>: <code style="background:#eee;padding:4px 8px;">${otp}</code></p><p>Verify at: <a href="${verifyUrl}">${verifyUrl}</a></p><p>If you did not request this, please ignore.</p></body></html>`,
@@ -725,9 +721,8 @@ employeeRouter.post(
           fromName,
         });
         try {
-          await mailer.sendMail({
+            await sendEmail({
             to: directorEmails,
-            from: `"${fromName}" <${getFromAddress()}>`,
             subject: `Employee password updated – ${employee.name}`,
             text,
             html,
@@ -828,9 +823,8 @@ employeeRouter.get("/verify-email-link", async (req, res) => {
         loginUrl,
         fromName,
       });
-      await mailer.sendMail({
+      await sendEmail({
         to: employee.email,
-        from: `"${fromName}" <${getFromAddress()}>`,
         subject: `Your ${fromName} login credentials – account verified`,
         text: credText,
         html: credHtml,

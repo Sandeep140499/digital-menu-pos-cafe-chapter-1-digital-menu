@@ -2,7 +2,7 @@
  * At 04:05 AM (after shifts auto-close at 04:00) send Daily Business Report email to director(s).
  */
 import { prisma } from "../config/prisma.js";
-import { mailer, getFromAddress, isMailConfigured } from "../config/mailer.js";
+import { isMailConfigured, sendEmail } from "../config/mailer.js";
 
 const TIMEZONE = process.env.TZ || "Asia/Kolkata";
 const REPORT_HOUR = 4;
@@ -189,13 +189,7 @@ export async function runDailyDirectorReport(): Promise<boolean> {
     .join("\n");
 
   try {
-    await mailer.sendMail({
-      to: directorEmails,
-      from: `"${fromName}" <${getFromAddress()}>`,
-      subject,
-      text,
-      html,
-    });
+    await sendEmail({ to: directorEmails, subject, text, html });
     console.log(`[DailyDirectorReport] Sent to ${directorEmails.length} director(s) for ${dateStr}`);
     return true;
   } catch (e: unknown) {

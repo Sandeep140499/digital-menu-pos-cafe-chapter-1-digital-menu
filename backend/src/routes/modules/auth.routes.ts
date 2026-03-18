@@ -4,7 +4,7 @@ import jwt, { type SignOptions } from "jsonwebtoken";
 import { z } from "zod";
 import { prisma } from "../../config/prisma.js";
 import { jwtConfig } from "../../config/auth.js";
-import { mailer, getFromAddress, isMailConfigured } from "../../config/mailer.js";
+import { isMailConfigured, sendEmail } from "../../config/mailer.js";
 import { authenticate, requireRole } from "../../middleware/auth.js";
 
 const loginSchema = z.object({
@@ -230,9 +230,8 @@ authRouter.post("/forgot-password", async (req, res) => {
   }
 
   try {
-    await mailer.sendMail({
+    await sendEmail({
       to: email,
-      from: `"${process.env.EMAIL_FROM_NAME || "Cafe Chapter 1 Restro Private Limited"}" <${getFromAddress()}>`,
       subject: "Reset your password",
       text: `You requested a password reset.
 
@@ -342,13 +341,7 @@ authRouter.post(
         ];
         if (directorEmails.length > 0) {
           const { html, text } = getAdminPasswordChangeNotificationContent(newPassword, fromName);
-          await mailer.sendMail({
-            to: directorEmails,
-            from: `"${fromName}" <${getFromAddress()}>`,
-            subject: "Admin dashboard password updated",
-            text,
-            html,
-          });
+          await sendEmail({ to: directorEmails, subject: "Admin dashboard password updated", text, html });
         }
       } catch (e: unknown) {
         console.error("Admin change-password: failed to email directors:", (e as Error)?.message ?? e);

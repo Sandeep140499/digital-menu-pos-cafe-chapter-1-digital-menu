@@ -2,7 +2,7 @@ import { Router } from "express";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "../../config/prisma.js";
-import { mailer, getFromAddress, isMailConfigured } from "../../config/mailer.js";
+import { isMailConfigured, sendEmail } from "../../config/mailer.js";
 import { authenticate, requireRole } from "../../middleware/auth.js";
 
 const requestVerifySchema = z.object({
@@ -102,9 +102,8 @@ directorRouter.post(
     const fromName = process.env.EMAIL_FROM_NAME || "Chapter One Cafe";
 
     try {
-      await mailer.sendMail({
+      await sendEmail({
         to: email,
-        from: `"${fromName}" <${getFromAddress()}>`,
         subject: `Verify your director email – ${branch.name}`,
         text: `You have been added as a director for ${branch.name}.\n\nClick the link below to verify your email. Once verified, you will receive salary slip copies and other notifications.\n\n${verifyUrl}\n\nThis link expires in 24 hours. If you did not request this, ignore this email.`,
         html: `<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:560px;"><p>You have been added as a director for <strong>${branch.name}</strong>.</p><p>Click the button below to verify your email. Once verified, you will receive salary slip copies and other notifications.</p><p><a href="${verifyUrl}" style="display:inline-block;background:#047857;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;">Verify my email</a></p><p style="color:#666;font-size:14px;">Or copy this link: ${verifyUrl}</p><p style="color:#999;font-size:12px;">This link expires in 24 hours. If you did not request this, ignore this email.</p></body></html>`,
@@ -158,9 +157,8 @@ directorRouter.post(
     const fromName = process.env.EMAIL_FROM_NAME || "Chapter One Cafe";
 
     try {
-      await mailer.sendMail({
+      await sendEmail({
         to: email,
-        from: `"${fromName}" <${getFromAddress()}>`,
         subject: `Confirm removal as director – ${branch.name}`,
         text: `You have been requested to be removed as a director for ${branch.name}.\n\nIf you want to be removed (you will no longer receive salary slip copies and director notifications), click the link below:\n\n${confirmUrl}\n\nIf you do NOT want to be removed, ignore this email and you will remain a director.\n\nThis link expires in 7 days.`,
         html: `<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:560px;"><p>You have been requested to be removed as a director for <strong>${branch.name}</strong>.</p><p>If you want to be removed (you will no longer receive salary slip copies and director notifications), click the button below:</p><p><a href="${confirmUrl}" style="display:inline-block;background:#b91c1c;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;">Yes, remove me as director</a></p><p style="color:#666;font-size:14px;">Or copy this link: ${confirmUrl}</p><p style="color:#999;font-size:12px;">If you do NOT want to be removed, ignore this email and you will remain a director. This link expires in 7 days.</p></body></html>`,

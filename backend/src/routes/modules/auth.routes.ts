@@ -246,52 +246,59 @@ authRouter.post("/refresh", async (req, res) => {
     return res.status(401).json({ message: "Missing refresh token" });
   }
 
-  const tokenHash = hashRefreshToken(raw);
-  const existing = await prisma.refreshToken.findUnique({ where: { tokenHash } });
-  if (!existing || existing.revokedAt || existing.expiresAt <= new Date()) {
+  try {
+    const tokenHash = hashRefreshToken(raw);
+    const existing = await prisma.refreshToken.findUnique({ where: { tokenHash } });
+    if (!existing || existing.revokedAt || existing.expiresAt <= new Date()) {
+      clearAuthCookies(req as any, res as any);
+      return res.status(401).json({ message: "Invalid refresh token" });
+    }
+
+    const role = existing.role as "ADMIN" | "EMPLOYEE";
+    const userId = role === "ADMIN" ? existing.adminId : existing.employeeId;
+    if (!userId) {
+      clearAuthCookies(req as any, res as any);
+      return res.status(401).json({ message: "Invalid refresh token" });
+    }
+
+    // Rotate refresh token
+    const newRefreshToken = generateOpaqueToken(32);
+    const newCsrfToken = generateCsrfToken();
+    const refreshExpiresAt = new Date(Date.now() + parseExpiresToMs(jwtConfig.refreshExpiresIn));
+
+    const created = await prisma.refreshToken.create({
+      data: {
+        tokenHash: hashRefreshToken(newRefreshToken),
+        role,
+        expiresAt: refreshExpiresAt,
+        ...(role === "ADMIN" ? { adminId: userId } : { employeeId: userId }),
+        userAgent: String(req.headers["user-agent"] || ""),
+        ip: (
+          (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ||
+          req.socket.remoteAddress
+        ) ?? undefined,
+      },
+    });
+
+    await prisma.refreshToken.update({
+      where: { id: existing.id },
+      data: { revokedAt: new Date(), replacedByTokenId: created.id },
+    });
+
+    setAuthCookies(req as any, res as any, {
+      refreshToken: newRefreshToken,
+      csrfToken: newCsrfToken,
+      refreshExpiresAt,
+    });
+
+    const accessToken = signAccessToken({ id: userId, role });
+    return res.json({ accessToken, role });
+  } catch (_e: unknown) {
+    // If refresh-token storage is unavailable/mismatched (e.g., migrations not applied),
+    // degrade gracefully: clear cookies and ask client to continue with access-token-only session.
     clearAuthCookies(req as any, res as any);
-    return res.status(401).json({ message: "Invalid refresh token" });
+    return res.status(401).json({ message: "Refresh unavailable" });
   }
-
-  const role = existing.role as "ADMIN" | "EMPLOYEE";
-  const userId = role === "ADMIN" ? existing.adminId : existing.employeeId;
-  if (!userId) {
-    clearAuthCookies(req as any, res as any);
-    return res.status(401).json({ message: "Invalid refresh token" });
-  }
-
-  // Rotate refresh token
-  const newRefreshToken = generateOpaqueToken(32);
-  const newCsrfToken = generateCsrfToken();
-  const refreshExpiresAt = new Date(Date.now() + parseExpiresToMs(jwtConfig.refreshExpiresIn));
-
-  const created = await prisma.refreshToken.create({
-    data: {
-      tokenHash: hashRefreshToken(newRefreshToken),
-      role,
-      expiresAt: refreshExpiresAt,
-      ...(role === "ADMIN" ? { adminId: userId } : { employeeId: userId }),
-      userAgent: String(req.headers["user-agent"] || ""),
-      ip:
-        (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ||
-        req.socket.remoteAddress ||
-        null,
-    },
-  });
-
-  await prisma.refreshToken.update({
-    where: { id: existing.id },
-    data: { revokedAt: new Date(), replacedByTokenId: created.id },
-  });
-
-  setAuthCookies(req as any, res as any, {
-    refreshToken: newRefreshToken,
-    csrfToken: newCsrfToken,
-    refreshExpiresAt,
-  });
-
-  const accessToken = signAccessToken({ id: userId, role });
-  return res.json({ accessToken, role });
 });
 
 authRouter.post("/forgot-password", async (req, res) => {
@@ -476,13 +483,17 @@ authRouter.post("/logout", async (req, res) => {
 
   const raw = (req as any).cookies?.rt as string | undefined;
   if (raw) {
-    const tokenHash = hashRefreshToken(raw);
-    const existing = await prisma.refreshToken.findUnique({ where: { tokenHash } });
-    if (existing && !existing.revokedAt) {
-      await prisma.refreshToken.update({
-        where: { id: existing.id },
-        data: { revokedAt: new Date() },
-      });
+    try {
+      const tokenHash = hashRefreshToken(raw);
+      const existing = await prisma.refreshToken.findUnique({ where: { tokenHash } });
+      if (existing && !existing.revokedAt) {
+        await prisma.refreshToken.update({
+          where: { id: existing.id },
+          data: { revokedAt: new Date() },
+        });
+      }
+    } catch {
+      // ignore DB errors; still clear cookies
     }
   }
 

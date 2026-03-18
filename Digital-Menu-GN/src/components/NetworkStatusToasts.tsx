@@ -1,42 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2, WifiOff, Wifi } from "lucide-react";
 import { toast, useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
-import { API_BASE_URL, fetchWithTimeout } from "@/constants";
-
-function getHealthUrl(apiBase: string) {
-  const base = apiBase.replace(/\/$/, "");
-  // Backend health is exposed at /api/health (see backend routes index)
-  return `${base}/health`;
-}
-
-async function checkBackendOnline(healthUrl: string): Promise<boolean> {
-  try {
-    const res = await fetchWithTimeout(healthUrl, {
-      method: "GET",
-      cache: "no-store",
-      timeout: 8000,
-      credentials: "include",
-    });
-    if (!res.ok) return false;
-    const data = (await res.json().catch(() => null)) as { ok?: boolean } | null;
-    return data?.ok === true;
-  } catch {
-    return false;
-  }
-}
 
 export default function NetworkStatusToasts() {
-  const healthUrl = useMemo(() => getHealthUrl(API_BASE_URL), []);
   const { dismiss } = useToast();
   const offlineToastIdRef = useRef<string | null>(null);
   const lastOnlineToastAtRef = useRef<number>(0);
+  const wasOfflineRef = useRef<boolean>(false);
   const [isBrowserOnline, setIsBrowserOnline] = useState<boolean>(() =>
     typeof navigator === "undefined" ? true : navigator.onLine,
   );
 
   const showOfflineToast = () => {
     if (offlineToastIdRef.current) return;
+    wasOfflineRef.current = true;
     const t = toast({
       duration: 0,
       title: (
@@ -59,11 +37,7 @@ export default function NetworkStatusToasts() {
       action: (
         <ToastAction
           altText="Retry connection"
-          onClick={async () => {
-            const ok = await checkBackendOnline(healthUrl);
-            if (!ok) return;
-            setIsBrowserOnline(true);
-          }}
+          onClick={() => setIsBrowserOnline(typeof navigator === "undefined" ? true : navigator.onLine)}
         >
           Retry
         </ToastAction>
@@ -80,6 +54,9 @@ export default function NetworkStatusToasts() {
   };
 
   const showBackOnlineToast = () => {
+    // Only show when we actually recovered from an offline state.
+    if (!wasOfflineRef.current) return;
+    wasOfflineRef.current = false;
     const now = Date.now();
     if (now - lastOnlineToastAtRef.current < 2500) return;
     lastOnlineToastAtRef.current = now;
@@ -109,36 +86,13 @@ export default function NetworkStatusToasts() {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    let interval: number | undefined;
-
-    const run = async () => {
-      if (isBrowserOnline) {
-        const ok = await checkBackendOnline(healthUrl);
-        if (cancelled) return;
-        if (ok) {
-          dismissOfflineToast();
-          showBackOnlineToast();
-          return;
-        }
-        setIsBrowserOnline(false);
-      }
+    if (isBrowserOnline) {
+      dismissOfflineToast();
+      showBackOnlineToast();
+    } else {
       showOfflineToast();
-      interval = window.setInterval(async () => {
-        const ok = await checkBackendOnline(healthUrl);
-        if (cancelled) return;
-        if (ok) {
-          setIsBrowserOnline(true);
-        }
-      }, 6000);
-    };
-
-    void run();
-    return () => {
-      cancelled = true;
-      if (interval) window.clearInterval(interval);
-    };
-  }, [dismiss, healthUrl, isBrowserOnline]);
+    }
+  }, [isBrowserOnline]);
 
   return null;
 }

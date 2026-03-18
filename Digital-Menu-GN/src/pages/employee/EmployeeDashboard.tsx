@@ -24,6 +24,12 @@ import {
   ChevronLeft,
   ChevronRight,
   FileDown,
+  Plus,
+  Minus,
+  Trash2,
+  Download,
+  Loader2,
+  Package,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LoaderButton } from "@/components/shared/LoaderButton";
@@ -320,6 +326,7 @@ type Order = {
   acceptedAt?: string | null;
   completedAt?: string | null;
   employeeId?: number | null;
+  orderType?: "DINE_IN" | "TAKE_AWAY" | null;
   table?: TableInfo | null;
   items: OrderItem[];
   customerName?: string | null;
@@ -336,6 +343,8 @@ type Order = {
 const sidebarItems = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "live", label: "Live Orders", icon: ShoppingCart },
+  { key: "add-order", label: "Add Order", icon: Plus },
+  { key: "all-orders", label: "All Orders", icon: ShoppingCart },
   { key: "completed", label: "Completed", icon: CheckCircle },
   { key: "pending", label: "Pending Payment", icon: CreditCard },
   { key: "performance", label: "Performance", icon: Bell },
@@ -751,7 +760,24 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
                   )}
                 </div>
               </div>
-              <div className="flex justify-end gap-2">
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const url = `${apiBase}/orders/${displayOrder.id}/invoice-pdf`;
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.target = "_blank";
+                    a.rel = "noopener noreferrer";
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                  }}
+                >
+                  <Download className="mr-1 h-4 w-4" />
+                  Invoice
+                </Button>
                 <Button variant="outline" onClick={() => onOpenChange(false)}>
                   Close
                 </Button>
@@ -776,7 +802,24 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
                 <span>Total:</span>
                 <span>{formatINR(displayOrder.totalAmount)}</span>
               </div>
-              <div className="flex justify-end gap-2">
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const url = `${apiBase}/orders/${displayOrder.id}/invoice-pdf`;
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.target = "_blank";
+                    a.rel = "noopener noreferrer";
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                  }}
+                >
+                  <Download className="mr-1 h-4 w-4" />
+                  Download Invoice
+                </Button>
                 <Button variant="outline" onClick={() => onOpenChange(false)}>
                   Close
                 </Button>
@@ -788,6 +831,359 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
     </Dialog>
   );
 });
+
+// ─── Add Order Section ────────────────────────────────────────────────────────
+type AddCartItem = {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+  variant?: "HALF" | "FULL";
+  category?: string;
+};
+
+function AddOrderSection({
+  branchId,
+  token,
+  onOrderPlaced,
+}: {
+  branchId: number | null | undefined;
+  token: string | null;
+  onOrderPlaced: (orderId: number) => void;
+}) {
+  const [menuCategories, setMenuCategories] = useState<any[]>([]);
+  const [menuLoading, setMenuLoading] = useState(true);
+  const [cart, setCart] = useState<AddCartItem[]>([]);
+  const [customerName, setCustomerName] = useState("");
+  const [customerMobile, setCustomerMobile] = useState("");
+  const [tableNumber, setTableNumber] = useState("");
+  const [orderType, setOrderType] = useState<"DINE_IN" | "TAKE_AWAY">("DINE_IN");
+  const [submitting, setSubmitting] = useState(false);
+  const [lastOrderId, setLastOrderId] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    setMenuLoading(true);
+    fetch(`${apiBase}/menu`)
+      .then((r) => r.json())
+      .then((data) => {
+        const cats = Array.isArray(data) ? data : (data?.categories ?? []);
+        setMenuCategories(cats);
+      })
+      .catch(() => setMenuCategories([]))
+      .finally(() => setMenuLoading(false));
+  }, []);
+
+  const cartTotal = useMemo(
+    () => cart.reduce((s, i) => s + i.price * i.quantity, 0),
+    [cart],
+  );
+
+  const addToCart = (name: string, price: number, variant?: "HALF" | "FULL", category?: string) => {
+    const id = `${name}-${variant ?? "FULL"}-${category ?? ""}`;
+    setCart((prev) => {
+      const existing = prev.find((i) => i.id === id);
+      if (existing) return prev.map((i) => i.id === id ? { ...i, quantity: i.quantity + 1 } : i);
+      return [...prev, { id, name, price, quantity: 1, variant, category }];
+    });
+  };
+
+  const updateQty = (id: string, delta: number) => {
+    setCart((prev) =>
+      prev
+        .map((i) => i.id === id ? { ...i, quantity: i.quantity + delta } : i)
+        .filter((i) => i.quantity > 0),
+    );
+  };
+
+  const filteredCategories = useMemo(() => {
+    if (!searchQuery.trim()) return menuCategories;
+    const q = searchQuery.toLowerCase();
+    return menuCategories.filter(
+      (cat) =>
+        cat.name?.toLowerCase().includes(q) ||
+        cat.items?.some((item: any) => item.name?.toLowerCase().includes(q)),
+    );
+  }, [menuCategories, searchQuery]);
+
+  const handleSubmit = async () => {
+    if (!cart.length) { toast.error("Add at least one item"); return; }
+    if (!customerName.trim()) { toast.error("Customer name is required"); return; }
+    if (orderType === "DINE_IN" && !tableNumber.trim()) { toast.error("Table number is required"); return; }
+    if (!branchId) { toast.error("Branch not loaded. Refresh and try again."); return; }
+
+    const mobileTrim = customerMobile.replace(/\D/g, "").slice(0, 10);
+    const validMobile = mobileTrim.length === 10 && /^[6-9]/.test(mobileTrim) ? mobileTrim : "";
+
+    setSubmitting(true);
+    try {
+      const res = await fetch(`${apiBase}/orders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          branchId,
+          orderType,
+          tableNumber: orderType === "TAKE_AWAY" ? "" : tableNumber.trim(),
+          customerName: customerName.trim().toUpperCase(),
+          customerMobile: validMobile || undefined,
+          packaging: orderType === "TAKE_AWAY",
+          items: cart.map((item) => ({
+            name: item.name,
+            unitPrice: item.price,
+            quantity: item.quantity,
+            variant: item.variant,
+          })),
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Failed to place order");
+      }
+      const data = await res.json();
+      const newOrderId = data.order?.id ?? null;
+      setLastOrderId(newOrderId);
+      setCart([]);
+      setCustomerName("");
+      setCustomerMobile("");
+      setTableNumber("");
+      toast.success(`Order #${newOrderId} placed successfully!`);
+      if (newOrderId) onOrderPlaced(newOrderId);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to place order");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4 sm:space-y-6 animate-fade-in">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold sm:text-xl">Add New Order</h2>
+          <p className="text-sm text-muted-foreground">Place an order for a customer at the counter</p>
+        </div>
+        {lastOrderId && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => {
+              const url = `${apiBase}/orders/${lastOrderId}/invoice-pdf`;
+              const a = document.createElement("a");
+              a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer";
+              document.body.appendChild(a); a.click(); a.remove();
+            }}
+          >
+            <Download className="h-4 w-4" />
+            Download Last Invoice (#{lastOrderId})
+          </Button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Menu Panel */}
+        <div className="lg:col-span-2 space-y-3">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Package className="h-4 w-4 text-emerald-600" />
+                Menu
+              </CardTitle>
+              <div className="relative mt-2">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search items..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 h-9"
+                />
+              </div>
+            </CardHeader>
+            <CardContent className="pb-4 max-h-[60vh] overflow-y-auto">
+              {menuLoading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-12 rounded-lg bg-slate-100 animate-pulse" />
+                  ))}
+                </div>
+              ) : filteredCategories.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">No items found</p>
+              ) : (
+                <div className="space-y-4">
+                  {filteredCategories.map((cat: any) => (
+                    <div key={cat.id}>
+                      <h3 className="text-sm font-bold text-emerald-800 mb-2 px-1 uppercase tracking-wide">{cat.name}</h3>
+                      <div className="space-y-1">
+                        {(cat.items || []).map((item: any) => {
+                          const hasHalf = item.hasHalf && item.halfPrice;
+                          return (
+                            <div key={item.id} className="flex items-center justify-between gap-2 p-2 rounded-lg hover:bg-slate-50 border border-transparent hover:border-slate-200 transition-all">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium truncate">{item.name}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {hasHalf ? `₹${item.halfPrice} / ₹${item.basePrice}` : `₹${item.basePrice}`}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                {hasHalf ? (
+                                  <>
+                                    <Button size="sm" variant="outline" className="h-8 px-2 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50" onClick={() => addToCart(item.name, item.halfPrice, "HALF", cat.name)}>
+                                      Half
+                                    </Button>
+                                    <Button size="sm" variant="outline" className="h-8 px-2 text-xs bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700" onClick={() => addToCart(item.name, item.basePrice, "FULL", cat.name)}>
+                                      Full
+                                    </Button>
+                                  </>
+                                ) : (
+                                  <Button size="sm" variant="outline" className="h-8 px-3 text-xs bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700" onClick={() => addToCart(item.name, item.basePrice, "FULL", cat.name)}>
+                                    Add
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Order Summary Panel */}
+        <div className="space-y-3">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <ShoppingCart className="h-4 w-4 text-blue-600" />
+                Order Summary
+                {cart.length > 0 && (
+                  <span className="ml-auto text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold">
+                    {cart.length} item{cart.length > 1 ? "s" : ""}
+                  </span>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 pb-4">
+              {/* Cart Items */}
+              {cart.length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground">
+                  <ShoppingCart className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">No items added yet</p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[30vh] overflow-y-auto">
+                  {cart.map((item) => (
+                    <div key={item.id} className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 border border-slate-100">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium truncate">{item.name}{item.variant ? ` (${item.variant === "HALF" ? "Half" : "Full"})` : ""}</p>
+                        <p className="text-xs text-muted-foreground">₹{item.price} each</p>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button onClick={() => updateQty(item.id, -1)} className="h-6 w-6 rounded-full bg-slate-200 hover:bg-slate-300 flex items-center justify-center text-xs font-bold transition-colors">
+                          <Minus className="h-3 w-3" />
+                        </button>
+                        <span className="w-6 text-center text-sm font-semibold">{item.quantity}</span>
+                        <button onClick={() => updateQty(item.id, 1)} className="h-6 w-6 rounded-full bg-emerald-100 hover:bg-emerald-200 flex items-center justify-center text-xs font-bold text-emerald-700 transition-colors">
+                          <Plus className="h-3 w-3" />
+                        </button>
+                        <button onClick={() => setCart((p) => p.filter((i) => i.id !== item.id))} className="h-6 w-6 rounded-full bg-red-100 hover:bg-red-200 flex items-center justify-center text-xs font-bold text-red-600 transition-colors ml-0.5">
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="flex justify-between items-center pt-2 border-t font-bold text-sm">
+                    <span>Total</span>
+                    <span className="text-emerald-700">₹{cartTotal.toFixed(0)}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Customer Details */}
+              <div className="space-y-3 pt-2 border-t">
+                <h4 className="text-sm font-semibold text-slate-700">Customer Details</h4>
+                <div>
+                  <label className="text-xs font-medium text-slate-600 mb-1 block">Name <span className="text-red-500">*</span></label>
+                  <Input
+                    placeholder="Customer name"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    className="h-9 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-600 mb-1 block">Mobile <span className="text-slate-400 font-normal">(optional)</span></label>
+                  <Input
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
+                    placeholder="10-digit number"
+                    value={customerMobile}
+                    onChange={(e) => setCustomerMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                    className="h-9 text-sm"
+                  />
+                </div>
+
+                {/* Order Type */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setOrderType("DINE_IN")}
+                    className={`h-9 rounded-lg border-2 text-sm font-semibold transition-all ${orderType === "DINE_IN" ? "bg-emerald-600 text-white border-emerald-600" : "border-slate-200 text-slate-600 hover:border-emerald-300"}`}
+                  >
+                    Dine In
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setOrderType("TAKE_AWAY"); setTableNumber(""); }}
+                    className={`h-9 rounded-lg border-2 text-sm font-semibold transition-all ${orderType === "TAKE_AWAY" ? "bg-emerald-600 text-white border-emerald-600" : "border-slate-200 text-slate-600 hover:border-emerald-300"}`}
+                  >
+                    Take Away
+                  </button>
+                </div>
+
+                {orderType === "DINE_IN" && (
+                  <div>
+                    <label className="text-xs font-medium text-slate-600 mb-1 block">Table Number <span className="text-red-500">*</span></label>
+                    <Input
+                      inputMode="numeric"
+                      placeholder="e.g. 5"
+                      value={tableNumber}
+                      onChange={(e) => setTableNumber(e.target.value.replace(/\D/g, ""))}
+                      className="h-9 text-sm"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <Button
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-2 h-10"
+                disabled={submitting || cart.length === 0 || !customerName.trim() || (orderType === "DINE_IN" && !tableNumber.trim())}
+                onClick={handleSubmit}
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Placing Order...
+                  </>
+                ) : (
+                  <>
+                    <ShoppingCart className="h-4 w-4" />
+                    Place Order · ₹{cartTotal.toFixed(0)}
+                  </>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 const EmployeeDashboard = () => {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -1680,6 +2076,9 @@ const EmployeeDashboard = () => {
     [orders],
   );
 
+  // All orders (no extra filtering) – used by the All Orders tab
+  const allOrders = orders;
+
   const getStatusColor = useCallback(
     (status: string) =>
       ORDER_STATUS_COLORS[status] ?? "bg-slate-100 text-slate-800",
@@ -1885,9 +2284,18 @@ const EmployeeDashboard = () => {
                       </span>
                     </Badge>
                   </div>
-                  <p className="text-xs sm:text-sm text-muted-foreground">
-                    {new Date(order.createdAt).toLocaleTimeString()}
-                  </p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-xs sm:text-sm text-muted-foreground">
+                      {new Date(order.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                      {" · "}
+                      <span className="font-medium text-slate-600">{timeAgo(order.createdAt)}</span>
+                    </p>
+                    {order.orderType && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${order.orderType === "TAKE_AWAY" ? "bg-purple-100 text-purple-800" : "bg-blue-100 text-blue-800"}`}>
+                        {order.orderType === "TAKE_AWAY" ? "Take Away" : "Dine In"}
+                      </span>
+                    )}
+                  </div>
                   {order.employee && (
                     <p className="text-xs text-emerald-700 font-medium">
                       Accepted by {order.employee.name}
@@ -2251,8 +2659,9 @@ const EmployeeDashboard = () => {
     formatTimeToComplete: (a: string, b: string) => string;
   }) => {
     const [search, setSearch] = useState("");
+    // Default to "all" so All Orders tab shows full history unless user narrows it
     const [dateFilter, setDateFilter] = useState<"today" | "last7" | "all">(
-      "today",
+      "all",
     );
     const [paymentFilter, setPaymentFilter] = useState<
       "all" | "paid" | "unpaid"
@@ -2288,7 +2697,11 @@ const EmployeeDashboard = () => {
             (o.employee?.name ?? "").toLowerCase().includes(q),
         );
       }
-      return list;
+      // Always show latest orders first
+      return [...list].sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
     }, [rawOrders, dateFilter, paymentFilter, search]);
 
     const total = filtered.length;
@@ -2589,17 +3002,27 @@ const EmployeeDashboard = () => {
                           {order.employee?.name ?? "—"}
                         </TableCell>
                         <TableCell className="text-muted-foreground">
-                          {new Date(order.createdAt).toLocaleTimeString(
-                            "en-IN",
-                            { hour: "2-digit", minute: "2-digit" },
-                          )}
+                          <div className="text-xs font-medium text-slate-700">
+                            {new Date(order.createdAt).toLocaleTimeString(
+                              "en-IN",
+                              { hour: "2-digit", minute: "2-digit" },
+                            )}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {timeAgo(order.createdAt)}
+                          </div>
                           {order.acceptedAt && order.completedAt && (
-                            <span className="block text-xs text-slate-500">
+                            <span className="block text-xs text-emerald-600 font-medium">
                               Done in{" "}
                               {formatTimeToComplete(
                                 order.acceptedAt,
                                 order.completedAt,
                               )}
+                            </span>
+                          )}
+                          {(order as any).orderType && (
+                            <span className={`inline-block mt-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${(order as any).orderType === "TAKE_AWAY" ? "bg-purple-100 text-purple-800" : "bg-blue-100 text-blue-800"}`}>
+                              {(order as any).orderType === "TAKE_AWAY" ? "Take Away" : "Dine In"}
                             </span>
                           )}
                         </TableCell>
@@ -2679,10 +3102,17 @@ const EmployeeDashboard = () => {
                           hour: "2-digit",
                           minute: "2-digit",
                         })}
+                        {" · "}
+                        {timeAgo(order.createdAt)}
                         {order.acceptedAt &&
                           order.completedAt &&
                           ` · Done in ${formatTimeToComplete(order.acceptedAt, order.completedAt)}`}
                       </p>
+                      {(order as any).orderType && (
+                        <span className={`inline-block text-[10px] px-2 py-0.5 rounded-full font-semibold ${(order as any).orderType === "TAKE_AWAY" ? "bg-purple-100 text-purple-800" : "bg-blue-100 text-blue-800"}`}>
+                          {(order as any).orderType === "TAKE_AWAY" ? "Take Away" : "Dine In"}
+                        </span>
+                      )}
                       <div
                         className="flex gap-2 pt-2"
                         onClick={(e) => e.stopPropagation()}
@@ -4008,6 +4438,30 @@ const EmployeeDashboard = () => {
       <div className="w-full min-h-full space-y-4 sm:space-y-6 p-3 sm:p-4 md:p-6 relative animate-fade-in">
         {activeSection === "dashboard" && dashboardOverviewContent}
         {activeSection === "live" && liveOrdersSectionContent}
+        {activeSection === "add-order" && (
+          <AddOrderSection
+            branchId={profile?.branchId ?? profile?.branch?.id}
+            token={token}
+            onOrderPlaced={(orderId) => {
+              // Navigate to live orders after placing
+              setTimeout(() => setActiveSection("live"), 1500);
+            }}
+          />
+        )}
+        {activeSection === "all-orders" && (
+          <OrdersTableSection
+            orders={allOrders}
+            title="All Orders"
+            loading={loading}
+            showConfirmPayment={true}
+            onViewOrder={openOrderPopup}
+            onConfirmPayment={confirmPayment}
+            actionOrderId={actionOrderId}
+            formatINR={formatINR}
+            getStatusColor={getStatusColor}
+            formatTimeToComplete={formatTimeToComplete}
+          />
+        )}
         {activeSection === "completed" && completedSectionContent}
         {activeSection === "pending" && pendingSectionContent}
         {activeSection === "paid" && paidSectionContent}
@@ -4020,12 +4474,23 @@ const EmployeeDashboard = () => {
       activeSection,
       dashboardOverviewContent,
       liveOrdersSectionContent,
+      profile,
+      token,
+      setActiveSection,
+      allOrders,
       completedSectionContent,
       pendingSectionContent,
       paidSectionContent,
       performanceSectionContent,
       shiftSectionContent,
       profileSectionContent,
+      loading,
+      openOrderPopup,
+      confirmPayment,
+      actionOrderId,
+      formatINR,
+      getStatusColor,
+      formatTimeToComplete,
     ],
   );
 

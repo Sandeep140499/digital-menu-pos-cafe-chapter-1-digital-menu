@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { LoaderButton } from "@/components/shared";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
@@ -128,13 +128,14 @@ const Login = () => {
             </div>
           </div>
 
-          <Button
+          <LoaderButton
             type="submit"
             className="w-full min-h-[44px] bg-emerald-700 hover:bg-emerald-800"
-            disabled={loading}
+            loading={loading}
+            loadingLabel="Signing in..."
           >
-            {loading ? "Signing in..." : "Sign in"}
-          </Button>
+            Sign in
+          </LoaderButton>
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mt-3 text-center sm:text-left">
             <p className="text-[11px] text-muted-foreground order-2 sm:order-1">

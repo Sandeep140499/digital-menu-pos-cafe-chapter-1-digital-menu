@@ -4,6 +4,12 @@ import type { Order, PaymentRecord, ErrorLog } from "@prisma/client";
 import { prisma } from "../../config/prisma.js";
 import { authenticate, requireRole } from "../../middleware/auth.js";
 import { getPublicMenuViewCount } from "../../services/publicTraffic.js";
+import {
+  getFromAddress,
+  isMailConfigured,
+  mailer,
+  verifyMailConnection,
+} from "../../config/mailer.js";
 
 type CustomerQueryRecord = { id: number; name: string; mobile: string; orderId: number | null; issueType: string; message: string; status: string; createdAt: Date };
 
@@ -28,11 +34,90 @@ const notificationSchema = z.object({
 
 export const configRouter = Router();
 
+const emailTestSchema = z.object({
+  to: z.string().email(),
+  subject: z.string().min(1).optional(),
+  message: z.string().min(1).optional(),
+});
+
 configRouter.get("/google-review", (_req, res) => {
   return res.json({
     url: process.env.GOOGLE_REVIEW_URL || null,
   });
 });
+
+// Admin: check SMTP/email configuration status (helps debugging deployment)
+configRouter.get(
+  "/email/status",
+  authenticate,
+  requireRole("ADMIN"),
+  async (_req, res) => {
+    const from = getFromAddress();
+    const status = {
+      configured: isMailConfigured(),
+      from: from || null,
+      host: process.env.EMAIL_SMTP_HOST ? String(process.env.EMAIL_SMTP_HOST) : null,
+      port: process.env.EMAIL_SMTP_PORT ? Number(process.env.EMAIL_SMTP_PORT) : null,
+      user: process.env.EMAIL_SMTP_USER ? String(process.env.EMAIL_SMTP_USER) : null,
+      hasPass: !!process.env.EMAIL_SMTP_PASS,
+      note:
+        "In production, set EMAIL_SMTP_* and EMAIL_FROM_* as platform env vars (not only .env file).",
+    };
+    return res.json(status);
+  },
+);
+
+// Admin: verify SMTP connection + send a test email
+configRouter.post(
+  "/email/test",
+  authenticate,
+  requireRole("ADMIN"),
+  async (req, res) => {
+    const parsed = emailTestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid input", errors: parsed.error.issues });
+    }
+    if (!isMailConfigured()) {
+      return res.status(400).json({
+        message:
+          "Email is not configured on the server. Set EMAIL_SMTP_HOST/PORT/USER/PASS and EMAIL_FROM_ADDRESS (or SMTP user as from).",
+      });
+    }
+    try {
+      await verifyMailConnection();
+    } catch (err) {
+      return res.status(500).json({
+        message: "SMTP verification failed",
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    const { to, subject, message } = parsed.data;
+    try {
+      await mailer.sendMail({
+        from: `"${process.env.EMAIL_FROM_NAME || "Cafe Chapter 1"}" <${getFromAddress()}>`,
+        to,
+        subject: subject || "✅ Test email (Cafe Chapter 1 POS)",
+        html: `<div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:16px;">
+          <h2 style="margin:0 0 8px;color:#065f46;">Test email sent successfully</h2>
+          <p style="margin:0 0 12px;color:#334155;">This confirms your server can connect to SMTP and send emails.</p>
+          <div style="padding:12px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;">
+            <div><b>Server</b>: ${(process.env.EMAIL_SMTP_HOST || "").toString()}</div>
+            <div><b>Port</b>: ${Number(process.env.EMAIL_SMTP_PORT) || 587}</div>
+            <div><b>From</b>: ${getFromAddress()}</div>
+          </div>
+          ${message ? `<p style="margin-top:12px;color:#0f172a;"><b>Message:</b> ${String(message)}</p>` : ""}
+        </div>`,
+      });
+      return res.json({ ok: true });
+    } catch (err) {
+      return res.status(500).json({
+        message: "Failed to send test email",
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  },
+);
 
 // Admin: public network traffic (menu page views since server start)
 configRouter.get(

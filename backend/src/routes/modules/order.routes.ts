@@ -6,6 +6,7 @@ import { getBusinessDayRange as getBusinessDayRangeForDate } from "../../utils/b
 import { authenticate, requireRole } from "../../middleware/auth.js";
 import { buildOrderInvoice, buildStatusMessage, getWaMeLink } from "../../services/whatsapp.js";
 import { generateOrderInvoicePdf, getInvoiceFileName } from "../../services/invoicePdf.js";
+import { mailer, isMailConfigured, getFromAddress } from "../../config/mailer.js";
 
 const mobileRegex = /^[6-9]\d{9}$/;
 
@@ -300,6 +301,60 @@ orderRouter.post("/", async (req, res) => {
 
   req.app.locals.io?.emit("order:new", order);
 
+  // Send email notification to admin + branch directors for new orders
+  if (isMailConfigured()) {
+    setImmediate(async () => {
+      try {
+        const admin = await prisma.admin.findFirst({ select: { email: true } });
+        const directorEmails: string[] = Array.isArray((order.branch as any)?.directorEmails)
+          ? (order.branch as any).directorEmails.filter(Boolean)
+          : [];
+        const recipients = [...new Set([admin?.email, ...directorEmails].filter(Boolean))] as string[];
+        if (recipients.length === 0) return;
+
+        const orderTypeLabel = orderType === "TAKE_AWAY" ? "Take Away" : "Dine In";
+        const tableLabel = orderType === "TAKE_AWAY" ? "Take Away" : `Table ${tableNumber}`;
+        const itemRows = order.items
+          .map((i) => {
+            const variantLabel = i.variant ? ` (${i.variant === "HALF" ? "Half" : "Full"})` : "";
+            return `<tr><td style="padding:6px 12px;border-bottom:1px solid #eee;">${i.quantity}× ${i.name}${variantLabel}</td><td style="padding:6px 12px;border-bottom:1px solid #eee;text-align:right;">₹${(i.price * i.quantity).toFixed(0)}</td></tr>`;
+          })
+          .join("");
+
+        const html = `
+<div style="font-family:sans-serif;max-width:540px;margin:0 auto;background:#f9f9f9;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
+  <div style="background:#1a5c38;color:#fff;padding:20px 24px;">
+    <h2 style="margin:0;font-size:20px;">🛎️ New Order Received — #${order.id}</h2>
+    <p style="margin:4px 0 0;opacity:0.85;font-size:14px;">${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} IST</p>
+  </div>
+  <div style="padding:20px 24px;">
+    <table style="width:100%;border-collapse:collapse;margin-bottom:16px;">
+      <tr><td style="color:#6b7280;font-size:13px;padding:4px 0;">Customer</td><td style="font-weight:600;font-size:14px;">${order.customerName || "Walk-in"}</td></tr>
+      <tr><td style="color:#6b7280;font-size:13px;padding:4px 0;">Mobile</td><td style="font-size:14px;">${order.customerMobile || "—"}</td></tr>
+      <tr><td style="color:#6b7280;font-size:13px;padding:4px 0;">Type</td><td style="font-size:14px;font-weight:600;color:#1a5c38;">${orderTypeLabel}</td></tr>
+      <tr><td style="color:#6b7280;font-size:13px;padding:4px 0;">Location</td><td style="font-size:14px;">${tableLabel}</td></tr>
+    </table>
+    <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;">
+      <thead><tr style="background:#f3f4f6;"><th style="text-align:left;padding:8px 12px;font-size:13px;color:#374151;">Item</th><th style="text-align:right;padding:8px 12px;font-size:13px;color:#374151;">Amount</th></tr></thead>
+      <tbody>${itemRows}</tbody>
+      <tfoot><tr style="background:#f0fdf4;"><td style="padding:10px 12px;font-weight:700;font-size:15px;">Total</td><td style="padding:10px 12px;font-weight:700;font-size:15px;text-align:right;color:#1a5c38;">₹${order.totalAmount.toFixed(0)}</td></tr></tfoot>
+    </table>
+    <p style="margin-top:16px;font-size:12px;color:#9ca3af;">This notification was sent automatically by Cafe Chapter 1 POS system.</p>
+  </div>
+</div>`;
+
+        await mailer.sendMail({
+          from: `"${process.env.EMAIL_FROM_NAME || "Cafe Chapter 1"}" <${getFromAddress()}>`,
+          to: recipients.join(", "),
+          subject: `🛎️ New Order #${order.id} — ${order.customerName || "Walk-in"} (${tableLabel})`,
+          html,
+        });
+      } catch (err) {
+        console.error("[order-email] Failed to send new order notification:", err);
+      }
+    });
+  }
+
   return res.status(201).json({
     order,
     ...(invoiceMessage && waMeLink ? { invoiceMessage, waMeLink } : {}),
@@ -418,6 +473,28 @@ orderRouter.get("/:id/invoice-pdf", async (req, res) => {
     console.error("Invoice PDF error:", err);
     return res.status(500).json({ message: "Failed to generate invoice PDF" });
   }
+});
+
+// Public: get order status for customer tracking (lightweight — no auth required)
+orderRouter.get("/:id/status", async (req, res) => {
+  const id = Number(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ message: "Invalid order id" });
+  const order = await prisma.order.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      status: true,
+      paymentStatus: true,
+      orderType: true,
+      totalAmount: true,
+      createdAt: true,
+      acceptedAt: true,
+      completedAt: true,
+      customerName: true,
+    },
+  });
+  if (!order) return res.status(404).json({ message: "Order not found" });
+  return res.json(order);
 });
 
 // Customer: get active order for table/session

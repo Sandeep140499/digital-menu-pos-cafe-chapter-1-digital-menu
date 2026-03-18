@@ -360,6 +360,7 @@ type Order = {
   id: number;
   tableId: number;
   tableNumber?: string;
+  orderType?: "DINE_IN" | "TAKE_AWAY" | null;
   employeeId?: number;
   employeeName?: string;
   employee?: {
@@ -374,6 +375,11 @@ type Order = {
   paymentStatus: string;
   totalAmount: number;
   createdAt: string;
+  acceptedAt?: string | null;
+  completedAt?: string | null;
+  customerName?: string | null;
+  customerMobile?: string | null;
+  table?: { id: number; tableNumber: string } | null;
   items: OrderItem[];
 };
 
@@ -501,17 +507,35 @@ const AdminOrderRow = memo(function AdminOrderRow({
     >
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-medium text-sm">Order #{order.id}</p>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <p className="font-medium text-sm">Order #{order.id}</p>
+            {order.orderType && (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${order.orderType === "TAKE_AWAY" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>
+                {order.orderType === "TAKE_AWAY" ? "Take Away" : "Dine In"}
+              </span>
+            )}
+          </div>
           <p className="text-xs text-muted-foreground">
-            {new Date(order.createdAt).toLocaleTimeString()}
+            {new Date(order.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+            {" · "}
+            {(() => {
+              const sec = Math.floor((Date.now() - new Date(order.createdAt).getTime()) / 1000);
+              if (sec < 60) return "Just now";
+              const min = Math.floor(sec / 60);
+              if (min < 60) return `${min} min ago`;
+              return `${Math.floor(min / 60)} hr ago`;
+            })()}
           </p>
+          {order.customerName && (
+            <p className="text-xs text-emerald-700 font-medium truncate">{order.customerName}</p>
+          )}
         </div>
         <div className="text-right shrink-0">
           <Badge
             variant={isComplete ? "default" : "secondary"}
             className={`text-xs mb-1 ${isComplete ? "bg-green-600 hover:bg-green-700" : ""}`}
           >
-            {order.status}
+            {order.status === "ORDER_COMPLETE" ? "Completed" : order.status.replace("_", " ")}
           </Badge>
           <p className="text-sm font-medium">{formatINR(order.totalAmount)}</p>
         </div>
@@ -539,6 +563,7 @@ const adminSidebarSections = [
     title: "Operations",
     items: [
       { key: "orders", label: "Orders", icon: ShoppingCart },
+      { key: "all-orders", label: "All Orders", icon: ShoppingCart },
       { key: "menu", label: "Menu", icon: ChefHat },
       {
         key: "customer-leaderboard",
@@ -9095,6 +9120,8 @@ const AdminDashboard = () => {
         return <EmployeesSection />;
       case "orders":
         return <OrdersSection />;
+      case "all-orders":
+        return <OrdersSection />;
       case "customer-leaderboard":
         return <CustomerLeaderboardSection />;
       case "customer-queries":
@@ -9381,6 +9408,24 @@ const AdminDashboard = () => {
                     <p className="text-xl font-bold text-emerald-600">
                       {formatINR(displayOrder.totalAmount)}
                     </p>
+                  </div>
+
+                  {/* Invoice download */}
+                  <div className="pt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2 text-emerald-700 border-emerald-200 hover:bg-emerald-50"
+                      onClick={() => {
+                        const url = `${apiBase}/orders/${displayOrder.id}/invoice-pdf`;
+                        const a = document.createElement("a");
+                        a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer";
+                        document.body.appendChild(a); a.click(); a.remove();
+                      }}
+                    >
+                      <Download className="h-4 w-4" />
+                      Download Invoice
+                    </Button>
                   </div>
 
                   {displayOrder.status !== "ORDER_COMPLETE" &&

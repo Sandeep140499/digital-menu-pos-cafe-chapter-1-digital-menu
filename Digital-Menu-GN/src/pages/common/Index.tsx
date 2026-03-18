@@ -15,6 +15,10 @@ import {
   AlertCircle,
   HelpCircle,
   Loader2,
+  Clock,
+  CheckCircle2,
+  FileDown,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,6 +27,7 @@ import {
   DialogTrigger,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { AnimatePresence, motion } from "framer-motion";
 import QRCodeGenerator from "@/components/QRCodeGenerator";
@@ -116,11 +121,19 @@ function OrderCartDialog({
     }
   }, [open, lastCustomerName, lastCustomerMobile]);
 
+  const descriptionId = "order-dialog-description";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange} key="order-cart-dialog">
-      <DialogContent className="sm:max-w-lg max-h-[80dvh] overflow-hidden flex flex-col">
+      <DialogContent
+        className="sm:max-w-lg max-h-[80dvh] overflow-hidden flex flex-col"
+        aria-describedby={descriptionId}
+      >
         <DialogHeader>
           <DialogTitle>Your Order</DialogTitle>
+          <DialogDescription id={descriptionId}>
+            Review your items, fill in your details, then tap Dine In or Take Away to place your order.
+          </DialogDescription>
         </DialogHeader>
         <div className="flex-1 overflow-y-auto space-y-3 pr-1">
           {cart.length === 0 ? (
@@ -216,80 +229,85 @@ function OrderCartDialog({
                 Add number to receive order confirmation & invoice on WhatsApp
               </span>
             </label>
-            <label className="flex flex-col gap-1">
-              <span className="font-semibold text-olive-900">
-                Table number <span className="text-red-500">*</span>
-              </span>
-              <input
-                value={tableNumber}
-                inputMode="numeric"
-                onChange={(e) =>
-                  setTableNumber(e.target.value.replace(/\D/g, ""))
-                }
-                placeholder="Enter table number (e.g., 1, 2, 3)"
-                disabled={orderType === "TAKE_AWAY"}
-                className="w-full rounded-md border px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600"
-              />
-            </label>
-            <div className="grid grid-cols-2 gap-2 pt-1">
-              <Button
-                type="button"
-                variant={orderType === "DINE_IN" ? "default" : "outline"}
-                className={
-                  orderType === "DINE_IN"
-                    ? "bg-emerald-700 hover:bg-emerald-800"
-                    : "border-emerald-700 text-emerald-800"
-                }
-                onClick={() => setOrderType("DINE_IN")}
-              >
-                DINE IN
-              </Button>
-              <Button
-                type="button"
-                variant={orderType === "TAKE_AWAY" ? "default" : "outline"}
-                className={
-                  orderType === "TAKE_AWAY"
-                    ? "bg-emerald-700 hover:bg-emerald-800"
-                    : "border-emerald-700 text-emerald-800"
-                }
-                onClick={() => {
-                  setOrderType("TAKE_AWAY");
-                  setTableNumber("");
-                }}
-              >
-                TAKE AWAY
-              </Button>
-            </div>
+            {/* Table number — only shown for Dine In */}
+            {orderType === "DINE_IN" && (
+              <label className="flex flex-col gap-1">
+                <span className="font-semibold text-olive-900">
+                  Table number <span className="text-red-500">*</span>
+                </span>
+                <input
+                  value={tableNumber}
+                  inputMode="numeric"
+                  onChange={(e) =>
+                    setTableNumber(e.target.value.replace(/\D/g, ""))
+                  }
+                  placeholder="Enter table number (e.g., 1, 2, 3)"
+                  className="w-full rounded-md border px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                />
+              </label>
+            )}
           </div>
+
           {showTotalAmount && (
-            <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center justify-between text-sm pt-1">
               <span className="font-semibold">Total</span>
               <span className="font-bold">₹{cartTotal.toFixed(0)}</span>
             </div>
           )}
-          <Button
-            className="w-full bg-emerald-700 hover:bg-emerald-800 shadow-none"
-            disabled={
-              !cart.length ||
-              isSubmittingOrder ||
-              !customerName.trim() ||
-              (orderType === "DINE_IN" && !tableNumber.trim())
-            }
-            onClick={() =>
-              onCheckout({
-                customerName,
-                customerMobile,
-                tableNumber,
-                orderType,
-              })
-            }
-          >
-            {isSubmittingOrder
-              ? "Placing Order..."
-              : orderType === "DINE_IN"
-                ? "DINE IN"
-                : "TAKE AWAY"}
-          </Button>
+
+          {/* DINE IN / TAKE AWAY — these ARE the order placement buttons */}
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            <Button
+              type="button"
+              disabled={
+                !cart.length ||
+                isSubmittingOrder ||
+                !customerName.trim() ||
+                !tableNumber.trim()
+              }
+              className="min-h-[48px] bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-sm disabled:opacity-50"
+              onClick={() =>
+                onCheckout({
+                  customerName,
+                  customerMobile,
+                  tableNumber,
+                  orderType: "DINE_IN",
+                })
+              }
+            >
+              {isSubmittingOrder && orderType === "DINE_IN" ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "DINE IN"
+              )}
+            </Button>
+            <Button
+              type="button"
+              disabled={
+                !cart.length ||
+                isSubmittingOrder ||
+                !customerName.trim()
+              }
+              className="min-h-[48px] border-2 border-emerald-700 bg-white text-emerald-800 hover:bg-emerald-50 font-bold text-sm disabled:opacity-50"
+              onClick={() => {
+                setTableNumber("");
+                setOrderType("TAKE_AWAY");
+                onCheckout({
+                  customerName,
+                  customerMobile,
+                  tableNumber: "",
+                  orderType: "TAKE_AWAY",
+                });
+              }}
+            >
+              {isSubmittingOrder && orderType === "TAKE_AWAY" ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "TAKE AWAY"
+              )}
+            </Button>
+          </div>
+
           <p className="text-[10px] text-muted-foreground text-center">
             Show this screen to staff if there is any issue with order
             confirmation.
@@ -801,6 +819,9 @@ const Index = () => {
     null,
   );
   const [lastOrderId, setLastOrderId] = useState<number | null>(null);
+  const [lastOrderType, setLastOrderType] = useState<"DINE_IN" | "TAKE_AWAY" | null>(null);
+  const [lastOrderStatus, setLastOrderStatus] = useState<string | null>(null);
+  const [lastOrderCreatedAt, setLastOrderCreatedAt] = useState<string | null>(null);
   const [lastCustomerMobile, setLastCustomerMobile] = useState<string>("");
   const [lastCustomerName, setLastCustomerName] = useState<string>("");
   const [branchContact, setBranchContact] = useState<{
@@ -1122,6 +1143,9 @@ const Index = () => {
         setOrderSuccess(true);
         setLastOrderWaMeLink(waMe);
         setLastOrderId(data.order?.id ?? null);
+        setLastOrderType(formData.orderType);
+        setLastOrderStatus("NEW_ORDER");
+        setLastOrderCreatedAt(data.order?.createdAt ?? new Date().toISOString());
         setLastCustomerMobile(validMobile);
         setLastCustomerName(nameTrim);
         toast({
@@ -1156,12 +1180,24 @@ const Index = () => {
     [cart, branchId, sessionToken, toast],
   );
 
+  // Poll order status while success screen is shown
   useEffect(() => {
-    if (!orderSuccess) return;
-    const delay = lastOrderWaMeLink ? 15000 : 2500;
-    const t = setTimeout(() => setOrderSuccess(false), delay);
-    return () => clearTimeout(t);
-  }, [orderSuccess, lastOrderWaMeLink]);
+    if (!orderSuccess || !lastOrderId) return;
+    const poll = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/orders/${lastOrderId}/status`);
+        if (res.ok) {
+          const data = await res.json();
+          setLastOrderStatus(data.status ?? null);
+        }
+      } catch {
+        // ignore poll errors
+      }
+    };
+    poll();
+    const id = setInterval(poll, 8000);
+    return () => clearInterval(id);
+  }, [orderSuccess, lastOrderId]);
 
   useEffect(() => {
     const key = lastToggledKeyRef.current;
@@ -1186,68 +1222,106 @@ const Index = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm"
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
           >
             <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              transition={{ type: "spring", damping: 20, stiffness: 300 }}
-              className="bg-white rounded-2xl shadow-2xl px-8 py-10 text-center max-w-sm mx-4"
+              transition={{ type: "spring", damping: 22, stiffness: 300 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
             >
-              <div className="text-5xl mb-3">🎉</div>
-              <h3 className="text-xl font-bold text-emerald-900">Thank you!</h3>
-              <p className="text-emerald-700 mt-2">Your order is on its way.</p>
-              {lastOrderWaMeLink && (
-                <Button
-                  className="mt-4 w-full bg-[#25D366] hover:bg-[#20BD5A] text-white"
-                  onClick={() => {
-                    window.open(lastOrderWaMeLink!, "_blank");
-                  }}
-                >
-                  Get invoice on WhatsApp
-                </Button>
-              )}
-              {lastOrderId != null && (
-                <Button
-                  variant="outline"
-                  className="mt-3 w-full"
-                  onClick={async () => {
-                    const url = `${API_BASE_URL}/orders/${lastOrderId}/invoice-pdf`;
-                    try {
-                      // Prefer direct navigation (best for iOS / WhatsApp in-app browser; backend sets Content-Disposition).
-                      // Fallback to blob if popup blocked.
-                      const a = document.createElement("a");
-                      a.href = url;
-                      a.target = "_blank";
-                      a.rel = "noopener noreferrer";
-                      document.body.appendChild(a);
-                      a.click();
-                      a.remove();
-                    } catch {
-                      toast({
-                        title: "Invoice unavailable",
-                        description:
-                          "Could not load the invoice. Check your connection and try again.",
-                        variant: "destructive",
-                      });
-                    }
-                  }}
-                >
-                  Download PDF invoice
-                </Button>
-              )}
-              <p className="text-sm text-muted-foreground mt-4">
-                Scroll down to leave us a review.
-              </p>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="mt-2"
-                onClick={() => setOrderSuccess(false)}
-              >
-                Close
-              </Button>
+              {/* Header */}
+              <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 px-6 py-5 text-center text-white">
+                <div className="text-4xl mb-2">🎉</div>
+                <h3 className="text-xl font-bold">Order Placed!</h3>
+                <p className="text-emerald-100 text-sm mt-1">
+                  {lastOrderType === "TAKE_AWAY" ? "Your take-away order is being prepared." : "Your order is being prepared at the kitchen."}
+                </p>
+              </div>
+
+              {/* Order Details */}
+              <div className="px-6 py-4 space-y-3">
+                {/* Order info row */}
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Order ID</span>
+                  <span className="font-bold text-emerald-800">#{lastOrderId}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Type</span>
+                  <span className={`font-semibold px-2 py-0.5 rounded-full text-xs ${lastOrderType === "TAKE_AWAY" ? "bg-purple-100 text-purple-800" : "bg-blue-100 text-blue-800"}`}>
+                    {lastOrderType === "TAKE_AWAY" ? "Take Away" : "Dine In"}
+                  </span>
+                </div>
+                {lastOrderCreatedAt && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Time</span>
+                    <span className="font-medium text-slate-700 flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {new Date(lastOrderCreatedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  </div>
+                )}
+                {lastOrderStatus && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Status</span>
+                    <div className="flex items-center gap-1.5">
+                      {lastOrderStatus === "ORDER_COMPLETE" ? (
+                        <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      ) : (
+                        <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                      )}
+                      <span className={`font-semibold text-xs ${lastOrderStatus === "ORDER_COMPLETE" ? "text-green-700" : lastOrderStatus === "SERVED" ? "text-blue-700" : "text-amber-700"}`}>
+                        {lastOrderStatus === "NEW_ORDER" ? "Received — Preparing" :
+                         lastOrderStatus === "ACCEPTED" ? "Accepted — Preparing" :
+                         lastOrderStatus === "PREPARING" ? "Being Prepared" :
+                         lastOrderStatus === "SERVED" ? "Served!" :
+                         lastOrderStatus === "ORDER_COMPLETE" ? "Completed ✓" : lastOrderStatus}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="space-y-2 pt-2">
+                  {lastOrderWaMeLink && (
+                    <Button
+                      className="w-full bg-[#25D366] hover:bg-[#20BD5A] text-white gap-2 h-10"
+                      onClick={() => window.open(lastOrderWaMeLink!, "_blank")}
+                    >
+                      <MessageCircle className="h-4 w-4" />
+                      Get Invoice on WhatsApp
+                    </Button>
+                  )}
+                  {lastOrderId != null && (
+                    <Button
+                      variant="outline"
+                      className="w-full gap-2 h-10 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                      onClick={() => {
+                        const url = `${API_BASE_URL}/orders/${lastOrderId}/invoice-pdf`;
+                        const a = document.createElement("a");
+                        a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer";
+                        document.body.appendChild(a); a.click(); a.remove();
+                      }}
+                    >
+                      <FileDown className="h-4 w-4" />
+                      Download PDF Invoice
+                    </Button>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <p className="text-xs text-muted-foreground">Scroll down for review & more</p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs text-muted-foreground h-7 px-2"
+                    onClick={() => setOrderSuccess(false)}
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
             </motion.div>
           </motion.div>
         )}

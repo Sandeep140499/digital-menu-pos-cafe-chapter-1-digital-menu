@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useRef, useCallback, memo } from "react";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 import toast from "react-hot-toast";
+import { useAuth } from "@/hooks/useAuth";
 import {
   LayoutDashboard,
   Clock,
@@ -1261,7 +1262,7 @@ const EmployeeDashboard = () => {
     return 0.85;
   });
 
-  const token = window.sessionStorage.getItem("dm_auth_token");
+  const { token, ready, refresh, logout } = useAuth();
 
   // Employee UX settings (ringing is branch-controlled by admin)
   useEffect(() => {
@@ -1319,10 +1320,15 @@ const EmployeeDashboard = () => {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error((data as any)?.message || "Failed to load performance");
+      if (!res.ok) {
+        const msg =
+          data && typeof data === "object" && "message" in data
+            ? String((data as { message?: unknown }).message || "")
+            : "";
+        throw new Error(msg || "Failed to load performance");
+      }
       setApiPerf(data as ApiPerfSummary);
     } catch (e) {
-      console.error("Load employee performance error:", e);
       setApiPerf(null);
     } finally {
       setApiPerfLoading(false);
@@ -1463,24 +1469,30 @@ const EmployeeDashboard = () => {
   }, [isOrderPopupOpen]);
 
   useEffect(() => {
-    if (!token) {
-      window.location.href = "/login";
-      return;
-    }
+    if (!ready) return;
+    if (!token) return;
     // Don't set up polling while order popup is open – keeps cards stable
     if (isOrderPopupOpen) return;
 
     async function loadOrders() {
       if (isOrderPopupOpenRef.current) return;
       try {
-        const res = await fetch(`${apiBase}/orders/live`, {
+        let res = await fetch(`${apiBase}/orders/live`, {
           headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
         });
         if (res.status === 401) {
-          window.sessionStorage.removeItem("dm_auth_token");
-          window.sessionStorage.removeItem("dm_auth_role");
-          window.location.href = "/login";
-          return;
+          const nextToken = await refresh();
+          if (!nextToken) return;
+          res = await fetch(`${apiBase}/orders/live`, {
+            headers: { Authorization: `Bearer ${nextToken}` },
+            credentials: "include",
+          });
+          if (res.status === 401) {
+            await logout();
+            window.location.href = "/login";
+            return;
+          }
         }
         if (!res.ok) {
           setOrders((prev) => (prev.length ? prev : []));
@@ -1528,7 +1540,7 @@ const EmployeeDashboard = () => {
       loadOrders();
     }, 10_000);
     return () => window.clearInterval(id);
-  }, [token, isOrderPopupOpen]);
+  }, [ready, token, refresh, logout, isOrderPopupOpen]);
 
   useEffect(() => {
     if (!token) return;

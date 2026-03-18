@@ -26,6 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useAuth } from "@/hooks/useAuth";
 
 export type SidebarItem = {
   key: string;
@@ -100,6 +101,7 @@ const DashboardShell = ({
   const unreadCount =
     notificationCount ?? notifications.filter((n) => !n.read).length;
   const logoUrl = companyLogoUrl || cafeLogo;
+  const { logout } = useAuth();
 
   // On desktop (sm+): sidebar open by default. On small devices: closed. Only sync when breakpoint actually changes (resize).
   useEffect(() => {
@@ -125,9 +127,9 @@ const DashboardShell = ({
   const toggleSidebar = () => setSidebarOpen((v) => !v);
 
   const handleLogout = () => {
-    window.sessionStorage.removeItem("dm_auth_token");
-    window.sessionStorage.removeItem("dm_auth_role");
-    window.location.href = "/";
+    void logout().finally(() => {
+      window.location.href = "/login";
+    });
   };
 
   return (

@@ -1,10 +1,10 @@
 import { useCallback } from "react";
 import { API_BASE_URL } from "@/constants";
+import { useAuth } from "@/hooks/useAuth";
 
 export type ApiOptions = {
   method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   body?: unknown;
-  token?: string | null;
   headers?: Record<string, string>;
 };
 
@@ -13,33 +13,46 @@ export type ApiOptions = {
  * Use this for consistent behavior and easy customization.
  */
 export function useApi() {
+  const { token, refresh, setSession } = useAuth();
   const fetchApi = useCallback(
-    async (path: string, options: ApiOptions = {}) => {
-      const { method = "GET", body, token, headers = {} } = options;
+    async <T = unknown>(path: string, options: ApiOptions = {}): Promise<T> => {
+      const { method = "GET", body, headers = {} } = options;
       const url = path.startsWith("http") ? path : `${API_BASE_URL}${path}`;
-      const reqHeaders: Record<string, string> = {
-        ...headers,
-        "Content-Type": "application/json",
+      const doFetch = async () => {
+        const reqHeaders: Record<string, string> = {
+          ...headers,
+          "Content-Type": "application/json",
+        };
+        if (token) reqHeaders.Authorization = `Bearer ${token}`;
+        return fetch(url, {
+          method,
+          headers: reqHeaders,
+          credentials: "include",
+          ...(body != null && { body: JSON.stringify(body) }),
+        });
       };
-      if (token) reqHeaders.Authorization = `Bearer ${token}`;
 
-      const res = await fetch(url, {
-        method,
-        headers: reqHeaders,
-        ...(body != null && { body: JSON.stringify(body) }),
-      });
+      let res = await doFetch();
+      if (res.status === 401) {
+        // Attempt a single refresh + retry.
+        await refresh();
+        res = await doFetch();
+      }
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         const err = new Error(
           (data as { message?: string }).message || "Request failed",
         );
         (err as Error & { status: number }).status = res.status;
+        if (res.status === 401) {
+          setSession(null, null);
+        }
         throw err;
       }
-      return data;
+      return data as T;
     },
-    [],
+    [refresh, setSession, token],
   );
 
   return { fetchApi, apiBase: API_BASE_URL };

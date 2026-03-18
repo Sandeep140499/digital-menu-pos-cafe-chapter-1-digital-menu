@@ -34,6 +34,7 @@ import QRCodeGenerator from "@/components/QRCodeGenerator";
 import LocationMap from "@/components/LocationMap";
 import { useToast } from "@/hooks/use-toast";
 import { API_BASE_URL, fetchWithTimeout } from "@/constants";
+import { useOrderStatusStream } from "@/hooks/useOrderStatusStream";
 import cafeLogo from "@/assets/logo.png";
 
 type CartItem = {
@@ -900,7 +901,6 @@ const Index = () => {
         // ignore
       }
     } catch (error) {
-      console.error("Failed to load menu:", error);
       const isTimeout = error instanceof Error && error.name === "AbortError";
       // If network fails, fall back to last known good cached menu so customers can still order.
       let usedCache = false;
@@ -1161,7 +1161,6 @@ const Index = () => {
           });
         }, 800);
       } catch (error) {
-        console.error(error);
         const message =
           error instanceof Error
             ? error.message
@@ -1181,23 +1180,17 @@ const Index = () => {
   );
 
   // Poll order status while success screen is shown
+  const { payload: liveOrderPayload } = useOrderStatusStream(
+    orderSuccess ? lastOrderId : null,
+    true,
+  );
+
   useEffect(() => {
     if (!orderSuccess || !lastOrderId) return;
-    const poll = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/orders/${lastOrderId}/status`);
-        if (res.ok) {
-          const data = await res.json();
-          setLastOrderStatus(data.status ?? null);
-        }
-      } catch {
-        // ignore poll errors
-      }
-    };
-    poll();
-    const id = setInterval(poll, 8000);
-    return () => clearInterval(id);
-  }, [orderSuccess, lastOrderId]);
+    if (!liveOrderPayload) return;
+    if (liveOrderPayload.id !== lastOrderId) return;
+    setLastOrderStatus(liveOrderPayload.status ?? null);
+  }, [liveOrderPayload, orderSuccess, lastOrderId]);
 
   useEffect(() => {
     const key = lastToggledKeyRef.current;

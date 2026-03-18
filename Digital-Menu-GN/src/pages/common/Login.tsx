@@ -6,9 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "react-router-dom";
-import { API_BASE_URL } from "@/constants";
 import cafeLogo from "@/assets/logo.png";
 import { useGlobalLoading } from "@/components/GlobalLoadingProvider";
+import { useAuth } from "@/hooks/useAuth";
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -18,6 +18,7 @@ const Login = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { startGlobalLoading, stopGlobalLoading } = useGlobalLoading();
+  const { login } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,41 +26,18 @@ const Login = () => {
     // Show global loader so navigation + first dashboard load never shows a white gap
     startGlobalLoading("Signing you in…");
     try {
-      const apiBase = API_BASE_URL;
-      const res = await fetch(`${apiBase}/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        const msg =
-          res.status === 403
-            ? data.message || "Please verify your email before logging in."
-            : data.message || "Login failed";
-        throw new Error(msg);
-      }
-
-      const data = await res.json();
-      // Use sessionStorage so admin + employee can be logged in different tabs
-      window.sessionStorage.setItem("dm_auth_token", data.token);
-      window.sessionStorage.setItem("dm_auth_role", data.role);
+      const role = await login({ email, password });
 
       toast({
         title: "Login successful",
-        description: `Logged in as ${data.role}`,
+        description: "Welcome back",
         className:
           "border-emerald-500 bg-emerald-50 text-emerald-900 font-medium",
       });
 
       // Keep global loader active while dashboard bootstraps;
       // the respective dashboard will stop it after first data load.
-      if (data.role === "ADMIN") {
-        navigate("/admin");
-      } else {
-        navigate("/employee");
-      }
+      navigate(role === "ADMIN" ? "/admin" : "/employee");
     } catch (error: any) {
       stopGlobalLoading();
       toast({

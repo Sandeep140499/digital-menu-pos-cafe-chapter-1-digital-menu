@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useCallback, memo, useRef } from "react";
 import React from "react";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import {
   LayoutDashboard,
   Utensils,
@@ -491,11 +492,23 @@ const formatINR = (amount: number) => {
 const AdminOrderRow = memo(function AdminOrderRow({
   order,
   onSelect,
+  now,
 }: {
   order: Order;
   onSelect: (order: Order) => void;
+  now: Date;
 }) {
   const isComplete = order.status === "ORDER_COMPLETE";
+  const relativeAge = useMemo(() => {
+    const sec = Math.floor(
+      (now.getTime() - new Date(order.createdAt).getTime()) / 1000,
+    );
+    if (sec < 60) return "Just now";
+    const min = Math.floor(sec / 60);
+    if (min < 60) return `${min} min ago`;
+    return `${Math.floor(min / 60)} hr ago`;
+  }, [now, order.createdAt]);
+
   return (
     <div
       className={`p-3 cursor-pointer transition-[background-color] duration-150 card-gpu border-l-4 ${
@@ -518,13 +531,7 @@ const AdminOrderRow = memo(function AdminOrderRow({
           <p className="text-xs text-muted-foreground">
             {new Date(order.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
             {" · "}
-            {(() => {
-              const sec = Math.floor((Date.now() - new Date(order.createdAt).getTime()) / 1000);
-              if (sec < 60) return "Just now";
-              const min = Math.floor(sec / 60);
-              if (min < 60) return `${min} min ago`;
-              return `${Math.floor(min / 60)} hr ago`;
-            })()}
+            {relativeAge}
           </p>
           {order.customerName && (
             <p className="text-xs text-emerald-700 font-medium truncate">{order.customerName}</p>
@@ -3517,7 +3524,7 @@ const AdminDashboard = () => {
   });
   const [loading, setLoading] = useState(true);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
-  const [token, setToken] = useState<string | null>(null);
+  const { token, ready } = useAuth();
   const [profile, setProfile] = useState<{ name?: string } | null>(null);
   const [publicNetworkTraffic, setPublicNetworkTraffic] = useState<number>(0);
   const [performanceSummary, setPerformanceSummary] = useState<{
@@ -3528,7 +3535,6 @@ const AdminDashboard = () => {
     trend: { label: string; orders: number; revenue: number }[];
     routes: { route: string; orders: number; revenue: number }[];
   } | null>(null);
-  const [authChecked, setAuthChecked] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const { stopGlobalLoading } = useGlobalLoading();
 
@@ -3894,16 +3900,6 @@ const AdminDashboard = () => {
   }, [employees]);
 
   useEffect(() => {
-    const storedToken = window.sessionStorage.getItem("dm_auth_token");
-    setAuthChecked(true);
-    if (!storedToken) {
-      window.location.href = "/login";
-      return;
-    }
-    setToken(storedToken);
-  }, []);
-
-  useEffect(() => {
     isOrderDialogOpenRef.current = isOrderDialogOpen;
   }, [isOrderDialogOpen]);
 
@@ -4143,7 +4139,6 @@ const AdminDashboard = () => {
         setOrders(ordersData);
       }
     } catch (error) {
-      console.error("Error loading dashboard data:", error);
       const isTimeout =
         error instanceof Error && error.name === "AbortError";
       toast({
@@ -4670,7 +4665,7 @@ const AdminDashboard = () => {
         setOrdersByTable(data.byTable);
       }
     } catch (error) {
-      console.error("Error loading orders:", error);
+      // ignore (UI handles empty/error states)
     } finally {
       setOrdersLoading(false);
     }
@@ -4707,7 +4702,7 @@ const AdminDashboard = () => {
         setDailyStats(data.dailyStats);
       }
     } catch (error) {
-      console.error("Error loading shifts:", error);
+      // ignore (UI handles empty/error states)
     } finally {
       setShiftHistoryLoading(false);
     }
@@ -4730,7 +4725,7 @@ const AdminDashboard = () => {
         setOvertimeRecords(data);
       }
     } catch (e) {
-      console.error("Load overtime error:", e);
+      // ignore (UI handles empty/error states)
     } finally {
       setOvertimeLoading(false);
     }
@@ -4759,7 +4754,7 @@ const AdminDashboard = () => {
         setLateEntries(Array.isArray(data) ? data : []);
       }
     } catch (e) {
-      console.error("Load late entries error:", e);
+      // ignore (UI handles empty/error states)
     } finally {
       setLateLoading(false);
     }
@@ -4852,7 +4847,7 @@ const AdminDashboard = () => {
         setErrorLogs(errData);
       }
     } catch (error) {
-      console.error("Error loading settings:", error);
+      // ignore (UI handles empty/error states)
     }
   };
 
@@ -5026,7 +5021,7 @@ const AdminDashboard = () => {
         setTotalLoss(data.summary?.totalLoss ?? 0);
       }
     } catch (error) {
-      console.error("Error loading removed items:", error);
+      // ignore (UI handles empty/error states)
     } finally {
       setRemovedItemsLoading(false);
     }
@@ -5046,7 +5041,7 @@ const AdminDashboard = () => {
         setCustomerQueries(Array.isArray(data) ? data : []);
       }
     } catch (error) {
-      console.error("Error loading customer queries:", error);
+      // ignore (UI handles empty/error states)
     }
   }, [token, apiBase, queryStatusFilter]);
 
@@ -6302,7 +6297,6 @@ const AdminDashboard = () => {
         setApiPerf(all);
         setApiPerfByActor({ CUSTOMER: customer, EMPLOYEE: employee, ADMIN: admin });
       } catch (e) {
-        console.error("Load API performance error:", e);
         setApiPerf(null);
         setApiPerfByActor({ CUSTOMER: null, EMPLOYEE: null, ADMIN: null });
       } finally {
@@ -6318,10 +6312,15 @@ const AdminDashboard = () => {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await res.json().catch(() => null);
-        if (!res.ok) throw new Error((data as any)?.message || "Failed to load system metrics");
+        if (!res.ok) {
+          const msg =
+            data && typeof data === "object" && "message" in data
+              ? String((data as { message?: unknown }).message || "")
+              : "";
+          throw new Error(msg || "Failed to load system metrics");
+        }
         setSysPerf(data as SystemPerf);
       } catch (e) {
-        console.error("Load system metrics error:", e);
         setSysPerf(null);
       } finally {
         setSysPerfLoading(false);
@@ -6336,10 +6335,19 @@ const AdminDashboard = () => {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await res.json().catch(() => null);
-        if (!res.ok) throw new Error((data as any)?.message || "Failed to load completion times");
-        setCompletionRows(Array.isArray((data as any)?.rows) ? (data as any).rows : []);
+        if (!res.ok) {
+          const msg =
+            data && typeof data === "object" && "message" in data
+              ? String((data as { message?: unknown }).message || "")
+              : "";
+          throw new Error(msg || "Failed to load completion times");
+        }
+        const rows =
+          data && typeof data === "object" && "rows" in data
+            ? (data as { rows?: unknown }).rows
+            : undefined;
+        setCompletionRows(Array.isArray(rows) ? (rows as any[]) : []);
       } catch (e) {
-        console.error("Load completion times error:", e);
         setCompletionRows([]);
       } finally {
         setCompletionLoading(false);
@@ -6992,6 +7000,7 @@ const AdminDashboard = () => {
                       key={order.id}
                       order={order}
                       onSelect={handleOpenOrderDialog}
+                      now={currentTime}
                     />
                   ))}
                 </div>
@@ -9219,7 +9228,7 @@ const AdminDashboard = () => {
     }
   }, [currentSection, ordersByTable, handleOpenOrderDialog, performanceSummary]);
 
-  if (!authChecked || !token) {
+  if (!ready || !token) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="flex flex-col items-center gap-3">

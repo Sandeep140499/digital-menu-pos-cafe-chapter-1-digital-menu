@@ -2522,6 +2522,8 @@ const EmployeeDashboard = () => {
         return <Utensils className="h-3 w-3" />;
       case "ORDER_COMPLETE":
         return <CheckCircle className="h-3 w-3" />;
+      case "REJECTED":
+        return <XCircle className="h-3 w-3" />;
       default:
         return null;
     }
@@ -2548,6 +2550,8 @@ const EmployeeDashboard = () => {
         return "Preparing";
       case "ORDER_COMPLETE":
         return "Completed";
+      case "REJECTED":
+        return "Rejected";
       default:
         return order.status.replace("_", " ");
     }
@@ -2566,6 +2570,8 @@ const EmployeeDashboard = () => {
         return "bg-amber-100 text-amber-800 border border-amber-300";
       case "ORDER_COMPLETE":
         return "bg-green-100 text-green-800 border border-green-300";
+      case "REJECTED":
+        return "bg-rose-100 text-rose-800 border border-rose-300";
       default:
         return getStatusColor(order.status);
     }
@@ -2890,7 +2896,7 @@ const EmployeeDashboard = () => {
                       disabled={isActionThis}
                       onClick={(e) => {
                         e.stopPropagation();
-                        markStatus(order.id, "CANCELLED");
+                        markStatus(order.id, "REJECTED");
                       }}
                     >
                       <XCircle className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />

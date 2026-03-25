@@ -33,7 +33,7 @@ export const ORDER_STATUS_COLORS: Record<string, string> = {
   PREPARING: "bg-amber-100 text-amber-800",
   SERVED: "bg-green-100 text-green-800",
   ORDER_COMPLETE: "bg-green-100 text-green-700",
-  CANCELLED: "bg-red-100 text-red-800",
+  REJECTED: "bg-red-100 text-red-800",
   PAYMENT_PENDING: "bg-amber-100 text-amber-800",
   PAID: "bg-green-100 text-green-700",
   DELAYED: "bg-red-100 text-red-800 border border-red-300",

@@ -394,6 +394,7 @@ enum OrderStatus {
   PREPARING
   SERVED
   ORDER_COMPLETE
+  REJECTED
 }
 
 enum OrderType {

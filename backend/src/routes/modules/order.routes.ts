@@ -59,7 +59,7 @@ const createOrderSchema = z.object({
 });
 
 const updateStatusSchema = z.object({
-  status: z.enum(["ACCEPTED", "PREPARING", "SERVED", "ORDER_COMPLETE"]),
+  status: z.enum(["ACCEPTED", "PREPARING", "SERVED", "ORDER_COMPLETE", "REJECTED"]),
 });
 
 const updateOrderCustomerSchema = z.object({
@@ -933,6 +933,33 @@ orderRouter.patch(
     };
     if (status === OrderStatusEnum.ORDER_COMPLETE) {
       statusUpdateData.completedAt = new Date();
+    }
+
+    // Reject can only be applied to unassigned NEW_ORDER.
+    if (status === (OrderStatusEnum as any).REJECTED) {
+      const existing = await prisma.order.findUnique({
+        where: { id },
+        select: { id: true, status: true, employeeId: true, shiftId: true },
+      });
+      if (!existing) return res.status(404).json({ message: "Order not found" });
+      if (existing.status !== OrderStatusEnum.NEW_ORDER || existing.employeeId != null) {
+        return res.status(409).json({ message: "Order cannot be rejected now" });
+      }
+      const rejected = await prisma.order.update({
+        where: { id },
+        data: { status: (OrderStatusEnum as any).REJECTED, employeeId: null, shiftId: null },
+        include: { branch: true, table: true, items: true, employee: true },
+      });
+      req.app.locals.io?.emit("order:updated", rejected);
+      req.app.locals.io?.to(`branch:${rejected.branchId}`)?.emit("order:updated", rejected);
+      publishOrderStatus({
+        id: rejected.id,
+        status: rejected.status,
+        acceptedAt: (rejected as any).acceptedAt ?? null,
+        completedAt: (rejected as any).completedAt ?? null,
+        updatedAt: (rejected as any).updatedAt ?? null,
+      });
+      return res.json({ order: rejected, message: "Order rejected" });
     }
 
     const order = await prisma.order.update({

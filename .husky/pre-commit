@@ -1,6 +1,7 @@
-#!/bin/sh
-. "$(dirname "$0")/_/husky.sh"
-
 npm run -s lint
-npm run -s test:api
+
+# Optional: API tests can require a reachable DB. Enable when needed.
+if [ "${RUN_API_TESTS_ON_COMMIT:-}" = "true" ]; then
+  npm run -s test:api
+fi
 

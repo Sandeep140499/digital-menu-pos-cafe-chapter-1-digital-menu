@@ -4,6 +4,11 @@ import { prisma } from "../../config/prisma.js";
 import { isMailConfigured, sendEmail } from "../../config/mailer.js";
 import { authenticate, requireRole } from "../../middleware/auth.js";
 import { getPublicMenuViewCount } from "../../services/publicTraffic.js";
+import { computeMonthlyMetrics } from "../../services/monthlyRevenueSnapshot.js";
+import {
+  avgOrdersPerDayForIncompleteMonth,
+  getCalendarMonthBoundsForNow,
+} from "../../utils/calendarMonth.js";
 
 export const reportRouter = Router();
 
@@ -164,6 +169,65 @@ function getBusinessDayRange() {
 
   return { start: businessStart, end: businessEnd };
 }
+
+// Admin: persisted monthly revenue rollups (written at month close before optional order purge)
+reportRouter.get(
+  "/monthly-revenue-snapshots",
+  authenticate,
+  requireRole("ADMIN"),
+  async (_req, res) => {
+    const rows = await prisma.monthlyRevenueSnapshot.findMany({
+      orderBy: [{ year: "desc" }, { month: "desc" }],
+      take: 240,
+    });
+
+    const bounds = getCalendarMonthBoundsForNow();
+    const hasSnapshotForCurrentMonth = rows.some(
+      (r) => r.yearMonth === bounds.yearMonth,
+    );
+
+    let currentMonthLive: Record<string, unknown> | null = null;
+    if (!hasSnapshotForCurrentMonth) {
+      const m = await computeMonthlyMetrics(
+        bounds.from,
+        bounds.to,
+        bounds.daysInMonth,
+      );
+      const avgOrderValue =
+        m.paidOrdersCount > 0 ? m.totalSales / m.paidOrdersCount : 0;
+      const avgOrdersPerDayLive = avgOrdersPerDayForIncompleteMonth(
+        m.totalOrders,
+        new Date(),
+      );
+      currentMonthLive = {
+        isLive: true,
+        year: bounds.year,
+        month: bounds.month,
+        yearMonth: bounds.yearMonth,
+        totalOrders: m.totalOrders,
+        totalSales: m.totalSales,
+        uniqueCustomers: m.uniqueCustomers,
+        newCustomersCount: m.newCustomersCount,
+        avgOrdersPerDay: avgOrdersPerDayLive,
+        paidOrdersCount: m.paidOrdersCount,
+        avgOrderValue,
+        totalLoss: m.totalLoss,
+        overtimeHoursApproved: m.overtimeHoursApproved,
+        approvedLeavesCount: m.approvedLeavesCount,
+        lateEntriesCount: m.lateEntriesCount,
+      };
+    }
+
+    const snapshots = rows.map((r) => {
+      const paid = r.paidOrdersCount ?? 0;
+      const avgOrderValue =
+        paid > 0 ? r.totalSales / paid : 0;
+      return { ...r, avgOrderValue };
+    });
+
+    return res.json({ snapshots, currentMonthLive });
+  },
+);
 
 // Admin: daily sales summary (restaurant day 4 AM → 3:59 AM)
 reportRouter.get(

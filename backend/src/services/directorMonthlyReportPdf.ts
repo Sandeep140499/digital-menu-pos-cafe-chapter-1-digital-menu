@@ -10,6 +10,7 @@ export type MonthlyDirectorReportData = {
   paidOrders: number;
   pendingOrders: number;
   uniqueCustomers: number;
+  newCustomersCount: number;
   totalLosses: number;
   avgDailySale: number;
   avgDailyOrders: number;
@@ -89,7 +90,8 @@ export async function generateMonthlyDirectorReportPdf(
   drawKVRow("Total orders", String(data.totalOrders));
   drawKVRow("Paid orders", String(data.paidOrders));
   drawKVRow("Pending orders", String(data.pendingOrders));
-  drawKVRow("Unique customers", String(data.uniqueCustomers));
+  drawKVRow("Unique customers (orders this month)", String(data.uniqueCustomers));
+  drawKVRow("New customers (first order in month)", String(data.newCustomersCount));
   drawKVRow("Losses (removed items)", formatINR(data.totalLosses));
   drawKVRow("Average daily sale", formatINR(data.avgDailySale));
   drawKVRow("Average daily orders", String(Math.round(data.avgDailyOrders * 10) / 10));
@@ -98,7 +100,8 @@ export async function generateMonthlyDirectorReportPdf(
   drawText("Notes", 13, true);
   drawText("- Revenue is calculated from orders marked PAID in the month.", 10);
   drawText("- Losses are calculated from removed-items reports.", 10);
-  drawText("- Unique customers are estimated using customer mobile when available, otherwise session token.", 10);
+  drawText("- Unique customers: distinct mobiles/sessions with any order in the month.", 10);
+  drawText("- New customers: first-ever order (by mobile or session) falls in this month.", 10);
 
   // Footer
   page.drawText(`Generated automatically by POS • Month: ${data.monthKey}`, {

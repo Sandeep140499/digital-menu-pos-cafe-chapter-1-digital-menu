@@ -441,3 +441,26 @@ model CustomerQuery {
   @@index([createdAt])
   @@index([branchId])
 }
+
+/** Persisted month rollup (written before optional order purge) so admin Revenue page keeps history. */
+model MonthlyRevenueSnapshot {
+  id                    Int      @id @default(autoincrement())
+  year                  Int
+  month                 Int
+  yearMonth             String   @unique
+  totalOrders           Int
+  totalSales            Float
+  uniqueCustomers       Int
+  /** Customers whose first-ever order falls in this month (mobile/session key). */
+  newCustomersCount     Int      @default(0)
+  avgOrdersPerDay       Float
+  paidOrdersCount       Int      @default(0)
+  totalLoss             Float
+  overtimeHoursApproved Float
+  approvedLeavesCount   Int
+  lateEntriesCount      Int
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([year, month])
+}

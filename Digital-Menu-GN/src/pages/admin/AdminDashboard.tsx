@@ -608,6 +608,7 @@ const adminSidebarSections = [
   {
     title: "Finance",
     items: [
+      { key: "revenue", label: "Revenue", icon: BarChart3 },
       { key: "salary-slips", label: "Salary Slips", icon: IndianRupee },
     ] as SidebarItem[],
   },
@@ -3572,12 +3573,14 @@ const AdminDashboard = () => {
     "menu",
     "employees",
     "orders",
+    "all-orders",
     "customer-leaderboard",
     "customer-queries",
     "removed-items",
     "hours",
     "overtime",
     "late",
+    "revenue",
     "salary-slips",
     "certificates",
     "settings",
@@ -3895,6 +3898,30 @@ const AdminDashboard = () => {
   const [salaryTablePage, setSalaryTablePage] = useState(0);
   const SALARY_TABLE_PAGE_SIZE = 10;
 
+  const [monthlyRevenueSnapshots, setMonthlyRevenueSnapshots] = useState<
+    {
+      id: number;
+      year: number;
+      month: number;
+      yearMonth: string;
+      totalOrders: number;
+      totalSales: number;
+      uniqueCustomers: number;
+      newCustomersCount: number;
+      avgOrdersPerDay: number;
+      paidOrdersCount: number;
+      avgOrderValue: number;
+      totalLoss: number;
+      overtimeHoursApproved: number;
+      approvedLeavesCount: number;
+      lateEntriesCount: number;
+      isLive?: boolean;
+    }[]
+  >([]);
+  const [revenueExpandedYearMonth, setRevenueExpandedYearMonth] = useState<
+    string | null
+  >(null);
+
   // Certificates state
   const [certificates, setCertificates] = useState<any[]>([]);
   const [isCertificateDialogOpen, setIsCertificateDialogOpen] = useState(false);
@@ -4068,6 +4095,10 @@ const AdminDashboard = () => {
         { key: "overtimeSummary", url: `${apiBase}/overtime/summary` },
         { key: "branches", url: `${apiBase}/branches` },
         { key: "salarySlips", url: `${apiBase}/reports/salary-slips` },
+        {
+          key: "monthlyRevenueSnapshots",
+          url: `${apiBase}/reports/monthly-revenue-snapshots`,
+        },
       ] as const;
 
       const results = await Promise.allSettled(
@@ -4103,6 +4134,7 @@ const AdminDashboard = () => {
       const overtimeSummaryRes = byKey.get("overtimeSummary");
       const branchesRes = byKey.get("branches");
       const salarySlipsRes = byKey.get("salarySlips");
+      const monthlyRevenueRes = byKey.get("monthlyRevenueSnapshots");
 
       // Read each response body only once (avoid "body stream already read")
       const menuData = menuRes?.ok ? await menuRes.json() : null;
@@ -4110,6 +4142,9 @@ const AdminDashboard = () => {
       const ordersData = ordersRes?.ok ? await ordersRes.json() : null;
       const salarySlipData = salarySlipsRes?.ok
         ? await salarySlipsRes.json()
+        : null;
+      const monthlyRevenueData = monthlyRevenueRes?.ok
+        ? await monthlyRevenueRes.json()
         : null;
       if (trafficRes?.ok) {
         const trafficData = await trafficRes.json();
@@ -4160,6 +4195,59 @@ const AdminDashboard = () => {
           deductions: Array.isArray(s?.deductions) ? s.deductions : [],
         }));
         setSalarySlips(normalized);
+      }
+
+      if (monthlyRevenueData) {
+        const raw = Array.isArray((monthlyRevenueData as any)?.snapshots)
+          ? (monthlyRevenueData as any).snapshots
+          : Array.isArray(monthlyRevenueData)
+            ? monthlyRevenueData
+            : [];
+        const live = (monthlyRevenueData as any)?.currentMonthLive;
+        const normalizeRow = (r: any, isLive?: boolean) => {
+          const paid = Number(r.paidOrdersCount ?? 0);
+          const totalSales = Number(r.totalSales ?? 0);
+          const avgFromApi = Number(r.avgOrderValue ?? NaN);
+          const avgOrderValue =
+            Number.isFinite(avgFromApi) && avgFromApi >= 0
+              ? avgFromApi
+              : paid > 0
+                ? totalSales / paid
+                : 0;
+          return {
+            id:
+              typeof r.id === "number" && Number.isFinite(r.id)
+                ? r.id
+                : 0,
+            year: Number(r.year),
+            month: Number(r.month),
+            yearMonth: String(r.yearMonth ?? ""),
+            totalOrders: Number(r.totalOrders ?? 0),
+            totalSales,
+            uniqueCustomers: Number(r.uniqueCustomers ?? 0),
+            newCustomersCount: Number(
+              r.newCustomersCount ?? r.uniqueCustomers ?? 0,
+            ),
+            avgOrdersPerDay: Number(r.avgOrdersPerDay ?? 0),
+            paidOrdersCount: paid,
+            avgOrderValue,
+            totalLoss: Number(r.totalLoss ?? 0),
+            overtimeHoursApproved: Number(r.overtimeHoursApproved ?? 0),
+            approvedLeavesCount: Number(r.approvedLeavesCount ?? 0),
+            lateEntriesCount: Number(r.lateEntriesCount ?? 0),
+            ...(isLive ? { isLive: true as const } : {}),
+          };
+        };
+        let combined = raw.map((r: any) => normalizeRow(r));
+        if (
+          live &&
+          typeof live.yearMonth === "string" &&
+          !combined.some((x) => x.yearMonth === live.yearMonth)
+        ) {
+          combined = [normalizeRow(live, true), ...combined];
+        }
+        combined.sort((a, b) => b.year - a.year || b.month - a.month);
+        setMonthlyRevenueSnapshots(combined);
       }
 
       if (menuData) {
@@ -8912,6 +9000,195 @@ const AdminDashboard = () => {
       .reduce((sum, s) => sum + (s.netSalary || 0), 0);
   }, [salarySlips]);
 
+  const RevenueSection = () => {
+    return (
+      <div className="w-full min-w-0 space-y-6 overflow-hidden">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            <BarChart3 className="h-5 w-5 text-emerald-600 shrink-0" />
+            <h2 className="text-xl font-bold truncate">Revenue</h2>
+          </div>
+          <p className="text-sm text-muted-foreground max-w-xl">
+            Monthly figures are saved at month close (before optional order
+            archive), so history stays available after orders are cleared.
+          </p>
+        </div>
+
+        <Card className="w-full min-w-0 overflow-hidden rounded-xl border border-slate-200 shadow-sm">
+          <CardHeader className="px-3 sm:px-6 pb-2">
+            <CardTitle className="text-lg">Monthly performance</CardTitle>
+            <CardDescription>
+              Closed months are saved at month end (before optional order
+              archive). The current month updates live until it is closed. New
+              customers counts first-time orders (by phone or session) in that
+              month.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="px-2 sm:px-6 pb-6">
+            <div className="overflow-x-auto -mx-1 px-1">
+              <Table className="min-w-[880px]">
+                <TableHeader>
+                  <TableRow className="bg-slate-50">
+                    <TableHead className="whitespace-nowrap">Month</TableHead>
+                    <TableHead className="whitespace-nowrap text-right">
+                      Total orders
+                    </TableHead>
+                    <TableHead className="whitespace-nowrap text-right">
+                      New customers
+                    </TableHead>
+                    <TableHead className="whitespace-nowrap text-right">
+                      Avg orders / day
+                    </TableHead>
+                    <TableHead className="whitespace-nowrap text-right">
+                      Avg order value
+                    </TableHead>
+                    <TableHead className="whitespace-nowrap text-right">
+                      Total sales
+                    </TableHead>
+                    <TableHead className="w-12 text-center whitespace-nowrap">
+                      More
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {monthlyRevenueSnapshots.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={7}
+                        className="text-center py-10 text-muted-foreground"
+                      >
+                        No revenue data loaded. Snapshots are created when each
+                        month closes; the current month appears here as soon as
+                        there is activity.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    monthlyRevenueSnapshots.map((row) => {
+                      const label = new Date(
+                        row.year,
+                        row.month - 1,
+                        1,
+                      ).toLocaleDateString("en-IN", {
+                        month: "long",
+                        year: "numeric",
+                      });
+                      const open = revenueExpandedYearMonth === row.yearMonth;
+                      return (
+                        <React.Fragment key={row.yearMonth}>
+                          <TableRow className="hover:bg-slate-50/80">
+                            <TableCell className="font-medium">
+                              <span className="inline-flex items-center gap-2 flex-wrap">
+                                {label}
+                                {row.isLive ? (
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-xs font-normal"
+                                  >
+                                    Live
+                                  </Badge>
+                                ) : null}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {row.totalOrders.toLocaleString("en-IN")}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {row.newCustomersCount.toLocaleString("en-IN")}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {Math.round(row.avgOrdersPerDay * 1000) / 1000}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {row.paidOrdersCount > 0
+                                ? formatINR(row.avgOrderValue)
+                                : "—"}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums font-medium text-emerald-800">
+                              {formatINR(row.totalSales)}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-9 w-9 rounded-lg"
+                                aria-expanded={open}
+                                aria-label={
+                                  open
+                                    ? "Hide extra metrics"
+                                    : "View loss and staff metrics"
+                                }
+                                onClick={() =>
+                                  setRevenueExpandedYearMonth((ym) =>
+                                    ym === row.yearMonth ? null : row.yearMonth,
+                                  )
+                                }
+                              >
+                                <Eye
+                                  className={`h-4 w-4 ${open ? "text-emerald-700" : "text-slate-600"}`}
+                                />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                          {open ? (
+                            <TableRow className="bg-slate-50/90 border-0 hover:bg-slate-50/90">
+                              <TableCell colSpan={7} className="py-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+                                  <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                                    <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                                      Loss (removed items)
+                                    </p>
+                                    <p className="text-base font-semibold text-slate-900 mt-0.5">
+                                      {formatINR(row.totalLoss)}
+                                    </p>
+                                  </div>
+                                  <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                                    <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                                      Employee overtime (approved hrs)
+                                    </p>
+                                    <p className="text-base font-semibold text-slate-900 mt-0.5">
+                                      {Math.round(row.overtimeHoursApproved * 100) /
+                                        100}{" "}
+                                      hrs
+                                    </p>
+                                  </div>
+                                  <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                                    <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                                      Approved leaves
+                                    </p>
+                                    <p className="text-base font-semibold text-slate-900 mt-0.5">
+                                      {row.approvedLeavesCount.toLocaleString(
+                                        "en-IN",
+                                      )}
+                                    </p>
+                                  </div>
+                                  <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                                    <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                                      Late entries
+                                    </p>
+                                    <p className="text-base font-semibold text-slate-900 mt-0.5">
+                                      {row.lateEntriesCount.toLocaleString(
+                                        "en-IN",
+                                      )}
+                                    </p>
+                                  </div>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ) : null}
+                        </React.Fragment>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
+
   const handleOpenGenerateDialog = useCallback(() => {
     setSalarySlipPrefill(null);
     setIsSalarySlipDialogOpen(true);
@@ -9486,6 +9763,8 @@ const AdminDashboard = () => {
         return <OvertimeSection />;
       case "late":
         return <LateSection />;
+      case "revenue":
+        return <RevenueSection />;
       case "salary-slips":
         return (
           <SalarySlipsSection
@@ -9522,7 +9801,14 @@ const AdminDashboard = () => {
       default:
         return <OverviewSection />;
     }
-  }, [currentSection, ordersByTable, handleOpenOrderDialog, performanceSummary]);
+  }, [
+    currentSection,
+    ordersByTable,
+    handleOpenOrderDialog,
+    performanceSummary,
+    monthlyRevenueSnapshots,
+    revenueExpandedYearMonth,
+  ]);
 
   if (!ready || !token) {
     return (

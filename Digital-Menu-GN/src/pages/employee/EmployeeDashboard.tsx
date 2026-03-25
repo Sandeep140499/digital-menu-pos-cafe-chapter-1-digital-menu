@@ -253,7 +253,10 @@ function playNewOrderSound(preset?: NewOrderSoundPreset, volume?: number) {
           NEW_ORDER_SOUND_PRESET_KEY,
         ) as NewOrderSoundPreset | null) ??
           "ring");
-      const volRaw = volume ?? Number(window?.localStorage?.getItem(NEW_ORDER_SOUND_VOLUME_KEY) ?? "0.85");
+      // We aim for maximum loudness; actual output is still limited by device/system volume.
+      const volRaw =
+        volume ??
+        Number(window?.localStorage?.getItem(NEW_ORDER_SOUND_VOLUME_KEY) ?? "1");
       const vol = clamp01(volRaw);
 
       const t = ctx.currentTime;
@@ -1255,11 +1258,11 @@ const EmployeeDashboard = () => {
   const [newOrderSoundVolume, setNewOrderSoundVolume] = useState<number>(() => {
     try {
       const raw = Number(
-        window.localStorage.getItem(NEW_ORDER_SOUND_VOLUME_KEY) ?? "0.85",
+        window.localStorage.getItem(NEW_ORDER_SOUND_VOLUME_KEY) ?? "1",
       );
       return clamp01(raw);
     } catch (_) {}
-    return 0.85;
+    return 1;
   });
 
   const { token, ready, refresh, logout } = useAuth();
@@ -1405,16 +1408,17 @@ const EmployeeDashboard = () => {
   useEffect(() => {
     const n = newOrderPopupOrders.length;
     if (n > prevNewOrderCountRef.current) {
-      if (ringingEnabledByAdmin) {
-        playNewOrderSound(newOrderSoundPreset, newOrderSoundVolume);
+      // Ring only for the active (on-shift) employee.
+      if (ringingEnabledByAdmin && shiftActive) {
+        playNewOrderSound(newOrderSoundPreset, 1);
       }
     }
     prevNewOrderCountRef.current = n;
   }, [
     newOrderPopupOrders.length,
     newOrderSoundPreset,
-    newOrderSoundVolume,
     ringingEnabledByAdmin,
+    shiftActive,
   ]);
 
   // Keep ringing (beep) until staff accepts/clears, unless paused.
@@ -1422,16 +1426,17 @@ const EmployeeDashboard = () => {
     if (pauseNewOrderPopup) return;
     if (newOrderPopupOrders.length === 0) return;
     if (!ringingEnabledByAdmin) return;
+    if (!shiftActive) return;
     const id = window.setInterval(() => {
-      playNewOrderSound(newOrderSoundPreset, newOrderSoundVolume);
-    }, 3000);
+      playNewOrderSound(newOrderSoundPreset, 1);
+    }, 2500);
     return () => window.clearInterval(id);
   }, [
     newOrderPopupOrders.length,
     pauseNewOrderPopup,
     newOrderSoundPreset,
-    newOrderSoundVolume,
     ringingEnabledByAdmin,
+    shiftActive,
   ]);
 
   useEffect(() => {

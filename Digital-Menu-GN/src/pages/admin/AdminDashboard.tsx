@@ -20,6 +20,7 @@ import {
   IndianRupee,
   ChefHat,
   Store,
+  Info,
   AlertCircle,
   CheckCircle2,
   MoreHorizontal,
@@ -56,6 +57,7 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -707,6 +709,7 @@ type SettingsSectionContentProps = {
     pendingRemoval: { email: string; expiresAt: string }[];
   } | null;
   loadDirectors: () => Promise<void>;
+  branchesListUnavailable: boolean;
 };
 function parseDirectorEmails(s: string): string[] {
   const arr = (s || "")
@@ -739,6 +742,7 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
     token,
     directorsData,
     loadDirectors,
+    branchesListUnavailable,
   } = props;
   const [newDirectorEmail, setNewDirectorEmail] = useState("");
   const [sendingVerify, setSendingVerify] = useState(false);
@@ -795,7 +799,9 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
         <CardContent>
           {branches.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No branches yet. Create your first branch below.
+              {branchesListUnavailable
+                ? "List could not be loaded from the server. Use “Retry loading” on the banner at the top, or try again in a minute."
+                : "No branches yet. Tap “Create Branch” above to add your first location."}
             </p>
           ) : (
             <div className="space-y-2">
@@ -3779,6 +3785,9 @@ const AdminDashboard = () => {
       _count?: { employees: number; tables: number; orders: number };
     }[]
   >([]);
+  /** True when GET /branches failed (e.g. 503) — show guidance, not a generic error toast. */
+  const [branchesListUnavailable, setBranchesListUnavailable] =
+    useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [branchForm, setBranchForm] = useState<BranchFormState>({
     name: "",
@@ -4129,7 +4138,10 @@ const AdminDashboard = () => {
           byKey.set(key, res.value);
         } else {
           byKey.set(key, null);
-          failed.push(requests[idx]!.key);
+          // Branch list is optional for many screens; handle without scary toast (see below).
+          if (key !== "branches") {
+            failed.push(requests[idx]!.key);
+          }
           console.error(
             "[AdminDashboard] Fetch failed:",
             requests[idx]!.url,
@@ -4189,6 +4201,10 @@ const AdminDashboard = () => {
               ? (branchesData as any).data
               : [];
         setBranches(branchList);
+        setBranchesListUnavailable(false);
+      } else {
+        setBranches([]);
+        setBranchesListUnavailable(true);
       }
 
       if (salarySlipData) {
@@ -4335,10 +4351,11 @@ const AdminDashboard = () => {
         setOrders(ordersData);
       }
 
-      if (failed.length > 0) {
+      const failedForToast = failed.filter((k) => k !== "branches");
+      if (failedForToast.length > 0) {
         toast({
           title: "Dashboard partially loaded",
-          description: `Some data could not be loaded (${failed.join(", ")}). Please refresh.`,
+          description: `Some data could not be loaded (${failedForToast.join(", ")}). Please refresh.`,
           variant: "destructive",
         });
       }
@@ -5036,6 +5053,10 @@ const AdminDashboard = () => {
               ? (branchesData as any).data
               : [];
         setBranches(branchList);
+        setBranchesListUnavailable(false);
+      } else {
+        setBranches([]);
+        setBranchesListUnavailable(true);
       }
       if (notifRes.ok) {
         const notifData = await notifRes.json();
@@ -5090,6 +5111,7 @@ const AdminDashboard = () => {
       if (res.ok) {
         const newBranch = await res.json();
         setBranches((prev) => [...prev, newBranch]);
+        setBranchesListUnavailable(false);
         setCreateBranchOpen(false);
         setCreateBranchForm({
           name: "",
@@ -9809,6 +9831,7 @@ const AdminDashboard = () => {
             token={token}
             directorsData={directorsData}
             loadDirectors={loadDirectors}
+            branchesListUnavailable={branchesListUnavailable}
           />
         );
       default:
@@ -9821,6 +9844,8 @@ const AdminDashboard = () => {
     performanceSummary,
     monthlyRevenueSnapshots,
     revenueExpandedYearMonth,
+    branches,
+    branchesListUnavailable,
   ]);
 
   if (!ready || !token) {
@@ -9912,6 +9937,46 @@ const AdminDashboard = () => {
       }}
     >
       <div className="w-full min-h-full space-y-4 pb-6 relative overflow-x-hidden max-w-full px-0 sm:px-0">
+        {hasLoadedOnce &&
+          (branchesListUnavailable || branches.length === 0) && (
+            <Alert className="border-amber-200 bg-amber-50/90 text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+              <Info className="h-4 w-4 text-amber-700 dark:text-amber-300" />
+              <AlertTitle className="text-amber-950 dark:text-amber-50">
+                {branchesListUnavailable
+                  ? "Branch list could not be loaded"
+                  : "Create your first branch"}
+              </AlertTitle>
+              <AlertDescription className="text-amber-900/90 dark:text-amber-100/90 space-y-2">
+                <p>
+                  {branchesListUnavailable
+                    ? "The server may be starting or temporarily busy (for example 503). This is not because you forgot to add a branch—try again in a moment."
+                    : "Add at least one branch so employees, tables, and orders are tied to a location."}
+                </p>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="default"
+                    className="bg-amber-800 hover:bg-amber-900 text-white"
+                    onClick={() => setActiveSection("settings")}
+                  >
+                    Open Settings → Branches
+                  </Button>
+                  {branchesListUnavailable ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="border-amber-300 bg-white/80"
+                      onClick={() => loadDashboardData()}
+                    >
+                      Retry loading
+                    </Button>
+                  ) : null}
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
         {loading && hasLoadedOnce && (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/40 backdrop-blur-sm">
             <div className="flex flex-col items-center gap-3 rounded-xl bg-white/80 px-5 py-4 shadow-lg border border-slate-200">

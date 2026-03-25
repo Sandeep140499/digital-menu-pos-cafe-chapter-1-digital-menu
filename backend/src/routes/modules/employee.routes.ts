@@ -497,14 +497,14 @@ employeeRouter.get(
   },
 );
 
-// Admin: list only ACTIVE + emailVerified employees (e.g. for salary slip dropdown).
+// Admin: roster-active employees (status ACTIVE). Email verification is separate from roster visibility.
 employeeRouter.get(
   "/active",
   authenticate,
   requireRole("ADMIN"),
   async (_req, res) => {
     const employees = await prisma.employee.findMany({
-      where: { status: "ACTIVE", emailVerified: true },
+      where: { status: "ACTIVE" },
       include: {
         branch: {
           select: { id: true, name: true, location: true, timezone: true },

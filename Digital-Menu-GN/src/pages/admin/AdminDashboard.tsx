@@ -2511,13 +2511,11 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
           ],
     );
   }, [open, prefillSlip, employees]);
-  // API /employees/active returns only ACTIVE; also require emailVerified for "active employee" UX
+  // Roster-active = status ACTIVE (email verification is shown separately in the table)
   const activeEmployees = useMemo(
     () =>
       employees.filter(
-        (e) =>
-          String(e.status || "").toUpperCase() === "ACTIVE" &&
-          (e as any).emailVerified === true,
+        (e) => String(e.status || "").toUpperCase() === "ACTIVE",
       ),
     [employees],
   );
@@ -3965,12 +3963,10 @@ const AdminDashboard = () => {
     return categories.find((c) => c.id === viewingCategory);
   }, [categories, viewingCategory]);
 
-  // Active employees for salary slips and certificates (case-insensitive status + verified email)
+  // Roster-active employees (status ACTIVE) — same as employee list "Active" filter
   const activeEmployees = useMemo(() => {
     return employees.filter(
-      (e) =>
-        String(e.status || "").toUpperCase() === "ACTIVE" &&
-        e.emailVerified === true,
+      (e) => String(e.status || "").toUpperCase() === "ACTIVE",
     );
   }, [employees]);
 
@@ -4025,9 +4021,7 @@ const AdminDashboard = () => {
     const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
     const activeEmps = employees.filter(
-      (e) =>
-        String(e.status || "").toUpperCase() === "ACTIVE" &&
-        e.emailVerified === true,
+      (e) => String(e.status || "").toUpperCase() === "ACTIVE",
     ).length;
 
     const totalItemsSold = itemSales.reduce(
@@ -6918,9 +6912,7 @@ const AdminDashboard = () => {
     [employees, searchQuery, statusFilter],
   );
   const activeCount = employees.filter(
-    (e) =>
-      String(e.status || "").toUpperCase() === "ACTIVE" &&
-      e.emailVerified === true,
+    (e) => String(e.status || "").toUpperCase() === "ACTIVE",
   ).length;
 
   const EmployeesSection = () => (
@@ -6929,8 +6921,8 @@ const AdminDashboard = () => {
         <div>
           <h2 className="text-xl font-bold">Employees</h2>
           <p className="text-sm text-muted-foreground">
-            Active employees = permanent roster. &quot;Currently on Shift&quot;
-            is shown on the dashboard.
+            Active employees = roster status Active (not email verification).
+            &quot;Currently on Shift&quot; uses live shift data.
           </p>
         </div>
         <Button size="sm" onClick={() => setIsEmployeeDialogOpen(true)}>
@@ -7593,8 +7585,7 @@ const AdminDashboard = () => {
               {employees
                 .filter(
                   (e) =>
-                    String(e.status || "").toUpperCase() === "ACTIVE" &&
-                    e.emailVerified === true,
+                    String(e.status || "").toUpperCase() === "ACTIVE",
                 )
                 .map((emp) => (
                   <SelectItem key={emp.id} value={String(emp.id)}>
@@ -7895,8 +7886,7 @@ const AdminDashboard = () => {
                   {employees
                     .filter(
                       (e) =>
-                        String(e.status || "").toUpperCase() === "ACTIVE" &&
-                        e.emailVerified === true,
+                        String(e.status || "").toUpperCase() === "ACTIVE",
                     )
                     .map((emp) => (
                       <SelectItem key={emp.id} value={String(emp.id)}>
@@ -8263,8 +8253,7 @@ const AdminDashboard = () => {
                   {employees
                     .filter(
                       (e) =>
-                        String(e.status || "").toUpperCase() === "ACTIVE" &&
-                        e.emailVerified === true,
+                        String(e.status || "").toUpperCase() === "ACTIVE",
                     )
                     .map((emp) => (
                       <SelectItem key={emp.id} value={String(emp.id)}>
@@ -9378,8 +9367,7 @@ const AdminDashboard = () => {
                   {employees
                     .filter(
                       (e) =>
-                        String(e.status || "").toUpperCase() === "ACTIVE" &&
-                        e.emailVerified === true,
+                        String(e.status || "").toUpperCase() === "ACTIVE",
                     )
                     .map((emp) => (
                       <SelectItem key={emp.id} value={String(emp.id)}>

@@ -874,6 +874,27 @@ const Index = () => {
   const [menuLoadError, setMenuLoadError] = useState<string | null>(null);
   const MENU_CACHE_KEY = "dm_public_menu_cache_v1";
 
+  // Hydrate from last saved menu immediately (fast first paint), then refresh from server.
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(MENU_CACHE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as {
+        categories?: any[];
+        bestSellerItemIds?: number[];
+      };
+      if (Array.isArray(parsed.categories) && parsed.categories.length > 0) {
+        setMenuCategories(parsed.categories);
+        setBestSellerItemIds(
+          Array.isArray(parsed.bestSellerItemIds) ? parsed.bestSellerItemIds : [],
+        );
+        setIsLoadingMenu(false);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const fetchMenu = useCallback(async () => {
     setMenuLoadError(null);
     setIsLoadingMenu(true);
@@ -884,8 +905,9 @@ const Index = () => {
         setMenuLoadError(
           data?.message || `Failed to load menu (${res.status})`,
         );
-        setMenuCategories([]);
-        setBestSellerItemIds([]);
+        // Keep last known menu on screen (cached/previous) if we have one.
+        setMenuCategories((prev) => (prev.length ? prev : []));
+        setBestSellerItemIds((prev) => (prev.length ? prev : []));
         return;
       }
       const categories = Array.isArray(data) ? data : (data?.categories ?? []);
@@ -932,8 +954,9 @@ const Index = () => {
             ? "Request timed out. Please try again."
             : `Could not reach the server at ${apiBase}. Please try again in a moment.`,
         );
-        setMenuCategories([]);
-        setBestSellerItemIds([]);
+        // Don't wipe any already-rendered menu (cache hydrate) on transient network errors.
+        setMenuCategories((prev) => (prev.length ? prev : []));
+        setBestSellerItemIds((prev) => (prev.length ? prev : []));
       }
       toast({
         title: "Error",

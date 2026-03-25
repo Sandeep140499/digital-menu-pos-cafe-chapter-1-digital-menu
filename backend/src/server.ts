@@ -5,6 +5,7 @@ import cors from "cors";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import morgan from "morgan";
+import compression from "compression";
 import { Server as SocketIOServer } from "socket.io";
 import "./utils/asyncErrors.js";
 import { router } from "./routes/index.js";
@@ -71,6 +72,8 @@ app.use(
   }),
 );
 app.use(cookieParser());
+// Compression significantly reduces payload size for menu + dashboards (mobile networks).
+app.use(compression());
 app.use(express.json());
 app.use(morgan("dev"));
 

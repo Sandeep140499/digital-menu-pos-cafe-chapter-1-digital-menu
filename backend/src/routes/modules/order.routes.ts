@@ -103,42 +103,22 @@ const modifyOrderV2Schema = z.object({
 export const orderRouter = Router();
 
 async function assignEmployeeToOrder(branchId: number) {
-  // active employees = status ACTIVE + active (non-paused) shift
-  const activeShifts = await prisma.employeeShift.findMany({
+  // For customer order placement we only need to know if *any* employee is active.
+  // Keep this query fast (single indexed lookup) to protect API latency under load.
+  const shift = await prisma.employeeShift.findFirst({
     where: {
       branchId,
       shiftEnd: null,
       status: "ACTIVE" as any,
       employee: { status: "ACTIVE" },
     },
-    include: { employee: true },
+    select: { id: true, employeeId: true },
+    orderBy: { shiftStart: "desc" },
   });
 
-  if (!activeShifts.length) return { employeeId: null as number | null, shiftId: null as number | null };
-
-  // pick shift with least number of orders today
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date();
-  todayEnd.setHours(23, 59, 59, 999);
-
-  const withCounts = await Promise.all(
-    activeShifts.map(async (shift) => {
-      const count = await prisma.order.count({
-        where: {
-          shiftId: shift.id,
-          createdAt: { gte: todayStart, lte: todayEnd },
-        },
-      });
-      return { shift, count };
-    }),
-  );
-
-  withCounts.sort((a, b) => a.count - b.count);
-
   return {
-    employeeId: withCounts[0].shift.employeeId,
-    shiftId: withCounts[0].shift.id,
+    employeeId: shift?.employeeId ?? null,
+    shiftId: shift?.id ?? null,
   };
 }
 

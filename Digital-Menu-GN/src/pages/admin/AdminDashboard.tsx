@@ -4064,46 +4064,72 @@ const AdminDashboard = () => {
       setLoading(true);
 
       const opts = { headers: { Authorization: `Bearer ${token}` } };
-      const [
-        menuRes,
-        employeesRes,
-        ordersRes,
-        trafficRes,
-        dashboardSummaryRes,
-        activeShiftsRes,
-        overtimeSummaryRes,
-        branchesRes,
-        salarySlipsRes,
-      ] = await Promise.all([
-        fetchWithTimeout(`${apiBase}/menu/admin`, opts),
-        fetchWithTimeout(`${apiBase}/employees`, opts),
-        fetchWithTimeout(`${apiBase}/orders/live`, opts),
-        fetchWithTimeout(`${apiBase}/config/public-traffic`, opts),
-        fetchWithTimeout(`${apiBase}/reports/dashboard-summary`, opts),
-        fetchWithTimeout(`${apiBase}/shift/active`, opts),
-        fetchWithTimeout(`${apiBase}/overtime/summary`, opts),
-        fetchWithTimeout(`${apiBase}/branches`, opts),
-        fetchWithTimeout(`${apiBase}/reports/salary-slips`, opts),
-      ]);
+      const requests = [
+        { key: "menu", url: `${apiBase}/menu/admin` },
+        { key: "employees", url: `${apiBase}/employees` },
+        { key: "orders", url: `${apiBase}/orders/live` },
+        { key: "traffic", url: `${apiBase}/config/public-traffic` },
+        { key: "dashboardSummary", url: `${apiBase}/reports/dashboard-summary` },
+        { key: "activeShifts", url: `${apiBase}/shift/active` },
+        { key: "overtimeSummary", url: `${apiBase}/overtime/summary` },
+        { key: "branches", url: `${apiBase}/branches` },
+        { key: "salarySlips", url: `${apiBase}/reports/salary-slips` },
+      ] as const;
+
+      const results = await Promise.allSettled(
+        requests.map((r) => fetchWithTimeout(r.url, opts)),
+      );
+
+      const failed: string[] = [];
+      const byKey = new Map<
+        (typeof requests)[number]["key"],
+        Response | null
+      >();
+      results.forEach((res, idx) => {
+        const key = requests[idx]!.key;
+        if (res.status === "fulfilled") {
+          byKey.set(key, res.value);
+        } else {
+          byKey.set(key, null);
+          failed.push(requests[idx]!.key);
+          console.error(
+            "[AdminDashboard] Fetch failed:",
+            requests[idx]!.url,
+            res.reason,
+          );
+        }
+      });
+
+      const menuRes = byKey.get("menu");
+      const employeesRes = byKey.get("employees");
+      const ordersRes = byKey.get("orders");
+      const trafficRes = byKey.get("traffic");
+      const dashboardSummaryRes = byKey.get("dashboardSummary");
+      const activeShiftsRes = byKey.get("activeShifts");
+      const overtimeSummaryRes = byKey.get("overtimeSummary");
+      const branchesRes = byKey.get("branches");
+      const salarySlipsRes = byKey.get("salarySlips");
 
       // Read each response body only once (avoid "body stream already read")
-      const menuData = menuRes.ok ? await menuRes.json() : null;
-      const empData = employeesRes.ok ? await employeesRes.json() : null;
-      const ordersData = ordersRes.ok ? await ordersRes.json() : null;
-      const salarySlipData = salarySlipsRes.ok ? await salarySlipsRes.json() : null;
-      if (trafficRes.ok) {
+      const menuData = menuRes?.ok ? await menuRes.json() : null;
+      const empData = employeesRes?.ok ? await employeesRes.json() : null;
+      const ordersData = ordersRes?.ok ? await ordersRes.json() : null;
+      const salarySlipData = salarySlipsRes?.ok
+        ? await salarySlipsRes.json()
+        : null;
+      if (trafficRes?.ok) {
         const trafficData = await trafficRes.json();
         setPublicNetworkTraffic(trafficData.publicNetworkTraffic ?? 0);
       }
-      if (dashboardSummaryRes.ok) {
+      if (dashboardSummaryRes?.ok) {
         const summaryData = await dashboardSummaryRes.json();
         setPerformanceSummary(summaryData);
       }
-      if (activeShiftsRes.ok) {
+      if (activeShiftsRes?.ok) {
         const activeData = await activeShiftsRes.json();
         setActiveShiftsNow(activeData.shifts || []);
       }
-      if (overtimeSummaryRes.ok) {
+      if (overtimeSummaryRes?.ok) {
         const summary = await overtimeSummaryRes.json();
         setOvertimeSummary({
           pendingOvertimeCount: summary.pendingOvertimeCount ?? 0,
@@ -4111,7 +4137,7 @@ const AdminDashboard = () => {
           overtimeRunning: summary.overtimeRunning ?? [],
         });
       }
-      if (branchesRes.ok) {
+      if (branchesRes?.ok) {
         const branchesData = await branchesRes.json();
         const branchList = Array.isArray(branchesData)
           ? branchesData
@@ -4212,6 +4238,14 @@ const AdminDashboard = () => {
 
       if (ordersData) {
         setOrders(ordersData);
+      }
+
+      if (failed.length > 0) {
+        toast({
+          title: "Dashboard partially loaded",
+          description: `Some data could not be loaded (${failed.join(", ")}). Please refresh.`,
+          variant: "destructive",
+        });
       }
     } catch (error) {
       const isTimeout =

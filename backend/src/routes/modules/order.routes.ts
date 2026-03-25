@@ -44,7 +44,8 @@ const createOrderSchema = z.object({
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["tableNumber"],
-        message: "Please enter your table number",
+        message:
+          "Dine-in table must be exactly one digit (0–9), as printed on your table. Do not enter 10, letters, or spaces.",
       });
     }
   }

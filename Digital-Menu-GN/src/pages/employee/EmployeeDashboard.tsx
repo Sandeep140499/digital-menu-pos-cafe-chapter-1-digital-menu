@@ -1152,7 +1152,9 @@ function AddOrderSection({
     if (!cart.length) { toast.error("Add at least one item"); return; }
     if (!customerName.trim()) { toast.error("Customer name is required"); return; }
     if (orderType === "DINE_IN" && !/^\d$/.test(tableNumber.trim())) {
-      toast.error("Please enter your table number");
+      toast.error(
+        "Table number: enter one digit only (0–9), as on the table sticker.",
+      );
       return;
     }
     if (!branchId) { toast.error("Branch not loaded. Refresh and try again."); return; }
@@ -1181,8 +1183,22 @@ function AddOrderSection({
         }),
       });
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || "Failed to place order");
+        const err = (await res.json().catch(() => ({}))) as {
+          message?: string;
+          errors?: Array<{ path?: (string | number)[]; message?: string }>;
+        };
+        const issues = Array.isArray(err.errors) ? err.errors : [];
+        const tableIssue = issues.find(
+          (i) => Array.isArray(i.path) && String(i.path[0]) === "tableNumber",
+        );
+        const detail =
+          tableIssue?.message ||
+          issues.find((i) => i?.message)?.message ||
+          (err.message && err.message !== "Invalid input" ? err.message : null);
+        throw new Error(
+          detail ||
+            "Could not place order. For dine-in, table must be one digit (0–9).",
+        );
       }
       const data = await res.json();
       const newOrderId = data.order?.id ?? null;
@@ -1406,8 +1422,8 @@ function AddOrderSection({
                       }
                       className="h-9 text-sm"
                     />
-                    <p className="text-[10px] text-muted-foreground mt-0.5">
-                      Single digit only.
+                    <p className="text-[10px] text-amber-900/90 bg-amber-50 border border-amber-200 rounded px-2 py-1 mt-1">
+                      One digit (0–9) only—same as on the table. Not 10 or letters.
                     </p>
                   </div>
                 )}

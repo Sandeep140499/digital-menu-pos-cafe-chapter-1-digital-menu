@@ -249,8 +249,9 @@ function OrderCartDialog({
                   placeholder="One digit only (0–9)"
                   className="w-full rounded-md border px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600"
                 />
-                <span className="text-[10px] text-muted-foreground">
-                  Table number must be a single digit.
+                <span className="text-[10px] text-amber-900/80 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                  Use one digit only (0–9), matching the number on your table. If your
+                  table shows two digits, ask staff which single digit to use.
                 </span>
               </label>
             )}
@@ -1202,8 +1203,9 @@ const Index = () => {
         !/^\d$/.test(formData.tableNumber.trim())
       ) {
         toast({
-          title: "Invalid table number",
-          description: "Please enter your table number.",
+          title: "Table number: one digit only",
+          description:
+            "Enter a single number from 0 to 9 (the digit on your table). Two digits (e.g. 10) or letters are not accepted.",
           variant: "destructive",
         });
         return;
@@ -1243,8 +1245,21 @@ const Index = () => {
         });
 
         if (!response.ok) {
-          const err = await response.json().catch(() => ({}));
-          const msg = err.message || "Failed to place order";
+          const err = (await response.json().catch(() => ({}))) as {
+            message?: string;
+            errors?: Array<{ path?: (string | number)[]; message?: string }>;
+          };
+          const issues = Array.isArray(err.errors) ? err.errors : [];
+          const tableIssue = issues.find(
+            (i) => Array.isArray(i.path) && String(i.path[0]) === "tableNumber",
+          );
+          const firstDetail =
+            tableIssue?.message ||
+            issues[0]?.message ||
+            (err.message && err.message !== "Invalid input" ? err.message : null);
+          const msg =
+            firstDetail ||
+            "Could not place your order. For dine-in, use one digit (0–9) for the table.";
           throw new Error(msg);
         }
 
@@ -1275,8 +1290,8 @@ const Index = () => {
             ? error.message
             : "Please try again or call the staff.";
         toast({
-          title: message,
-          description: undefined,
+          title: "Order not sent",
+          description: message,
           variant: "destructive",
         });
       } finally {

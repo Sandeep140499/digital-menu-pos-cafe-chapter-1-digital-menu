@@ -487,7 +487,7 @@ const MenuCategoriesSection = memo(function MenuCategoriesSection({
       </div>
 
       <div className="grid gap-3 sm:gap-4 lg:gap-6 grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 w-full max-w-full min-w-0">
-        {isLoadingMenu && (
+        {isLoadingMenu && menuCategories.length === 0 && (
           <>
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <div
@@ -964,6 +964,7 @@ const Index = () => {
         bestSellerItemIds?: number[];
       };
       if (Array.isArray(parsed.categories) && parsed.categories.length > 0) {
+        menuCategoriesRef.current = parsed.categories;
         setMenuCategories(parsed.categories);
         setBestSellerItemIds(
           Array.isArray(parsed.bestSellerItemIds) ? parsed.bestSellerItemIds : [],
@@ -980,7 +981,23 @@ const Index = () => {
     if (!silent) {
       setMenuLoadError(null);
     }
-    setIsLoadingMenu(true);
+    const hasCachedCategories = (() => {
+      try {
+        const raw = window.localStorage.getItem(MENU_CACHE_KEY);
+        if (!raw) return false;
+        const p = JSON.parse(raw) as { categories?: unknown[] };
+        return Array.isArray(p.categories) && p.categories.length > 0;
+      } catch {
+        return false;
+      }
+    })();
+    const hasMenuData =
+      (menuCategoriesRef.current as unknown[]).length > 0 || hasCachedCategories;
+    // Only show the full grid skeleton when there is nothing to display yet.
+    // Silent / background fetches must not flip loading — that caused skeleton + cards together (flashing).
+    if (!silent && !hasMenuData) {
+      setIsLoadingMenu(true);
+    }
     try {
       const res = await fetchWithTimeout(`${apiBase}/menu`);
       const data = await res.json().catch(() => ({}));

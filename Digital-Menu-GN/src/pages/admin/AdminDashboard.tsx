@@ -237,7 +237,7 @@ function buildPayslipHtmlFromSlip(
   const totalDeductions = deductionRows.reduce((s, r) => s + r.amount, 0);
   const grossEarnings = basicSalary + totalAllowances;
   const netSalary =
-    slip.netSalary != null && slip.netSalary !== ""
+    slip.netSalary != null
       ? Number(slip.netSalary)
       : grossEarnings - totalDeductions;
   return buildPayslipPrintHtmlModule({
@@ -254,14 +254,8 @@ function buildPayslipHtmlFromSlip(
     selectedEmployee: slip.employee
       ? { name: slip.employee.name, employeeCode: slip.employeeCode }
       : undefined,
-    paidDays:
-      slip.paidDays != null && slip.paidDays !== ""
-        ? Number(slip.paidDays)
-        : 22,
-    lopDays:
-      slip.lopDays != null && slip.lopDays !== ""
-        ? Number(slip.lopDays)
-        : 0,
+    paidDays: slip.paidDays != null ? Number(slip.paidDays) : 22,
+    lopDays: slip.lopDays != null ? Number(slip.lopDays) : 0,
     basicSalary,
     allowanceRows,
     deductionRows,
@@ -488,6 +482,22 @@ const formatINR = (amount: number) => {
   }).format(amount);
 };
 
+type NewOrderSoundPreset = "beep" | "ring" | "siren" | "chime";
+type BranchFormState = {
+  name: string;
+  location: string;
+  timezone: string;
+  logoUrl: string;
+  phone: string;
+  googleReviewUrl: string;
+  pincode: string;
+  directorsEmail: string;
+  showTotalAmountToCustomers: boolean;
+  enableNewOrderRinging?: boolean;
+  newOrderSoundPreset?: NewOrderSoundPreset;
+  newOrderSoundVolume?: number;
+};
+
 // Memoized order row: one row per order, green when completed
 const AdminOrderRow = memo(function AdminOrderRow({
   order,
@@ -622,6 +632,8 @@ type SettingsSectionContentProps = {
     directorsEmail: string;
     showTotalAmountToCustomers: boolean;
     enableNewOrderRinging?: boolean;
+    newOrderSoundPreset?: "beep" | "ring" | "siren" | "chime";
+    newOrderSoundVolume?: number;
   };
   setBranchForm: React.Dispatch<
     React.SetStateAction<{
@@ -635,6 +647,8 @@ type SettingsSectionContentProps = {
       directorsEmail: string;
       showTotalAmountToCustomers: boolean;
       enableNewOrderRinging?: boolean;
+      newOrderSoundPreset?: "beep" | "ring" | "siren" | "chime";
+      newOrderSoundVolume?: number;
     }>
   >;
   branch: any;
@@ -653,6 +667,8 @@ type SettingsSectionContentProps = {
     directorsEmail: string;
     showTotalAmountToCustomers: boolean;
     enableNewOrderRinging?: boolean;
+    newOrderSoundPreset?: "beep" | "ring" | "siren" | "chime";
+    newOrderSoundVolume?: number;
   };
   setCreateBranchForm: React.Dispatch<
     React.SetStateAction<{
@@ -666,6 +682,8 @@ type SettingsSectionContentProps = {
       directorsEmail: string;
       showTotalAmountToCustomers: boolean;
       enableNewOrderRinging?: boolean;
+      newOrderSoundPreset?: "beep" | "ring" | "siren" | "chime";
+      newOrderSoundVolume?: number;
     }>
   >;
   handleCreateBranch: () => Promise<void>;
@@ -1130,6 +1148,57 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
                   }))
                 }
               />
+            </div>
+            <div className="grid gap-2">
+              <Label className="text-sm">New order sound (global)</Label>
+              <p className="text-xs text-muted-foreground">
+                This sound is applied to all employee devices (employees cannot change it).
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid gap-1">
+                  <Label className="text-xs text-slate-700">Sound preset</Label>
+                  <Select
+                    value={branchForm.newOrderSoundPreset || "ring"}
+                    onValueChange={(v) =>
+                      setBranchForm((prev) => ({
+                        ...prev,
+                        newOrderSoundPreset: v as any,
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select sound" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ring">Ring (loud)</SelectItem>
+                      <SelectItem value="siren">Siren (very loud)</SelectItem>
+                      <SelectItem value="chime">Chime</SelectItem>
+                      <SelectItem value="beep">Beep</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-1">
+                  <Label className="text-xs text-slate-700">
+                    Volume: {Math.round(((branchForm.newOrderSoundVolume ?? 1) as number) * 100)}%
+                  </Label>
+                  <div className="rounded-md border bg-white px-3 py-3">
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={branchForm.newOrderSoundVolume ?? 1}
+                      onChange={(e) =>
+                        setBranchForm((prev) => ({
+                          ...prev,
+                          newOrderSoundVolume: Number(e.target.value),
+                        }))
+                      }
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
             {branchForm.logoUrl && (
               <div className="flex items-center gap-4 p-3 bg-slate-50 rounded-lg">
@@ -2448,7 +2517,7 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
       employees.filter(
         (e) =>
           String(e.status || "").toUpperCase() === "ACTIVE" &&
-          e.emailVerified === true,
+          (e as any).emailVerified === true,
       ),
     [employees],
   );
@@ -3708,7 +3777,7 @@ const AdminDashboard = () => {
     }[]
   >([]);
   const [notifications, setNotifications] = useState<any[]>([]);
-  const [branchForm, setBranchForm] = useState({
+  const [branchForm, setBranchForm] = useState<BranchFormState>({
     name: "",
     location: "",
     timezone: "Asia/Kolkata",
@@ -3718,9 +3787,12 @@ const AdminDashboard = () => {
     pincode: "",
     directorsEmail: "",
     showTotalAmountToCustomers: true,
+    enableNewOrderRinging: true,
+    newOrderSoundPreset: "ring",
+    newOrderSoundVolume: 1,
   });
   const [createBranchOpen, setCreateBranchOpen] = useState(false);
-  const [createBranchForm, setCreateBranchForm] = useState({
+  const [createBranchForm, setCreateBranchForm] = useState<BranchFormState>({
     name: "",
     location: "",
     timezone: "Asia/Kolkata",
@@ -3730,6 +3802,9 @@ const AdminDashboard = () => {
     pincode: "",
     directorsEmail: "",
     showTotalAmountToCustomers: true,
+    enableNewOrderRinging: true,
+    newOrderSoundPreset: "ring",
+    newOrderSoundVolume: 1,
   });
   const [savingBranch, setSavingBranch] = useState(false);
   const [directorsData, setDirectorsData] = useState<{
@@ -4808,6 +4883,16 @@ const AdminDashboard = () => {
             typeof branchData?.showTotalAmountToCustomers === "boolean"
               ? branchData.showTotalAmountToCustomers
               : true,
+          enableNewOrderRinging:
+            typeof branchData?.enableNewOrderRinging === "boolean"
+              ? branchData.enableNewOrderRinging
+              : true,
+          newOrderSoundPreset:
+            branchData?.newOrderSoundPreset || "ring",
+          newOrderSoundVolume:
+            typeof branchData?.newOrderSoundVolume === "number"
+              ? branchData.newOrderSoundVolume
+              : 1,
         });
       } else {
         setBranch(null);
@@ -4951,6 +5036,16 @@ const AdminDashboard = () => {
             typeof updated?.showTotalAmountToCustomers === "boolean"
               ? updated.showTotalAmountToCustomers
               : true,
+          enableNewOrderRinging:
+            typeof updated?.enableNewOrderRinging === "boolean"
+              ? updated.enableNewOrderRinging
+              : true,
+          newOrderSoundPreset:
+            updated?.newOrderSoundPreset || "ring",
+          newOrderSoundVolume:
+            typeof updated?.newOrderSoundVolume === "number"
+              ? updated.newOrderSoundVolume
+              : 1,
         });
         if (typeof window !== "undefined") {
           if (updated?.name)
@@ -6226,6 +6321,13 @@ const AdminDashboard = () => {
       window: { hours: number };
     };
 
+    type MetricsSummary = {
+      now: number;
+      windowMinutes: number;
+      socketio?: { activeConnections?: number };
+      http?: { rpm?: number; totalCount?: number; totalErrorCount?: number };
+    };
+
     type CompletionRow = {
       employeeId: number;
       employeeName: string;
@@ -6249,6 +6351,10 @@ const AdminDashboard = () => {
     }>({ CUSTOMER: null, EMPLOYEE: null, ADMIN: null });
     const [sysPerfLoading, setSysPerfLoading] = useState(false);
     const [sysPerf, setSysPerf] = useState<SystemPerf | null>(null);
+    const [metricsLoading, setMetricsLoading] = useState(false);
+    const [metricsSummary, setMetricsSummary] = useState<MetricsSummary | null>(
+      null,
+    );
     const [completionLoading, setCompletionLoading] = useState(false);
     const [completionRows, setCompletionRows] = useState<CompletionRow[]>([]);
 
@@ -6327,6 +6433,25 @@ const AdminDashboard = () => {
       }
     }, [token]);
 
+    const loadMetricsSummary = useCallback(async () => {
+      setMetricsLoading(true);
+      try {
+        const params = new URLSearchParams({
+          windowMinutes: String(apiPerfWindowMinutes),
+        });
+        const res = await fetch(`${apiBase}/metrics/summary?${params}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) throw new Error("Failed to load metrics");
+        setMetricsSummary(data as MetricsSummary);
+      } catch {
+        setMetricsSummary(null);
+      } finally {
+        setMetricsLoading(false);
+      }
+    }, [apiPerfWindowMinutes, token]);
+
     const loadCompletion = useCallback(async () => {
       if (!token) return;
       setCompletionLoading(true);
@@ -6359,15 +6484,24 @@ const AdminDashboard = () => {
       loadApiPerf();
       loadSysPerf();
       loadCompletion();
+      loadMetricsSummary();
       const id = window.setInterval(() => loadApiPerf(), 30_000);
       const id2 = window.setInterval(() => loadSysPerf(), 60_000);
       const id3 = window.setInterval(() => loadCompletion(), 120_000);
+      const id4 = window.setInterval(() => loadMetricsSummary(), 30_000);
       return () => {
         window.clearInterval(id);
         window.clearInterval(id2);
         window.clearInterval(id3);
+        window.clearInterval(id4);
       };
-    }, [activeSection, loadApiPerf, loadSysPerf, loadCompletion]);
+    }, [
+      activeSection,
+      loadApiPerf,
+      loadSysPerf,
+      loadCompletion,
+      loadMetricsSummary,
+    ]);
 
     const overall = useMemo(() => {
       const rows = apiPerf?.rows ?? [];
@@ -6452,7 +6586,7 @@ const AdminDashboard = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
           <Card className="bg-white">
             <CardContent className="p-4">
               <p className="text-xs text-muted-foreground">Requests / min</p>
@@ -6482,6 +6616,19 @@ const AdminDashboard = () => {
               <p className="text-xs text-muted-foreground">Errors (5xx)</p>
               <p className="mt-1 text-lg font-bold text-red-600">
                 {overall.totalErrorCount || 0}
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="bg-white">
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">Active devices</p>
+              <p className="mt-1 text-lg font-bold text-slate-900">
+                {metricsLoading && !metricsSummary
+                  ? "…"
+                  : metricsSummary?.socketio?.activeConnections ?? 0}
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Socket.IO connections
               </p>
             </CardContent>
           </Card>
@@ -7187,6 +7334,58 @@ const AdminDashboard = () => {
             />
             Refresh
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={leaderboard.length === 0}
+            className="min-h-[44px] sm:min-h-0"
+            onClick={() => {
+              const rows = leaderboard.map((r, idx) => ({
+                rank: idx + 1,
+                customerName: r.customerName || "",
+                customerMobile: r.customerMobile || "",
+                totalOrders: r.totalOrders ?? 0,
+                totalSpent: r.totalSpent ?? 0,
+                lastOrderDate: r.lastOrderDate || "",
+              }));
+              const header = [
+                "Rank",
+                "Customer Name",
+                "Mobile Number",
+                "Total Orders",
+                "Total Spent",
+                "Last Order Date",
+              ];
+              const escape = (v: unknown) =>
+                `"${String(v ?? "").replace(/"/g, '""')}"`;
+              const csv = [
+                header.join(","),
+                ...rows.map((r) =>
+                  [
+                    r.rank,
+                    r.customerName,
+                    r.customerMobile,
+                    r.totalOrders,
+                    r.totalSpent,
+                    r.lastOrderDate,
+                  ]
+                    .map(escape)
+                    .join(","),
+                ),
+              ].join("\n");
+              const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `customer-leads-${new Date().toISOString().slice(0, 10)}.csv`;
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+              setTimeout(() => URL.revokeObjectURL(url), 1000);
+            }}
+          >
+            Download Excel (CSV)
+          </Button>
         </div>
       </div>
 
@@ -7225,8 +7424,11 @@ const AdminDashboard = () => {
                   <TableHead className="min-w-[140px] sm:min-w-[180px] whitespace-nowrap">
                     Customer Name
                   </TableHead>
-                  <TableHead className="min-w-[110px] whitespace-nowrap">
+                  <TableHead className="min-w-[140px] whitespace-nowrap">
                     Mobile Number
+                  </TableHead>
+                  <TableHead className="w-20 whitespace-nowrap text-right">
+                    Action
                   </TableHead>
                   <TableHead className="w-24 whitespace-nowrap text-right">
                     Total Orders
@@ -7245,6 +7447,64 @@ const AdminDashboard = () => {
                     </TableCell>
                     <TableCell className="text-muted-foreground align-top font-mono text-sm">
                       {row.customerMobile || "—"}
+                    </TableCell>
+                    <TableCell className="text-right align-top">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={!row.customerMobile || !token}
+                        onClick={async () => {
+                          if (!token || !row.customerMobile) return;
+                          try {
+                            const res = await fetch(
+                              `${apiBase}/orders/customer-leads/${encodeURIComponent(row.customerMobile)}`,
+                              {
+                                method: "DELETE",
+                                headers: { Authorization: `Bearer ${token}` },
+                              },
+                            );
+                            if (!res.ok) {
+                              const err = await res.json().catch(() => ({}));
+                              toast({
+                                title: "Failed",
+                                description:
+                                  (err as any).message ||
+                                  "Could not delete this mobile number.",
+                                variant: "destructive",
+                              });
+                              return;
+                            }
+                            const data = await res.json().catch(() => ({}));
+                            toast({
+                              title: "Deleted",
+                              description: `Mobile cleared from ${data.clearedCount ?? 0} order(s).`,
+                            });
+                            // refresh leaderboard
+                            setTimeout(() => {
+                              try {
+                                const params = new URLSearchParams({
+                                  limit: String(leaderboardLimit),
+                                  sortBy: leaderboardSortBy,
+                                });
+                                fetch(`${apiBase}/orders/customer-leaderboard?${params}`, {
+                                  headers: { Authorization: `Bearer ${token}` },
+                                })
+                                  .then((r) => (r.ok ? r.json() : null))
+                                  .then((d) => d && setLeaderboard(d.leaderboard ?? []))
+                                  .catch(() => {});
+                              } catch {}
+                            }, 150);
+                          } catch (e: any) {
+                            toast({
+                              title: "Failed",
+                              description: e?.message || "Delete failed",
+                              variant: "destructive",
+                            });
+                          }
+                        }}
+                      >
+                        Delete
+                      </Button>
                     </TableCell>
                     <TableCell className="text-right font-semibold align-top">
                       {row.totalOrders}

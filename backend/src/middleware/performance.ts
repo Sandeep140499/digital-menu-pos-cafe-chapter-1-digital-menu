@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import { httpRequestDurationMs, httpRequestsTotal } from "../services/metrics.js";
 
 type Actor = "ADMIN" | "EMPLOYEE" | "CUSTOMER";
 
@@ -162,15 +163,23 @@ export function performanceMiddleware(req: Request, res: Response, next: NextFun
     const end = process.hrtime.bigint();
     const durationMs = Number(end - start) / 1_000_000;
     const path = normalizePath(original.replace(/^\/api/, "") || "/");
+    const status = res.statusCode ?? 0;
+    const actor = getActor(req);
     perfStore.add({
       ts,
-      actor: getActor(req),
+      actor,
       method: (req.method || "GET").toUpperCase(),
       path,
-      status: res.statusCode ?? 0,
+      status,
       durationMs,
       bytesSent,
     });
+    try {
+      httpRequestsTotal.labels((req.method || "GET").toUpperCase(), path, String(status), actor).inc();
+      httpRequestDurationMs.labels((req.method || "GET").toUpperCase(), path, String(status), actor).observe(durationMs);
+    } catch {
+      // metrics should never break request handling
+    }
   });
 
   next();

@@ -52,6 +52,24 @@ export async function endShiftAndCreateOvertimeIfNeeded(
     },
   });
 
+  // Any in-progress orders should be unassigned so other staff can accept.
+  // This ensures auto-close behaves the same as a normal end shift.
+  try {
+    await prisma.order.updateMany({
+      where: {
+        shiftId,
+        status: { in: ["NEW_ORDER", "ACCEPTED", "PREPARING", "SERVED"] as any },
+      },
+      data: {
+        employeeId: null,
+        shiftId: null,
+        status: "NEW_ORDER" as any,
+      },
+    });
+  } catch {
+    // Non-fatal; shift still ended.
+  }
+
   const requiredHours = shift.employee.workingHoursPerDay ?? DEFAULT_WORKING_HOURS;
   if (totalHours > requiredHours) {
     const overtimeHours = Math.round((totalHours - requiredHours) * 100) / 100;

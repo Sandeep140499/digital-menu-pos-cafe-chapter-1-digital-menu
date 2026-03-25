@@ -10,16 +10,27 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: "html",
   use: {
-    baseURL: "http://localhost:8080",
+    // Use IPv6 loopback to avoid machines where 127.0.0.1:8080 is a different service.
+    baseURL: "http://[::1]:8080",
     trace: "on-first-retry",
   },
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
-    { name: "firefox", use: { ...devices["Desktop Firefox"] } },
+    {
+      name: "firefox",
+      use: {
+        ...devices["Desktop Firefox"],
+        // Work around rare Windows Firefox session-restore crash on context close.
+        firefoxUserPrefs: {
+          "browser.sessionstore.resume_from_crash": false,
+          "browser.sessionstore.restore_on_demand": false,
+        },
+      },
+    },
   ],
   webServer: {
     command: "npm run dev",
-    url: "http://localhost:8080",
+    url: "http://[::1]:8080",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },

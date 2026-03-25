@@ -13,6 +13,12 @@ export default defineConfig(({ mode }) => ({
         target: "http://localhost:4000",
         changeOrigin: true,
       },
+      // Socket.IO (used for instant new-order popups)
+      "/socket.io": {
+        target: "http://localhost:4000",
+        ws: true,
+        changeOrigin: true,
+      },
     },
   },
   plugins: [

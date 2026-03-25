@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useRef, useCallback, memo } from "react";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 import toast from "react-hot-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { io, type Socket } from "socket.io-client";
 import {
   LayoutDashboard,
   Clock,
@@ -190,9 +191,6 @@ async function ensureAudioUnlocked(): Promise<AudioContext | null> {
 
 type NewOrderSoundPreset = "beep" | "ring" | "siren" | "chime";
 
-const NEW_ORDER_SOUND_PRESET_KEY = "dm_new_order_sound_preset";
-const NEW_ORDER_SOUND_VOLUME_KEY = "dm_new_order_sound_volume";
-
 function clamp01(v: number): number {
   if (!Number.isFinite(v)) return 0;
   return Math.min(1, Math.max(0, v));
@@ -247,16 +245,9 @@ function playNewOrderSound(preset?: NewOrderSoundPreset, volume?: number) {
   ensureAudioUnlocked()
     .then((ctx) => {
       if (!ctx) return;
-      const selectedPreset: NewOrderSoundPreset =
-        preset ||
-        ((window?.localStorage?.getItem(
-          NEW_ORDER_SOUND_PRESET_KEY,
-        ) as NewOrderSoundPreset | null) ??
-          "ring");
+      const selectedPreset: NewOrderSoundPreset = preset || "ring";
       // We aim for maximum loudness; actual output is still limited by device/system volume.
-      const volRaw =
-        volume ??
-        Number(window?.localStorage?.getItem(NEW_ORDER_SOUND_VOLUME_KEY) ?? "1");
+      const volRaw = volume ?? 1;
       const vol = clamp01(volRaw);
 
       const t = ctx.currentTime;
@@ -315,6 +306,21 @@ type OrderItem = {
   isRemoved?: boolean;
 };
 
+type MenuItemLite = {
+  id: number;
+  name: string;
+  basePrice: number;
+  hasHalf?: boolean;
+  halfPrice?: number | null;
+  isActive?: boolean;
+};
+
+type MenuCategoryLite = {
+  id: number;
+  name: string;
+  items?: MenuItemLite[];
+};
+
 type TableInfo = {
   id: number;
   tableNumber: string;
@@ -349,7 +355,7 @@ const sidebarItems = [
   { key: "live", label: "Live Orders", icon: ShoppingCart },
   { key: "add-order", label: "Add Order", icon: Plus },
   { key: "all-orders", label: "All Orders", icon: ShoppingCart },
-  { key: "completed", label: "Completed", icon: CheckCircle },
+  { key: "completed", label: "Completed (Unpaid)", icon: CheckCircle },
   { key: "pending", label: "Pending Payment", icon: CreditCard },
   { key: "performance", label: "Performance", icon: Bell },
   { key: "shift", label: "My Shift", icon: Clock },
@@ -371,6 +377,29 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
   toggleItemRemoval: (itemId: number) => void;
   modificationReason: string;
   setModificationReason: (v: string) => void;
+  addItemsSearchQuery: string;
+  setAddItemsSearchQuery: (v: string) => void;
+  menuCategories: MenuCategoryLite[];
+  menuLoading: boolean;
+  addedItemsCart: {
+    id: string;
+    name: string;
+    menuItemId?: number;
+    unitPrice: number;
+    quantity: number;
+    variant?: "HALF" | "FULL";
+  }[];
+  addItemToCart: (item: {
+    name: string;
+    menuItemId?: number;
+    unitPrice: number;
+    variant?: "HALF" | "FULL";
+  }) => void;
+  updateAddedItemQty: (id: string, delta: number) => void;
+  pendingQtyByOrderItemId: Record<number, number | undefined>;
+  setPendingQtyByOrderItemId: React.Dispatch<
+    React.SetStateAction<Record<number, number | undefined>>
+  >;
   markStatus: (orderId: number, status: string) => void;
   confirmPayment: (orderId: number) => void;
   modifyOrder: () => void;
@@ -392,6 +421,15 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
     toggleItemRemoval,
     modificationReason,
     setModificationReason,
+    addItemsSearchQuery,
+    setAddItemsSearchQuery,
+    menuCategories,
+    menuLoading,
+    addedItemsCart,
+    addItemToCart,
+    updateAddedItemQty,
+    pendingQtyByOrderItemId,
+    setPendingQtyByOrderItemId,
     markStatus,
     confirmPayment,
     modifyOrder,
@@ -400,14 +438,35 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
     selectedOrder,
   } = props;
 
+  const filteredMenuCategories = useMemo(() => {
+    const q = addItemsSearchQuery.trim().toLowerCase();
+    if (!q) return menuCategories;
+    return menuCategories
+      .map((cat) => ({
+        ...cat,
+        items: (cat.items || []).filter((it) =>
+          (it.name || "").toLowerCase().includes(q),
+        ),
+      }))
+      .filter((cat) => (cat.items || []).length > 0);
+  }, [addItemsSearchQuery, menuCategories]);
+
   if (!displayOrder) return null;
 
   const isCompletedViewOnly = displayOrder.status === "ORDER_COMPLETE";
+  const displayQtyFor = (item: OrderItem) =>
+    pendingQtyByOrderItemId[item.id] ?? item.quantity;
+
   const calculateNewTotal = () => {
-    const removedTotal = displayOrder.items
-      .filter((item) => removedItemIds.includes(item.id))
-      .reduce((sum, item) => sum + item.price * item.quantity, 0);
-    return displayOrder.totalAmount - removedTotal;
+    const baseItemsTotal = displayOrder.items
+      .filter((i) => !i.isRemoved)
+      .filter((i) => !removedItemIds.includes(i.id))
+      .reduce((sum, i) => sum + i.price * displayQtyFor(i), 0);
+    const addedTotal = addedItemsCart.reduce(
+      (sum, i) => sum + i.unitPrice * i.quantity,
+      0,
+    );
+    return baseItemsTotal + addedTotal;
   };
 
   return (
@@ -449,14 +508,7 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
             <X className="h-5 w-5" />
           </Button>
         </div>
-        {displayOrder.employee && (
-          <p className="text-xs text-muted-foreground mb-3">
-            Accepted by {displayOrder.employee.name}
-            {displayOrder.employee.role
-              ? ` (${displayOrder.employee.role})`
-              : ""}
-          </p>
-        )}
+        {/* Per requirements: do not display "Accepted by [Employee]" */}
 
         <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
           <h4 className="font-medium text-sm">Customer</h4>
@@ -651,7 +703,7 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
                       : "bg-amber-100 text-amber-800 border-amber-300 w-fit"
                   }
                 >
-                  {displayOrder.paymentStatus === "PAID" ? "Paid" : "Pending"}
+                  {displayOrder.paymentStatus === "PAID" ? "Paid" : "Unpaid"}
                 </Badge>
                 {displayOrder.paymentStatus !== "PAID" && selectedOrder && (
                   <Button
@@ -692,7 +744,7 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
                     )}
                     <div>
                       <p className="font-medium">
-                        {item.quantity} ×{" "}
+                        {displayQtyFor(item)} ×{" "}
                         {formatItemDisplayName(item.name, item.variant)}
                       </p>
                       {!isCompletedViewOnly &&
@@ -703,7 +755,43 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
                         )}
                     </div>
                   </div>
-                  <span className="font-medium">{formatINR(item.price)}</span>
+                  <div className="flex items-center gap-2">
+                    {!isCompletedViewOnly && !removedItemIds.includes(item.id) && (
+                      <div className="flex items-center gap-1">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 w-8 p-0"
+                          onClick={() =>
+                            setPendingQtyByOrderItemId((prev) => {
+                              const current = prev[item.id] ?? item.quantity;
+                              const next = Math.max(1, current - 1);
+                              return { ...prev, [item.id]: next };
+                            })
+                          }
+                        >
+                          <Minus className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 w-8 p-0"
+                          onClick={() =>
+                            setPendingQtyByOrderItemId((prev) => {
+                              const current = prev[item.id] ?? item.quantity;
+                              const next = current + 1;
+                              return { ...prev, [item.id]: next };
+                            })
+                          }
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                    <span className="font-medium">{formatINR(item.price)}</span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -711,6 +799,186 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
 
           {!isCompletedViewOnly && (
             <>
+              <div className="rounded-lg border bg-slate-50 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-slate-900">
+                      Add More Items
+                    </div>
+                    <div className="text-xs text-slate-600">
+                      Add/remove/modify items anytime. Prices update automatically.
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search menu items..."
+                      value={addItemsSearchQuery}
+                      onChange={(e) => setAddItemsSearchQuery(e.target.value)}
+                      className="pl-9 h-9"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  <div className="rounded-lg border bg-white p-3 max-h-[280px] overflow-y-auto">
+                    {menuLoading ? (
+                      <div className="space-y-2">
+                        {[1, 2, 3].map((i) => (
+                          <div key={i} className="h-10 rounded bg-slate-100 animate-pulse" />
+                        ))}
+                      </div>
+                    ) : filteredMenuCategories.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-8">
+                        No items found
+                      </p>
+                    ) : (
+                      <div className="space-y-3">
+                        {filteredMenuCategories.map((cat) => (
+                          <div key={cat.id}>
+                            <p className="text-xs font-bold text-emerald-800 uppercase tracking-wide mb-2">
+                              {cat.name}
+                            </p>
+                            <div className="space-y-1">
+                              {(cat.items || []).map((it) => {
+                                const hasHalf = !!it.hasHalf && !!it.halfPrice;
+                                return (
+                                  <div
+                                    key={it.id}
+                                    className="flex items-center justify-between gap-2 p-2 rounded-lg hover:bg-slate-50 border border-transparent hover:border-slate-200 transition-all"
+                                  >
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-sm font-medium truncate">
+                                        {it.name}
+                                      </p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {hasHalf
+                                          ? `₹${it.halfPrice} / ₹${it.basePrice}`
+                                          : `₹${it.basePrice}`}
+                                      </p>
+                                    </div>
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      {hasHalf ? (
+                                        <>
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            className="h-8 px-2 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                                            onClick={() =>
+                                              addItemToCart({
+                                                name: it.name,
+                                                menuItemId: it.id,
+                                                unitPrice: Number(it.halfPrice || 0),
+                                                variant: "HALF",
+                                              })
+                                            }
+                                          >
+                                            Half
+                                          </Button>
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            className="h-8 px-2 text-xs bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700"
+                                            onClick={() =>
+                                              addItemToCart({
+                                                name: it.name,
+                                                menuItemId: it.id,
+                                                unitPrice: Number(it.basePrice || 0),
+                                                variant: "FULL",
+                                              })
+                                            }
+                                          >
+                                            Full
+                                          </Button>
+                                        </>
+                                      ) : (
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="outline"
+                                          className="h-8 px-3 text-xs bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700"
+                                          onClick={() =>
+                                            addItemToCart({
+                                              name: it.name,
+                                              menuItemId: it.id,
+                                              unitPrice: Number(it.basePrice || 0),
+                                              variant: "FULL",
+                                            })
+                                          }
+                                        >
+                                          Add
+                                        </Button>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-lg border bg-white p-3">
+                    <p className="text-sm font-semibold text-slate-900">
+                      Items to add
+                    </p>
+                    {addedItemsCart.length === 0 ? (
+                      <p className="text-sm text-muted-foreground mt-2">
+                        No new items added yet.
+                      </p>
+                    ) : (
+                      <div className="mt-3 space-y-2">
+                        {addedItemsCart.map((i) => (
+                          <div
+                            key={i.id}
+                            className="flex items-center justify-between gap-2 p-2 rounded-lg border"
+                          >
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium truncate">
+                                {i.name}{" "}
+                                {i.variant ? `(${i.variant})` : ""}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {formatINR(i.unitPrice)}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-8 w-8 p-0"
+                                onClick={() => updateAddedItemQty(i.id, -1)}
+                              >
+                                <Minus className="h-4 w-4" />
+                              </Button>
+                              <span className="w-8 text-center text-sm font-semibold">
+                                {i.quantity}
+                              </span>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-8 w-8 p-0"
+                                onClick={() => updateAddedItemQty(i.id, 1)}
+                              >
+                                <Plus className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               {removedItemIds.length > 0 && (
                 <div>
                   <label className="text-sm font-medium mb-2 block">
@@ -732,36 +1000,10 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
                       {formatINR(displayOrder.totalAmount)}
                     </span>
                   </div>
-                  {removedItemIds.length > 0 && (
-                    <>
-                      <div className="flex justify-between text-red-600">
-                        <span>Items to Remove:</span>
-                        <span className="font-medium">
-                          -
-                          {formatINR(
-                            displayOrder.items
-                              .filter((item) =>
-                                removedItemIds.includes(item.id),
-                              )
-                              .reduce(
-                                (sum, item) => sum + item.price * item.quantity,
-                                0,
-                              ),
-                          )}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-lg font-bold">
-                        <span>New Total:</span>
-                        <span>{formatINR(calculateNewTotal())}</span>
-                      </div>
-                    </>
-                  )}
-                  {removedItemIds.length === 0 && (
-                    <div className="flex justify-between text-lg font-bold">
-                      <span>Total:</span>
-                      <span>{formatINR(displayOrder.totalAmount)}</span>
-                    </div>
-                  )}
+                  <div className="flex justify-between text-lg font-bold">
+                    <span>New Total:</span>
+                    <span>{formatINR(calculateNewTotal())}</span>
+                  </div>
                 </div>
               </div>
               <div className="flex flex-wrap justify-end gap-2">
@@ -785,17 +1027,13 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
                 <Button variant="outline" onClick={() => onOpenChange(false)}>
                   Close
                 </Button>
-                {removedItemIds.length > 0 && (
-                  <Button
-                    onClick={modifyOrder}
-                    disabled={isModifying}
-                    className="bg-red-600 hover:bg-red-700"
-                  >
-                    {isModifying
-                      ? "Removing..."
-                      : `Remove ${removedItemIds.length} Item(s)`}
-                  </Button>
-                )}
+                <Button
+                  onClick={modifyOrder}
+                  disabled={isModifying}
+                  className="bg-emerald-600 hover:bg-emerald-700"
+                >
+                  {isModifying ? "Saving..." : "Save Changes"}
+                </Button>
               </div>
             </>
           )}
@@ -1202,8 +1440,25 @@ const EmployeeDashboard = () => {
   const [modificationReason, setModificationReason] =
     useState("Item not available");
   const [isModifying, setIsModifying] = useState(false);
+  const [menuCategoriesForEdits, setMenuCategoriesForEdits] = useState<MenuCategoryLite[]>([]);
+  const [menuLoadingForEdits, setMenuLoadingForEdits] = useState(true);
+  const [addItemsSearchQuery, setAddItemsSearchQuery] = useState("");
+  const [addedItemsCart, setAddedItemsCart] = useState<
+    {
+      id: string;
+      name: string;
+      menuItemId?: number;
+      unitPrice: number;
+      quantity: number;
+      variant?: "HALF" | "FULL";
+    }[]
+  >([]);
+  const [pendingQtyByOrderItemId, setPendingQtyByOrderItemId] = useState<
+    Record<number, number | undefined>
+  >({});
   const [shiftActive, setShiftActive] = useState(false);
   const [shiftLoading, setShiftLoading] = useState(false);
+  const [confirmEndShiftOpen, setConfirmEndShiftOpen] = useState(false);
   const [actionOrderId, setActionOrderId] = useState<number | null>(null);
   /** Only the card where Accept was clicked shows "Accepting..." – prevents other cards showing loading */
   const [acceptingOrderId, setAcceptingOrderId] = useState<number | null>(null);
@@ -1218,6 +1473,8 @@ const EmployeeDashboard = () => {
   const [pauseNewOrderPopup, setPauseNewOrderPopup] = useState(false);
   const hasCompletedFirstLoad = useRef(false);
   const isOrderPopupOpenRef = useRef(false);
+  const ordersRef = useRef<Order[]>([]);
+  const socketRef = useRef<Socket | null>(null);
   const [currentShift, setCurrentShift] = useState<null | {
     id: number;
     branchId: number;
@@ -1226,6 +1483,7 @@ const EmployeeDashboard = () => {
     totalHours?: number | null;
     totalSales: number;
     ordersCount?: number;
+    status?: "ACTIVE" | "PAUSED" | "ENDED";
   }>(null);
   const [myShiftHistory, setMyShiftHistory] = useState<
     {
@@ -1239,33 +1497,22 @@ const EmployeeDashboard = () => {
   const [myDailyShiftStats, setMyDailyShiftStats] = useState<
     { date: string; totalHours: number; totalSales: number; shifts: number }[]
   >([]);
+  const [myApprovedOvertime, setMyApprovedOvertime] = useState<{
+    month: string;
+    approvedHours: number;
+    approvedCount: number;
+  } | null>(null);
   const [showStartShiftPrompt, setShowStartShiftPrompt] = useState(false);
   const prevNewOrderCountRef = useRef(0);
   const [newOrderSoundPreset, setNewOrderSoundPreset] =
-    useState<NewOrderSoundPreset>(() => {
-      try {
-        const raw = window.localStorage.getItem(NEW_ORDER_SOUND_PRESET_KEY);
-        if (
-          raw === "beep" ||
-          raw === "ring" ||
-          raw === "siren" ||
-          raw === "chime"
-        )
-          return raw;
-      } catch (_) {}
-      return "ring";
-    });
-  const [newOrderSoundVolume, setNewOrderSoundVolume] = useState<number>(() => {
-    try {
-      const raw = Number(
-        window.localStorage.getItem(NEW_ORDER_SOUND_VOLUME_KEY) ?? "1",
-      );
-      return clamp01(raw);
-    } catch (_) {}
-    return 1;
-  });
+    useState<NewOrderSoundPreset>("ring");
+  const [newOrderSoundVolume, setNewOrderSoundVolume] = useState<number>(1);
 
   const { token, ready, refresh, logout } = useAuth();
+
+  useEffect(() => {
+    ordersRef.current = orders;
+  }, [orders]);
 
   // Employee UX settings (ringing is branch-controlled by admin)
   useEffect(() => {
@@ -1278,6 +1525,17 @@ const EmployeeDashboard = () => {
         if (!res.ok) return;
         const data = await res.json().catch(() => ({}));
         setRingingEnabledByAdmin(data.enableNewOrderRinging !== false);
+        if (
+          data.newOrderSoundPreset === "beep" ||
+          data.newOrderSoundPreset === "ring" ||
+          data.newOrderSoundPreset === "siren" ||
+          data.newOrderSoundPreset === "chime"
+        ) {
+          setNewOrderSoundPreset(data.newOrderSoundPreset);
+        }
+        if (typeof data.newOrderSoundVolume === "number") {
+          setNewOrderSoundVolume(clamp01(data.newOrderSoundVolume));
+        }
       } catch {
         setRingingEnabledByAdmin(true);
       }
@@ -1404,13 +1662,96 @@ const EmployeeDashboard = () => {
     };
   }, []);
 
+  const isShiftPaused = currentShift?.status === "PAUSED";
+
+  // Instant new-order notifications via Socket.IO (in addition to 10s polling fallback)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!ready) return;
+    if (!token) return;
+
+    const socketBaseUrl =
+      API_BASE_URL.startsWith("http")
+        ? API_BASE_URL.replace(/\/api\/?$/, "")
+        : window.location.origin;
+
+    const s = io(socketBaseUrl, {
+      path: "/socket.io",
+      withCredentials: true,
+      auth: { token },
+      transports: ["websocket", "polling"],
+    });
+    socketRef.current = s;
+
+    const canNotify = () =>
+      shiftActive &&
+      !isShiftPaused &&
+      !pauseNewOrderPopup &&
+      !isOrderPopupOpenRef.current;
+
+    const addPopupOrder = (o: Order) => {
+      if (!canNotify()) return;
+      if (!o || typeof o.id !== "number") return;
+      // Only new orders should trigger device alerts.
+      if (o.status !== "NEW_ORDER") return;
+      // If already accepted by someone, don't ring.
+      if (o.employeeId != null) return;
+
+      setNewOrderPopupOrders((prev) => {
+        if (prev.some((p) => p.id === o.id)) return prev;
+        // Also avoid duplicates if it already exists in main orders list.
+        if (ordersRef.current.some((p) => p.id === o.id)) return [o, ...prev];
+        return [o, ...prev];
+      });
+      notifyNewOrders(1);
+      setTimeout(() => toast.success("1 new order received."), 50);
+    };
+
+    const removePopupOrder = (id: number) => {
+      setNewOrderPopupOrders((prev) => prev.filter((p) => p.id !== id));
+    };
+
+    s.on("order:new", (o: Order) => {
+      addPopupOrder(o);
+    });
+
+    s.on("order:updated", (o: Order) => {
+      if (!o || typeof o.id !== "number") return;
+      // If it is no longer NEW_ORDER or gets accepted, stop ringing for that order.
+      if (o.status !== "NEW_ORDER" || o.employeeId != null) {
+        removePopupOrder(o.id);
+      }
+      // Keep list fresh quickly without waiting for poll.
+      setOrders((prev) => mergeOrders(prev, prev.some((p) => p.id === o.id) ? prev.map((p) => (p.id === o.id ? { ...p, ...o } : p)) : [...prev, o]));
+    });
+
+    s.on("order:modified", (o: Order) => {
+      if (!o || typeof o.id !== "number") return;
+      setOrders((prev) => mergeOrders(prev, prev.some((p) => p.id === o.id) ? prev.map((p) => (p.id === o.id ? { ...p, ...o } : p)) : [...prev, o]));
+    });
+
+    s.on("disconnect", () => {
+      // no-op
+    });
+
+    return () => {
+      try {
+        s.removeAllListeners();
+        s.disconnect();
+      } catch {
+        // ignore
+      }
+      if (socketRef.current === s) socketRef.current = null;
+    };
+  }, [ready, token, shiftActive, isShiftPaused, pauseNewOrderPopup]);
+
   // New order sound when popup gets new orders (real-time notification)
   useEffect(() => {
     const n = newOrderPopupOrders.length;
     if (n > prevNewOrderCountRef.current) {
       // Ring only for the active (on-shift) employee.
-      if (ringingEnabledByAdmin && shiftActive) {
-        playNewOrderSound(newOrderSoundPreset, 1);
+      if (ringingEnabledByAdmin && shiftActive && !isShiftPaused) {
+        playNewOrderSound(newOrderSoundPreset, newOrderSoundVolume);
       }
     }
     prevNewOrderCountRef.current = n;
@@ -1419,6 +1760,8 @@ const EmployeeDashboard = () => {
     newOrderSoundPreset,
     ringingEnabledByAdmin,
     shiftActive,
+    isShiftPaused,
+    newOrderSoundVolume,
   ]);
 
   // Keep ringing (beep) until staff accepts/clears, unless paused.
@@ -1427,8 +1770,9 @@ const EmployeeDashboard = () => {
     if (newOrderPopupOrders.length === 0) return;
     if (!ringingEnabledByAdmin) return;
     if (!shiftActive) return;
+    if (isShiftPaused) return;
     const id = window.setInterval(() => {
-      playNewOrderSound(newOrderSoundPreset, 1);
+      playNewOrderSound(newOrderSoundPreset, newOrderSoundVolume);
     }, 2500);
     return () => window.clearInterval(id);
   }, [
@@ -1437,25 +1781,9 @@ const EmployeeDashboard = () => {
     newOrderSoundPreset,
     ringingEnabledByAdmin,
     shiftActive,
+    isShiftPaused,
+    newOrderSoundVolume,
   ]);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(
-        NEW_ORDER_SOUND_PRESET_KEY,
-        newOrderSoundPreset,
-      );
-    } catch (_) {}
-  }, [newOrderSoundPreset]);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(
-        NEW_ORDER_SOUND_VOLUME_KEY,
-        String(clamp01(newOrderSoundVolume)),
-      );
-    } catch (_) {}
-  }, [newOrderSoundVolume]);
 
   const [profile, setProfile] = useState<{
     name: string;
@@ -1488,14 +1816,18 @@ const EmployeeDashboard = () => {
         });
         if (res.status === 401) {
           const nextToken = await refresh();
-          if (!nextToken) return;
+          if (!nextToken) {
+            // Keep employee logged in during shift; don't force logout.
+            // Polling will retry next interval and realtime socket may still be connected.
+            return;
+          }
           res = await fetch(`${apiBase}/orders/live`, {
             headers: { Authorization: `Bearer ${nextToken}` },
             credentials: "include",
           });
           if (res.status === 401) {
-            await logout();
-            window.location.href = "/login";
+            // Do not auto-logout; avoid kicking staff out mid-shift.
+            toast.error("Session refresh failed. Please try again in a moment.");
             return;
           }
         }
@@ -1508,9 +1840,11 @@ const EmployeeDashboard = () => {
         setOrders((prev) => {
           const canShowPopup =
             hasCompletedFirstLoad.current &&
+            shiftActive &&
             prev.length > 0 &&
             data.length > prev.length &&
-            !pauseNewOrderPopup;
+            !pauseNewOrderPopup &&
+            !isShiftPaused;
           if (canShowPopup) {
             const prevIds = new Set(prev.map((o) => o.id));
             const newOrders = data.filter((d: Order) => !prevIds.has(d.id));
@@ -1594,6 +1928,17 @@ const EmployeeDashboard = () => {
         setMyShiftHistory(data.shifts ?? []);
         setMyDailyShiftStats(data.dailyStats ?? []);
       })
+      .catch(() => {});
+  }, [token]);
+
+  // Approved overtime counter (only after Admin approval)
+  useEffect(() => {
+    if (!token) return;
+    fetchWithTimeout(`${apiBase}/overtime/my-summary`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => data && setMyApprovedOvertime(data))
       .catch(() => {});
   }, [token]);
 
@@ -1702,6 +2047,7 @@ const EmployeeDashboard = () => {
         if (data) setCurrentShift(data);
         setShiftActive(false);
         toast.success("Your shift has ended");
+        setConfirmEndShiftOpen(false);
         fetch(`${apiBase}/shift/my-history`, {
           headers: { Authorization: `Bearer ${token}` },
         })
@@ -1933,9 +2279,44 @@ const EmployeeDashboard = () => {
     );
     setRemovedItemIds([]);
     setModificationReason("Item not available");
+    setAddItemsSearchQuery("");
+    setAddedItemsCart([]);
+    setPendingQtyByOrderItemId({});
     setPopupCustomerName(order.customerName ?? "");
     setPopupCustomerMobile(order.customerMobile ?? "");
     setIsOrderPopupOpen(true);
+  }, []);
+
+  // Load menu once (for Add More Items inside order popup)
+  useEffect(() => {
+    setMenuLoadingForEdits(true);
+    fetch(`${apiBase}/menu`)
+      .then((r) => r.json())
+      .then((data) => {
+        const cats = Array.isArray(data) ? data : (data?.categories ?? []);
+        setMenuCategoriesForEdits(cats);
+      })
+      .catch(() => setMenuCategoriesForEdits([]))
+      .finally(() => setMenuLoadingForEdits(false));
+  }, []);
+
+  const addItemToCart = useCallback((item: { name: string; menuItemId?: number; unitPrice: number; variant?: "HALF" | "FULL" }) => {
+    const id = `${item.menuItemId ?? item.name}-${item.variant ?? "FULL"}-${item.unitPrice}`;
+    setAddedItemsCart((prev) => {
+      const existing = prev.find((p) => p.id === id);
+      if (existing) {
+        return prev.map((p) => (p.id === id ? { ...p, quantity: p.quantity + 1 } : p));
+      }
+      return [...prev, { id, name: item.name, menuItemId: item.menuItemId, unitPrice: item.unitPrice, quantity: 1, variant: item.variant }];
+    });
+  }, []);
+
+  const updateAddedItemQty = useCallback((id: string, delta: number) => {
+    setAddedItemsCart((prev) =>
+      prev
+        .map((p) => (p.id === id ? { ...p, quantity: p.quantity + delta } : p))
+        .filter((p) => p.quantity > 0),
+    );
   }, []);
 
   const saveOrderCustomer = useCallback(async () => {
@@ -2017,7 +2398,26 @@ const EmployeeDashboard = () => {
 
   const modifyOrder = useCallback(async () => {
     if (!selectedOrder || !token) return;
-    if (removedItemIds.length === 0) return;
+    const updatedItems = Object.entries(pendingQtyByOrderItemId)
+      .map(([orderItemId, qty]) => ({
+        orderItemId: Number(orderItemId),
+        quantity: qty as number,
+      }))
+      .filter((u) => Number.isFinite(u.orderItemId) && typeof u.quantity === "number");
+
+    const addedItems = addedItemsCart.map((i) => ({
+      name: i.name,
+      menuItemId: i.menuItemId,
+      unitPrice: i.unitPrice,
+      quantity: i.quantity,
+      variant: i.variant,
+    }));
+
+    const hasChanges =
+      removedItemIds.length > 0 ||
+      addedItems.length > 0 ||
+      updatedItems.length > 0;
+    if (!hasChanges) return;
     setIsModifying(true);
     try {
       const res = await fetch(`${apiBase}/orders/${selectedOrder.id}/modify-v2`, {
@@ -2028,6 +2428,8 @@ const EmployeeDashboard = () => {
         },
         body: JSON.stringify({
           removedItemIds,
+          addedItems,
+          updatedItems,
           reason: modificationReason,
         }),
       });
@@ -2037,26 +2439,29 @@ const EmployeeDashboard = () => {
           prev.map((o) => (o.id === selectedOrder.id ? data.order : o)),
         );
         toast.success(
-          data.message ||
-            `Removed ${data.removedCount ?? 0} item(s). New total: ${formatINR(data.newAmount ?? 0)}`,
+          data.message || `Order updated. New total: ${formatINR(data.newAmount ?? (data.order?.totalAmount ?? 0))}`,
         );
         setPopupDisplayOrder(null);
         setIsOrderPopupOpen(false);
         setSelectedOrder(null);
         setRemovedItemIds([]);
+        setAddedItemsCart([]);
+        setPendingQtyByOrderItemId({});
       }
     } catch (error) {
       toast.error("Failed to modify order");
     } finally {
       setIsModifying(false);
     }
-  }, [token, selectedOrder, removedItemIds, modificationReason]);
+  }, [token, selectedOrder, removedItemIds, modificationReason, addedItemsCart, pendingQtyByOrderItemId]);
 
   const todayStats = useMemo(() => {
     const ordersToday = orders.length;
     const paidOrdersList = orders.filter((o) => o.paymentStatus === "PAID");
     const paid = new Set(paidOrdersList.map((o) => o.id)).size; // Unique paid order count
-    const completed = paid; // Completed = paid orders only
+    const completed = orders.filter(
+      (o) => o.status === "ORDER_COMPLETE" && o.paymentStatus !== "PAID",
+    ).length; // Completed = completed but not yet paid
     const pendingPayments = orders.filter(
       (o) => o.status === "ORDER_COMPLETE" && o.paymentStatus !== "PAID",
     ).length;
@@ -2078,7 +2483,10 @@ const EmployeeDashboard = () => {
     [liveOrdersRaw],
   );
   const completedOrders = useMemo(
-    () => orders.filter((o) => o.paymentStatus === "PAID"),
+    () =>
+      orders.filter(
+        (o) => o.status === "ORDER_COMPLETE" && o.paymentStatus !== "PAID",
+      ),
     [orders],
   );
   const pendingPayments = useMemo(
@@ -2168,24 +2576,40 @@ const EmployeeDashboard = () => {
     options?: { isCompletedSection?: boolean; isLiveSection?: boolean },
   ) => {
     const delayed = isOrderDelayed(order);
+    const isTakeAway = order.orderType === "TAKE_AWAY";
     const isReadyForPayment =
       options?.isLiveSection && order.status === "ORDER_COMPLETE";
-    // Live: red = delayed, yellow/amber = completed but unpaid, green = completed paid (or preparing)
+    // Card theme by order type:
+    // - Dine-in: green
+    // - Takeaway: blue (distinct alternative)
+    const typeTheme = isTakeAway
+      ? {
+          border: "border-l-blue-600",
+          bg: "bg-blue-50/50",
+          badge: "bg-blue-100 text-blue-800 border-blue-300",
+        }
+      : {
+          border: "border-l-green-600",
+          bg: "bg-green-50/50",
+          badge: "bg-green-100 text-green-800 border-green-300",
+        };
+
+    // Live: red = delayed, otherwise themed by order type
     const liveCardStyle = options?.isLiveSection
       ? delayed
         ? "border-l-4 border-l-red-600 bg-red-50/50 ring-1 ring-red-200"
         : order.status === "ORDER_COMPLETE"
           ? order.paymentStatus !== "PAID"
-            ? "border-l-4 border-l-amber-500 bg-amber-50/60"
-            : "border-l-4 border-l-green-600 bg-green-50/50"
-          : "border-l-4 border-l-amber-500 bg-amber-50/40"
+            ? `border-l-4 ${typeTheme.border} ${typeTheme.bg}`
+            : `border-l-4 ${typeTheme.border} ${typeTheme.bg}`
+          : `border-l-4 ${typeTheme.border} ${typeTheme.bg}`
       : "";
     const completedCardStyle = options?.isCompletedSection
-      ? "border-l-4 border-l-green-600 bg-green-50/50"
+      ? `border-l-4 ${typeTheme.border} ${typeTheme.bg}`
       : "";
     const defaultCardStyle =
       !options?.isLiveSection && !options?.isCompletedSection
-        ? "border-l-4 border-l-emerald-500"
+        ? `border-l-4 ${typeTheme.border} ${typeTheme.bg}`
         : "";
     const isAcceptingThis = acceptingOrderId === order.id;
     const isActionThis = actionOrderId === order.id;
@@ -2214,7 +2638,7 @@ const EmployeeDashboard = () => {
           variant={order.paymentStatus === "PAID" ? "default" : "secondary"}
           className={`w-fit shrink-0 text-sm font-semibold px-3 py-1 ${order.paymentStatus === "PAID" ? "bg-green-100 text-green-800 border-green-300" : "bg-red-100 text-red-800 border-red-300"}`}
         >
-          {order.paymentStatus === "PAID" ? "Paid" : "Not Paid"}
+          {order.paymentStatus === "PAID" ? "Paid" : "Unpaid"}
         </Badge>
         <div className="flex flex-col gap-2 mt-auto w-full">
           <Button
@@ -2228,6 +2652,17 @@ const EmployeeDashboard = () => {
           >
             <Eye className="mr-1 h-3 w-3 shrink-0" />
             <span className="truncate">View Order</span>
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="w-full min-h-[44px] text-xs"
+            disabled
+            title="Completed orders cannot be edited"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Plus className="mr-1 h-3 w-3 shrink-0" />
+            <span className="truncate">Add More Items</span>
           </Button>
           {order.paymentStatus !== "PAID" && (
             <Button
@@ -2308,16 +2743,25 @@ const EmployeeDashboard = () => {
                       <span className="font-medium text-slate-600">{timeAgo(order.createdAt)}</span>
                     </p>
                     {order.orderType && (
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${order.orderType === "TAKE_AWAY" ? "bg-purple-100 text-purple-800" : "bg-blue-100 text-blue-800"}`}>
+                      <span
+                        className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+                          order.orderType === "TAKE_AWAY"
+                            ? "bg-blue-100 text-blue-800"
+                            : "bg-green-100 text-green-800"
+                        }`}
+                      >
                         {order.orderType === "TAKE_AWAY" ? "Take Away" : "Dine In"}
                       </span>
                     )}
                   </div>
-                  {order.employee && (
-                    <p className="text-xs text-emerald-700 font-medium">
-                      Accepted by {order.employee.name}
-                    </p>
-                  )}
+                  {/* Paused shift: show who accepted (no popup/ringing while paused). */}
+                  {isShiftPaused &&
+                    order.employee &&
+                    (order.employee as any).name && (
+                      <p className="text-xs text-slate-600 font-medium">
+                        Accepted by {(order.employee as any).name}
+                      </p>
+                    )}
                   {order.status === "ORDER_COMPLETE" &&
                     order.acceptedAt &&
                     order.completedAt && (
@@ -2368,7 +2812,7 @@ const EmployeeDashboard = () => {
                             : "bg-amber-100 text-amber-800 border-amber-300"
                         }
                       >
-                        {order.paymentStatus === "PAID" ? "Paid" : "Pending"}
+                        {order.paymentStatus === "PAID" ? "Paid" : "Unpaid"}
                       </Badge>
                     )}
                   </div>
@@ -2387,6 +2831,24 @@ const EmployeeDashboard = () => {
                 >
                   <Eye className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
                   View
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openOrderPopup(order);
+                  }}
+                  className="text-xs sm:text-sm"
+                  disabled={order.status === "ORDER_COMPLETE"}
+                  title={
+                    order.status === "ORDER_COMPLETE"
+                      ? "Completed orders cannot be edited"
+                      : undefined
+                  }
+                >
+                  <Plus className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
+                  Add More Items
                 </Button>
                 {order.status !== "ORDER_COMPLETE" && (
                   <Button
@@ -3038,7 +3500,13 @@ const EmployeeDashboard = () => {
                             </span>
                           )}
                           {(order as any).orderType && (
-                            <span className={`inline-block mt-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${(order as any).orderType === "TAKE_AWAY" ? "bg-purple-100 text-purple-800" : "bg-blue-100 text-blue-800"}`}>
+                            <span
+                              className={`inline-block mt-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+                                (order as any).orderType === "TAKE_AWAY"
+                                  ? "bg-blue-100 text-blue-800"
+                                  : "bg-green-100 text-green-800"
+                              }`}
+                            >
                               {(order as any).orderType === "TAKE_AWAY" ? "Take Away" : "Dine In"}
                             </span>
                           )}
@@ -3099,7 +3567,7 @@ const EmployeeDashboard = () => {
                           className={paymentBadgeClass(order.paymentStatus)}
                           variant="outline"
                         >
-                          {order.paymentStatus === "PAID" ? "Paid" : "Pending"}
+                          {order.paymentStatus === "PAID" ? "Paid" : "Unpaid"}
                         </Badge>
                       </div>
                       <p className="text-sm text-muted-foreground">
@@ -3110,10 +3578,14 @@ const EmployeeDashboard = () => {
                       <p className="font-semibold">
                         {formatINR(order.totalAmount)}
                       </p>
-                      <p className="text-xs text-emerald-700">
-                        {order.employee?.name &&
-                          `Accepted by ${order.employee.name}`}
-                      </p>
+                      {/* Paused shift: show who accepted (no popup/ringing while paused). */}
+                      {isShiftPaused &&
+                        order.employee &&
+                        (order.employee as any).name && (
+                          <p className="text-xs text-muted-foreground">
+                            Accepted by {(order.employee as any).name}
+                          </p>
+                        )}
                       <p className="text-xs text-muted-foreground">
                         {new Date(order.createdAt).toLocaleTimeString("en-IN", {
                           hour: "2-digit",
@@ -3126,7 +3598,13 @@ const EmployeeDashboard = () => {
                           ` · Done in ${formatTimeToComplete(order.acceptedAt, order.completedAt)}`}
                       </p>
                       {(order as any).orderType && (
-                        <span className={`inline-block text-[10px] px-2 py-0.5 rounded-full font-semibold ${(order as any).orderType === "TAKE_AWAY" ? "bg-purple-100 text-purple-800" : "bg-blue-100 text-blue-800"}`}>
+                        <span
+                          className={`inline-block text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                            (order as any).orderType === "TAKE_AWAY"
+                              ? "bg-blue-100 text-blue-800"
+                              : "bg-green-100 text-green-800"
+                          }`}
+                        >
                           {(order as any).orderType === "TAKE_AWAY" ? "Take Away" : "Dine In"}
                         </span>
                       )}
@@ -3258,7 +3736,10 @@ const EmployeeDashboard = () => {
               variant={shiftActive ? "destructive" : "default"}
               size="lg"
               disabled={shiftLoading || endedShiftToday}
-              onClick={shiftActive ? endShift : startShift}
+              onClick={() => {
+                if (shiftActive) setConfirmEndShiftOpen(true);
+                else void startShift();
+              }}
               className={`gap-2 shrink-0 ${!shiftActive && !shiftLoading && !endedShiftToday ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""}`}
             >
               {shiftLoading ? (
@@ -3437,6 +3918,29 @@ const EmployeeDashboard = () => {
               </div>
             </CardContent>
           </Card>
+
+          <Card className="bg-gradient-to-br from-slate-50 to-white border-slate-100 min-w-0">
+            <CardContent className="p-2 sm:p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">
+                    Approved overtime ({myApprovedOvertime?.month ?? "—"})
+                  </p>
+                  <p className="text-base sm:text-lg font-bold text-slate-900 truncate">
+                    {myApprovedOvertime
+                      ? `${Number(myApprovedOvertime.approvedHours || 0).toFixed(2)}h`
+                      : "0.00h"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    After admin approval
+                  </p>
+                </div>
+                <div className="p-1.5 bg-slate-100 rounded-md shrink-0">
+                  <Clock className="h-4 w-4 text-slate-700" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Quick Actions - same card style as admin */}
@@ -3559,7 +4063,7 @@ const EmployeeDashboard = () => {
                       }
                       variant="outline"
                     >
-                      {order.paymentStatus === "PAID" ? "Paid" : "Pending"}
+                      {order.paymentStatus === "PAID" ? "Paid" : "Unpaid"}
                     </Badge>
                     <span className="font-bold text-emerald-700 whitespace-nowrap">
                       {formatINR(order.totalAmount)}
@@ -3614,7 +4118,10 @@ const EmployeeDashboard = () => {
             variant={shiftActive ? "destructive" : "default"}
             size="lg"
             disabled={shiftLoading}
-            onClick={shiftActive ? endShift : startShift}
+            onClick={() => {
+              if (shiftActive) setConfirmEndShiftOpen(true);
+              else void startShift();
+            }}
             className={`gap-2 shrink-0 w-full sm:w-auto ${!shiftActive && !shiftLoading ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""}`}
           >
             {shiftLoading ? (
@@ -4285,7 +4792,7 @@ const EmployeeDashboard = () => {
                   New order sound
                 </div>
                 <div className="text-xs text-slate-600">
-                  Choose a louder ringtone and volume.
+                  This is set by Admin Settings and applies to all devices.
                 </div>
               </div>
               <Button
@@ -4297,40 +4804,6 @@ const EmployeeDashboard = () => {
               >
                 Test
               </Button>
-            </div>
-            <div className="mt-3 grid grid-cols-1 gap-3">
-              <label className="grid gap-1">
-                <span className="text-xs font-medium text-slate-700">
-                  Sound
-                </span>
-                <select
-                  className="h-10 rounded-md border bg-white px-3 text-sm"
-                  value={newOrderSoundPreset}
-                  onChange={(e) =>
-                    setNewOrderSoundPreset(
-                      e.target.value as NewOrderSoundPreset,
-                    )
-                  }
-                >
-                  <option value="ring">Ring (loud)</option>
-                  <option value="siren">Siren (very loud)</option>
-                  <option value="chime">Chime</option>
-                  <option value="beep">Beep</option>
-                </select>
-              </label>
-              <label className="grid gap-1">
-                <span className="text-xs font-medium text-slate-700">
-                  Volume: {Math.round(newOrderSoundVolume * 100)}%
-                </span>
-                <input
-                  type="range"
-                  min={0.1}
-                  max={1}
-                  step={0.05}
-                  value={newOrderSoundVolume}
-                  onChange={(e) => setNewOrderSoundVolume(Number(e.target.value))}
-                />
-              </label>
             </div>
           </div>
           <div className="flex gap-2 justify-end pt-2">
@@ -4374,7 +4847,7 @@ const EmployeeDashboard = () => {
     () => (
       <OrdersTableSection
         orders={completedOrders}
-        title="Completed Orders"
+        title="Completed (Unpaid)"
         loading={loading}
         showConfirmPayment={true}
         onViewOrder={openOrderPopup}
@@ -4585,6 +5058,15 @@ const EmployeeDashboard = () => {
         toggleItemRemoval={toggleItemRemoval}
         modificationReason={modificationReason}
         setModificationReason={setModificationReason}
+        addItemsSearchQuery={addItemsSearchQuery}
+        setAddItemsSearchQuery={setAddItemsSearchQuery}
+        menuCategories={menuCategoriesForEdits}
+        menuLoading={menuLoadingForEdits}
+        addedItemsCart={addedItemsCart}
+        addItemToCart={addItemToCart}
+        updateAddedItemQty={updateAddedItemQty}
+        pendingQtyByOrderItemId={pendingQtyByOrderItemId}
+        setPendingQtyByOrderItemId={setPendingQtyByOrderItemId}
         markStatus={markStatus}
         confirmPayment={confirmPayment}
         modifyOrder={modifyOrder}
@@ -4592,6 +5074,33 @@ const EmployeeDashboard = () => {
         actionOrderId={actionOrderId}
         selectedOrder={selectedOrder}
       />
+      <Dialog open={confirmEndShiftOpen} onOpenChange={setConfirmEndShiftOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>End shift?</DialogTitle>
+            <DialogDescription>
+              This will end your active shift. Any in-progress order assignments
+              will be cleared so other staff can continue.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2 justify-end pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setConfirmEndShiftOpen(false)}
+              disabled={shiftLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => void endShift()}
+              disabled={shiftLoading}
+            >
+              {shiftLoading ? "Ending..." : "End Shift"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </DashboardShell>
   );
 };

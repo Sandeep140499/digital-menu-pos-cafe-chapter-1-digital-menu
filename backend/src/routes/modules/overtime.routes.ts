@@ -191,3 +191,40 @@ overtimeRouter.patch(
     return res.json(record);
   }
 );
+
+// Employee: approved overtime counter (only counts admin-approved records)
+overtimeRouter.get(
+  "/my-summary",
+  authenticate,
+  requireRole("EMPLOYEE"),
+  async (req, res) => {
+    try {
+      const employeeId = req.user!.id;
+      const timeZone = process.env.TZ || "Asia/Kolkata";
+      const now = new Date();
+      const monthStr = now.toLocaleDateString("en-CA", { timeZone }).slice(0, 7); // YYYY-MM
+      const monthStart = new Date(`${monthStr}-01T00:00:00.000Z`);
+      const nextMonth = new Date(monthStart);
+      nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
+      nextMonth.setUTCMilliseconds(-1);
+
+      const approved = await prisma.employeeOvertime.findMany({
+        where: {
+          employeeId,
+          status: "APPROVED",
+          shiftDate: { gte: monthStart, lte: nextMonth },
+        },
+        select: { overtimeHours: true },
+      });
+      const approvedHours = approved.reduce((s, r) => s + (Number(r.overtimeHours) || 0), 0);
+      return res.json({
+        month: monthStr,
+        approvedHours: Math.round(approvedHours * 100) / 100,
+        approvedCount: approved.length,
+      });
+    } catch (e) {
+      console.error("Employee overtime summary error:", e);
+      return res.status(500).json({ message: "Failed to load overtime summary" });
+    }
+  }
+);

@@ -37,6 +37,13 @@ paymentRouter.patch(
       return res.status(404).json({ message: "Order not found" });
     }
 
+    // Business rule: an order can be marked PAID only after it is completed.
+    if (paymentStatus === "PAID" && existingOrder.status !== "ORDER_COMPLETE") {
+      return res.status(400).json({
+        message: "Complete the order first, then mark it as paid.",
+      });
+    }
+
     const includeReviewLink =
       paymentStatus === "PAID" && !existingOrder.reviewSent;
 
@@ -81,10 +88,11 @@ paymentRouter.patch(
       }
     }
 
-    req.app.locals.io?.emit("payment:updated", {
-      orderId: order.id,
-      paymentStatus: order.paymentStatus,
-    });
+    const paymentEvent = { orderId: order.id, paymentStatus: order.paymentStatus, branchId: (order as any).branchId };
+    req.app.locals.io?.emit("payment:updated", paymentEvent);
+    if ((order as any).branchId) {
+      req.app.locals.io?.to(`branch:${(order as any).branchId}`)?.emit("payment:updated", paymentEvent);
+    }
 
     let paymentWhatsAppMessage: string | null = null;
     let paymentWaMeLink: string | null = null;

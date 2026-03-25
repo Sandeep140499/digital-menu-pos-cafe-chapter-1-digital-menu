@@ -14,19 +14,75 @@ import { performanceMiddleware } from "./middleware/performance.js";
 import { isMailConfigured, verifyMailConnection } from "./config/mailer.js";
 import { openApiSpec } from "./openapi.js";
 import net from "net";
+import jwt from "jsonwebtoken";
+import { jwtConfig } from "./config/auth.js";
+import { prisma } from "./config/prisma.js";
+import { setActiveSockets } from "./services/metrics.js";
 
 const app = express();
 const server = http.createServer(app);
 
 const io = new SocketIOServer(server, {
+  // Realtime scaling notes:
+  // - Without a shared adapter (Redis), multi-instance deployments require sticky sessions at the load balancer.
+  // - Keep payload sizes small and timeouts sane for mobile networks.
   cors: {
     origin: process.env.FRONTEND_CUSTOMER_URL?.split(",") ?? "*",
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE"],
   },
+  pingInterval: 25_000,
+  pingTimeout: 20_000,
+  maxHttpBufferSize: 1e6, // 1MB: prevents accidental huge payloads
 });
 
 // Attach io to app locals so services/controllers can emit events
 app.locals.io = io;
+
+// Socket.IO auth + room join (optional; connection works without token, but won't receive scoped events)
+io.use(async (socket, next) => {
+  try {
+    const authToken = (socket.handshake.auth as any)?.token as string | undefined;
+    const headerAuth = socket.handshake.headers?.authorization as string | undefined;
+    const token =
+      authToken ||
+      (headerAuth && headerAuth.startsWith("Bearer ") ? headerAuth.slice(7) : undefined);
+    if (!token) return next();
+    const decoded = jwt.verify(token, jwtConfig.secret) as { id: number; role: "ADMIN" | "EMPLOYEE" };
+    (socket.data as any).user = decoded;
+    return next();
+  } catch {
+    // Don't fail socket connection for bad tokens; just treat as unauthenticated.
+    return next();
+  }
+});
+
+io.on("connection", async (socket) => {
+  try {
+    setActiveSockets(io.engine.clientsCount);
+  } catch {
+    // ignore
+  }
+  socket.on("disconnect", () => {
+    try {
+      setActiveSockets(io.engine.clientsCount);
+    } catch {
+      // ignore
+    }
+  });
+  const user = (socket.data as any)?.user as { id: number; role: "ADMIN" | "EMPLOYEE" } | undefined;
+  if (!user) return;
+  try {
+    if (user.role === "EMPLOYEE") {
+      const emp = await prisma.employee.findUnique({ where: { id: user.id }, select: { branchId: true } });
+      if (emp?.branchId) socket.join(`branch:${emp.branchId}`);
+      socket.join(`employee:${user.id}`);
+    } else {
+      socket.join("admins");
+    }
+  } catch {
+    // ignore room join failures
+  }
+});
 
 // CORS: allow frontend origin and Authorization header so verify-invite and other API calls work from deployed frontend
 const allowedOrigins = process.env.CORS_ORIGIN
@@ -180,8 +236,10 @@ async function startServer() {
       console.log(`⚠️  Port ${DEFAULT_PORT} is in use. Using port ${port} instead.`);
     }
 
-    // Keep logs minimal; use errors/warnings for operational issues.
-    
+    // Ensure DB connection is established early. This reduces first-request latency
+    // and makes failures visible at boot time (better for autoscaling platforms).
+    await prisma.$connect();
+
     server.listen(port, "0.0.0.0", async () => {
       // For local development, skip failing on SMTP verification errors.
       if (isMailConfigured()) {
@@ -201,15 +259,31 @@ async function startServer() {
       startPendingPaymentCron();
       const { startDailyDirectorReportCron } = await import("./cron/dailyDirectorReport.js");
       startDailyDirectorReportCron();
+      const { startMonthlyDirectorReportCron } = await import("./cron/monthlyDirectorReport.js");
+      startMonthlyDirectorReportCron();
     });
 
     // Graceful shutdown
     process.on("SIGTERM", () => {
-      server.close(() => process.exit(0));
+      server.close(async () => {
+        try {
+          await prisma.$disconnect();
+        } catch {
+          // ignore
+        }
+        process.exit(0);
+      });
     });
 
     process.on("SIGINT", () => {
-      server.close(() => process.exit(0));
+      server.close(async () => {
+        try {
+          await prisma.$disconnect();
+        } catch {
+          // ignore
+        }
+        process.exit(0);
+      });
     });
 
   } catch (error) {

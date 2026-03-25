@@ -12,9 +12,13 @@
     "lint": "eslint . --ext .ts",
     "test": "vitest run --config vitest.config.ts",
     "test:watch": "vitest run --config vitest.config.ts --watch",
+    "loadtest:menu": "k6 run load-tests/k6-menu.js",
+    "loadtest:order": "k6 run load-tests/k6-order.js",
+    "loadtest:mixed": "k6 run load-tests/k6-mixed.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
+    "postinstall": "prisma generate",
     "seed": "node --loader ts-node/esm src/seed.ts",
     "seed:migrate": "node --loader ts-node/esm src/seed-menu-migrate.ts",
     "reset-db-keep-menu": "node --loader ts-node/esm src/reset-db-keep-menu.ts"
@@ -34,6 +38,7 @@
     "node-cron": "^4.2.1",
     "nodemailer": "^6.10.1",
     "pdf-lib": "^1.17.1",
+    "prom-client": "^15.1.3",
     "socket.io": "^4.8.1",
     "zod": "^4.3.6"
   },

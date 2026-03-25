@@ -223,11 +223,11 @@ function OrderCartDialog({
                     e.target.value.replace(/\D/g, "").slice(0, 10),
                   )
                 }
-                placeholder="10-digit for invoice on WhatsApp"
+                placeholder="10-digit mobile number"
                 className="w-full rounded-md border px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600"
               />
               <span className="text-[10px] text-muted-foreground">
-                Add number to receive order confirmation & invoice on WhatsApp
+                Mobile number is optional
               </span>
             </label>
             {/* Table number — only shown for Dine In */}
@@ -816,9 +816,6 @@ const Index = () => {
   const [bestSellerItemIds, setBestSellerItemIds] = useState<number[]>([]);
   const [isLoadingMenu, setIsLoadingMenu] = useState(true);
   const [orderSuccess, setOrderSuccess] = useState(false);
-  const [lastOrderWaMeLink, setLastOrderWaMeLink] = useState<string | null>(
-    null,
-  );
   const [lastOrderId, setLastOrderId] = useState<number | null>(null);
   const [lastOrderType, setLastOrderType] = useState<"DINE_IN" | "TAKE_AWAY" | null>(null);
   const [lastOrderStatus, setLastOrderStatus] = useState<string | null>(null);
@@ -834,6 +831,7 @@ const Index = () => {
     logoUrl: string | null;
     showTotalAmountToCustomers?: boolean;
   } | null>(null);
+  const [branchContactLoading, setBranchContactLoading] = useState(true);
   const showTotalAmountToCustomers =
     branchContact?.showTotalAmountToCustomers ?? true;
   const [contactDialogOpen, setContactDialogOpen] = useState(false);
@@ -860,6 +858,15 @@ const Index = () => {
 
   const branchId = branchContact?.id ?? null;
   const apiBase = API_BASE_URL;
+
+  // Deployment resilience: on cold starts (Railway/Render), menu + branch contact can return 503/timeout.
+  // We auto-retry with gentle backoff so customers don't get stuck on a broken first load.
+  const retryRef = useRef<{
+    menuAttempts: number;
+    contactAttempts: number;
+    menuTimer: number | null;
+    contactTimer: number | null;
+  }>({ menuAttempts: 0, contactAttempts: 0, menuTimer: null, contactTimer: null });
 
   const sessionToken = useMemo(() => {
     const key = "chapter1_session_token";
@@ -902,13 +909,32 @@ const Index = () => {
       const res = await fetchWithTimeout(`${apiBase}/menu`);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        // If the backend is warming up (common on deployment), retry automatically.
+        const isWarmingUp = res.status === 502 || res.status === 503 || res.status === 504;
         setMenuLoadError(
-          data?.message || `Failed to load menu (${res.status})`,
+          isWarmingUp
+            ? "Server is starting… menu will load automatically in a few seconds."
+            : data?.message || `Failed to load menu (${res.status})`,
         );
         // Keep last known menu on screen (cached/previous) if we have one.
         setMenuCategories((prev) => (prev.length ? prev : []));
         setBestSellerItemIds((prev) => (prev.length ? prev : []));
+        if (isWarmingUp) {
+          const attempts = (retryRef.current.menuAttempts ?? 0) + 1;
+          retryRef.current.menuAttempts = attempts;
+          const delay = Math.min(30_000, 1500 + attempts * 1500);
+          if (retryRef.current.menuTimer) window.clearTimeout(retryRef.current.menuTimer);
+          retryRef.current.menuTimer = window.setTimeout(() => {
+            fetchMenu();
+          }, delay);
+        }
         return;
+      }
+      // Success: reset retry state.
+      retryRef.current.menuAttempts = 0;
+      if (retryRef.current.menuTimer) {
+        window.clearTimeout(retryRef.current.menuTimer);
+        retryRef.current.menuTimer = null;
       }
       const categories = Array.isArray(data) ? data : (data?.categories ?? []);
       const ids = Array.isArray(data) ? [] : (data?.bestSellerItemIds ?? []);
@@ -960,9 +986,19 @@ const Index = () => {
       }
       toast({
         title: "Error",
-        description: "Failed to load menu. Check that the backend is running.",
-        variant: "destructive",
+        description:
+          "Menu could not be refreshed right now. If this is the first load, the server may be starting—please wait a moment.",
+        variant: usedCache ? "default" : "destructive",
       });
+
+      // Auto-retry on first-load failures (especially deployment cold starts).
+      const attempts = (retryRef.current.menuAttempts ?? 0) + 1;
+      retryRef.current.menuAttempts = attempts;
+      const delay = Math.min(30_000, 2000 + attempts * 1500);
+      if (retryRef.current.menuTimer) window.clearTimeout(retryRef.current.menuTimer);
+      retryRef.current.menuTimer = window.setTimeout(() => {
+        fetchMenu();
+      }, delay);
     } finally {
       setIsLoadingMenu(false);
     }
@@ -987,34 +1023,87 @@ const Index = () => {
   // Fetch branch contact for Call / WhatsApp on menu
   useEffect(() => {
     const fetchContact = async () => {
+      setBranchContactLoading(true);
       try {
         const res = await fetchWithTimeout(`${apiBase}/config/branch-contact`);
-        if (res.ok) {
-          const data = await res.json();
-          setBranchContact({
-            id: data.id ?? null,
-            name: data.name || "CAFE CHAPTER 1 RESTRO",
-            phone: data.phone ?? null,
-            location: data.location ?? null,
-            googleReviewUrl: data.googleReviewUrl ?? null,
-            logoUrl: data.logoUrl ?? null,
-            showTotalAmountToCustomers: data.showTotalAmountToCustomers ?? true,
-          });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const isWarmingUp = res.status === 502 || res.status === 503 || res.status === 504;
+          // Keep any previously loaded branch contact; don't permanently set branchId null on transient failures.
+          if (!branchContact) {
+            setBranchContact({
+              id: null,
+              name: "CAFE CHAPTER 1 RESTRO",
+              phone: null,
+              location: null,
+              googleReviewUrl: null,
+              logoUrl: null,
+              showTotalAmountToCustomers: true,
+            });
+          }
+          if (isWarmingUp) {
+            const attempts = (retryRef.current.contactAttempts ?? 0) + 1;
+            retryRef.current.contactAttempts = attempts;
+            const delay = Math.min(30_000, 1500 + attempts * 1500);
+            if (retryRef.current.contactTimer)
+              window.clearTimeout(retryRef.current.contactTimer);
+            retryRef.current.contactTimer = window.setTimeout(() => {
+              fetchContact();
+            }, delay);
+          }
+          return;
+        }
+
+        setBranchContact({
+          id: data.id ?? null,
+          name: data.name || "CAFE CHAPTER 1 RESTRO",
+          phone: data.phone ?? null,
+          location: data.location ?? null,
+          googleReviewUrl: data.googleReviewUrl ?? null,
+          logoUrl: data.logoUrl ?? null,
+          showTotalAmountToCustomers: data.showTotalAmountToCustomers ?? true,
+        });
+        retryRef.current.contactAttempts = 0;
+        if (retryRef.current.contactTimer) {
+          window.clearTimeout(retryRef.current.contactTimer);
+          retryRef.current.contactTimer = null;
         }
       } catch (_) {
-        setBranchContact({
-          id: null,
-          name: "CAFE CHAPTER 1 RESTRO",
-          phone: null,
-          location: null,
-          googleReviewUrl: null,
-          logoUrl: null,
-          showTotalAmountToCustomers: true,
-        });
+        // Keep any previously loaded branch contact; don't permanently set branchId null on transient failures.
+        if (!branchContact) {
+          setBranchContact({
+            id: null,
+            name: "CAFE CHAPTER 1 RESTRO",
+            phone: null,
+            location: null,
+            googleReviewUrl: null,
+            logoUrl: null,
+            showTotalAmountToCustomers: true,
+          });
+        }
+        const attempts = (retryRef.current.contactAttempts ?? 0) + 1;
+        retryRef.current.contactAttempts = attempts;
+        const delay = Math.min(30_000, 2000 + attempts * 1500);
+        if (retryRef.current.contactTimer)
+          window.clearTimeout(retryRef.current.contactTimer);
+        retryRef.current.contactTimer = window.setTimeout(() => {
+          fetchContact();
+        }, delay);
+      } finally {
+        setBranchContactLoading(false);
       }
     };
     fetchContact();
   }, [apiBase]);
+
+  // Cleanup retry timers on unmount.
+  useEffect(() => {
+    return () => {
+      if (retryRef.current.menuTimer) window.clearTimeout(retryRef.current.menuTimer);
+      if (retryRef.current.contactTimer)
+        window.clearTimeout(retryRef.current.contactTimer);
+    };
+  }, []);
 
   // No welcome/visiting page — splash only, then straight to menu
 
@@ -1121,14 +1210,15 @@ const Index = () => {
       }
       if (branchId == null) {
         toast({
-          title: "Branch not loaded",
-          description: "Please refresh the page and try again.",
-          variant: "destructive",
+          title: branchContactLoading ? "Loading branch…" : "Branch not loaded",
+          description: branchContactLoading
+            ? "Please wait a moment and try again."
+            : "Please refresh the page and try again.",
+          variant: branchContactLoading ? "default" : "destructive",
         });
         return;
       }
       setIsSubmittingOrder(true);
-      setLastOrderWaMeLink(null);
       try {
         const response = await fetch(`${apiBase}/orders`, {
           method: "POST",
@@ -1159,12 +1249,10 @@ const Index = () => {
         }
 
         const data = await response.json();
-        const waMe = data.waMeLink || null;
 
         setCart([]);
         setCartOpen(false);
         setOrderSuccess(true);
-        setLastOrderWaMeLink(waMe);
         setLastOrderId(data.order?.id ?? null);
         setLastOrderType(formData.orderType);
         setLastOrderStatus("NEW_ORDER");
@@ -1173,9 +1261,7 @@ const Index = () => {
         setLastCustomerName(nameTrim);
         toast({
           title: "Order placed!",
-          description: validMobile
-            ? "Your order has been sent. Use the button below to get your invoice on WhatsApp."
-            : "Your order has been sent to the kitchen. Add your mobile next time to receive the invoice on WhatsApp.",
+          description: "Your order has been sent to the kitchen.",
         });
         setTimeout(() => {
           reviewSectionRef.current?.scrollIntoView({
@@ -1190,9 +1276,7 @@ const Index = () => {
             : "Please try again or call the staff.";
         toast({
           title: message,
-          description: message.includes("active employee")
-            ? "Ask staff to start their shift at the counter, then try again."
-            : undefined,
+          description: undefined,
           variant: "destructive",
         });
       } finally {
@@ -1265,38 +1349,19 @@ const Index = () => {
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Type</span>
-                  <span className={`font-semibold px-2 py-0.5 rounded-full text-xs ${lastOrderType === "TAKE_AWAY" ? "bg-purple-100 text-purple-800" : "bg-blue-100 text-blue-800"}`}>
+                  <span
+                    className={`font-semibold px-2 py-0.5 rounded-full text-xs ${
+                      lastOrderType === "TAKE_AWAY"
+                        ? "bg-blue-100 text-blue-800"
+                        : "bg-green-100 text-green-800"
+                    }`}
+                  >
                     {lastOrderType === "TAKE_AWAY" ? "Take Away" : "Dine In"}
                   </span>
                 </div>
 
                 {/* Action Buttons */}
-                <div className="space-y-2 pt-2">
-                  {lastOrderWaMeLink && (
-                    <Button
-                      className="w-full bg-[#25D366] hover:bg-[#20BD5A] text-white gap-2 h-10"
-                      onClick={() => window.open(lastOrderWaMeLink!, "_blank")}
-                    >
-                      <MessageCircle className="h-4 w-4" />
-                      Get Invoice on WhatsApp
-                    </Button>
-                  )}
-                  {lastOrderId != null && (
-                    <Button
-                      variant="outline"
-                      className="w-full gap-2 h-10 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                      onClick={() => {
-                        const url = `${apiBase}/orders/${lastOrderId}/invoice-pdf`;
-                        const a = document.createElement("a");
-                        a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer";
-                        document.body.appendChild(a); a.click(); a.remove();
-                      }}
-                    >
-                      <FileDown className="h-4 w-4" />
-                      Download PDF Invoice
-                    </Button>
-                  )}
-                </div>
+                {/* Invoice actions removed for now (per request). */}
 
                 <div className="flex items-center justify-between pt-1">
                   <p className="text-xs text-muted-foreground">Scroll down for review & more</p>

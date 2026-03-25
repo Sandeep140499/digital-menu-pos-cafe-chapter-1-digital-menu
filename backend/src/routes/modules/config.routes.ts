@@ -25,6 +25,8 @@ const branchSchema = z.object({
   directorsEmail: z.string().optional().nullable(),
   showTotalAmountToCustomers: z.boolean().optional(),
   enableNewOrderRinging: z.boolean().optional(),
+  newOrderSoundPreset: z.enum(["beep", "ring", "siren", "chime"]).optional(),
+  newOrderSoundVolume: z.number().min(0).max(1).optional(),
 });
 
 const notificationSchema = z.object({
@@ -164,14 +166,27 @@ configRouter.get(
       select: { branchId: true },
     });
     if (!employee?.branchId) {
-      return res.json({ enableNewOrderRinging: true });
+      return res.json({
+        enableNewOrderRinging: true,
+        newOrderSoundPreset: "ring",
+        newOrderSoundVolume: 1,
+      });
     }
     const branch = await prisma.branch.findUnique({
       where: { id: employee.branchId },
-      select: { enableNewOrderRinging: true },
+      select: {
+        enableNewOrderRinging: true,
+        newOrderSoundPreset: true,
+        newOrderSoundVolume: true,
+      },
     });
     return res.json({
       enableNewOrderRinging: branch?.enableNewOrderRinging ?? true,
+      newOrderSoundPreset: (branch as any)?.newOrderSoundPreset ?? "ring",
+      newOrderSoundVolume:
+        typeof (branch as any)?.newOrderSoundVolume === "number"
+          ? (branch as any).newOrderSoundVolume
+          : 1,
     });
   },
 );

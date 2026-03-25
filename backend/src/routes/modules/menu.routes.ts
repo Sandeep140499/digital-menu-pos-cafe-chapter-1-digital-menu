@@ -70,13 +70,30 @@ menuRouter.get("/", async (_req, res) => {
   }
   try {
     const categories = await prisma.menuCategory.findMany({
-      include: {
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        imageUrl: true,
+        createdAt: true,
         items: {
           where: { isActive: true },
           orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            imageUrl: true,
+            basePrice: true,
+            hasHalf: true,
+            halfPrice: true,
+            isActive: true,
+            categoryId: true,
+            createdAt: true,
+          },
         },
       },
-      orderBy: { createdAt: "asc" },
     });
 
     let bestSellerItemIds: number[] = publicMenuCache?.data.bestSellerItemIds ?? [];
@@ -139,12 +156,29 @@ menuRouter.get(
   requireRole("ADMIN"),
   async (_req, res) => {
     const categories = await prisma.menuCategory.findMany({
-      include: {
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        imageUrl: true,
+        createdAt: true,
         items: {
           orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            imageUrl: true,
+            basePrice: true,
+            hasHalf: true,
+            halfPrice: true,
+            isActive: true,
+            categoryId: true,
+            createdAt: true,
+          },
         },
       },
-      orderBy: { createdAt: "asc" },
     });
     return res.json(categories);
   }

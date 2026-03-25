@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../../config/prisma.js";
 import { authenticate, requireRole } from "../../middleware/auth.js";
+import { getBusinessDayRange } from "../../utils/businessDay.js";
 
 const startShiftSchema = z.object({
   branchId: z.number().int().optional(), // optional: if omitted, use employee's branchId from DB
@@ -65,14 +66,19 @@ shiftRouter.get(
       },
     });
 
-    // Daily totals (by shiftStart date)
+    // Daily totals (business day reset at 04:00 in branch timezone)
     const dailyStats = new Map<string, { date: string; totalHours: number; totalSales: number; shifts: number }>();
+    const timeZone = process.env.TZ || "Asia/Kolkata";
     for (const shift of shifts) {
-      const date = shift.shiftStart.toISOString().slice(0, 10);
-      if (!dailyStats.has(date)) {
-        dailyStats.set(date, { date, totalHours: 0, totalSales: 0, shifts: 0 });
+      const { dateKey } = getBusinessDayRange({
+        date: shift.shiftStart,
+        boundaryHour: 4,
+        timeZone,
+      });
+      if (!dailyStats.has(dateKey)) {
+        dailyStats.set(dateKey, { date: dateKey, totalHours: 0, totalSales: 0, shifts: 0 });
       }
-      const stats = dailyStats.get(date)!;
+      const stats = dailyStats.get(dateKey)!;
       stats.totalHours += shift.totalHours || 0;
       stats.totalSales += shift.totalSales || 0;
       stats.shifts += 1;

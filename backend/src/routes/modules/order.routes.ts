@@ -64,7 +64,15 @@ const updateStatusSchema = z.object({
 
 const updateOrderCustomerSchema = z.object({
   customerName: z.string().min(1).optional(),
-  customerMobile: z.string().regex(mobileRegex, "Valid 10-digit mobile number required"),
+  customerMobile: z
+    .union([z.string().regex(mobileRegex), z.literal("")])
+    .optional()
+    .transform((s) => {
+      const raw = (s ?? "").trim();
+      if (!raw) return null;
+      const digits = raw.replace(/\D/g, "").slice(-10);
+      return digits.length === 10 && /^[6-9]/.test(digits) ? digits : null;
+    }),
 });
 
 const modifyOrderSchema = z.object({
@@ -222,7 +230,7 @@ orderRouter.post("/", async (req, res) => {
       console.error("Failed to log no-active-employee notification:", logErr);
     }
     return res.status(503).json({
-      message: "No active employee at counter. Please contact at counter if open.",
+      message: "No active employee at counter, please contact to counter.",
     });
   }
 
@@ -242,45 +250,29 @@ orderRouter.post("/", async (req, res) => {
         create: orderItemsData,
       },
     },
-    include: { items: true, branch: true, employee: true },
+    select: {
+      id: true,
+      branchId: true,
+      status: true,
+      paymentStatus: true,
+      orderType: true,
+      totalAmount: true,
+      createdAt: true,
+    },
+  });
+  // Invoice generation/linking intentionally omitted from order-create response to keep the
+  // customer checkout path fast under high concurrency. Invoice endpoints remain available.
+
+  // For realtime employee popups we still need order details (items/table). Fetch once and emit.
+  // This keeps the customer API response small while preserving existing employee UX.
+  const orderForRealtime = await prisma.order.findUnique({
+    where: { id: order.id },
+    include: { items: true, table: true, employee: { select: { id: true, name: true } }, branch: true },
   });
 
-  const branchInfo = order.branch
-    ? {
-        name: order.branch.name,
-        location: order.branch.location,
-        logoUrl: order.branch.logoUrl,
-        phone: order.branch.phone,
-        googleReviewUrl: order.branch.googleReviewUrl,
-        showTotalAmountToCustomers: (order.branch as any).showTotalAmountToCustomers,
-      }
-    : null;
-
-  const apiBase = process.env.PUBLIC_API_BASE_URL || "";
-  const invoicePdfUrl = apiBase
-    ? `${apiBase.replace(/\/$/, "")}/api/orders/${order.id}/invoice-pdf`
-    : undefined;
-
-  const acceptedBy = order.employee
-    ? { name: order.employee.name, role: order.employee.role ?? "Counter Staff" }
-    : undefined;
-  let invoiceMessage: string | undefined;
-  let waMeLink: string | undefined;
-  if (order.customerMobile && order.customerName) {
-    invoiceMessage = buildOrderInvoice({
-      orderId: order.id,
-      customerName: order.customerName,
-      items: order.items.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price, variant: i.variant })),
-      totalAmount: order.totalAmount,
-      tableNumber,
-      branch: branchInfo,
-      invoicePdfUrl,
-      acceptedBy,
-    });
-    waMeLink = getWaMeLink(order.customerMobile, invoiceMessage);
-  }
-
-  req.app.locals.io?.emit("order:new", order);
+  // Emit globally (legacy) + branch-scoped (instant employee notifications)
+  req.app.locals.io?.emit("order:new", orderForRealtime ?? order);
+  req.app.locals.io?.to(`branch:${order.branchId}`)?.emit("order:new", orderForRealtime ?? order);
   publishOrderStatus({
     id: order.id,
     status: order.status,
@@ -293,16 +285,26 @@ orderRouter.post("/", async (req, res) => {
   if (isMailConfigured()) {
     setImmediate(async () => {
       try {
+        const items = await prisma.orderItem.findMany({
+          where: { orderId: order.id, isRemoved: false },
+          select: { name: true, quantity: true, price: true, variant: true },
+          orderBy: { id: "asc" },
+        });
+        const branch = await prisma.branch.findUnique({
+          where: { id: order.branchId },
+          select: { directorsEmail: true },
+        });
         const admin = await prisma.admin.findFirst({ select: { email: true } });
-        const directorEmails: string[] = Array.isArray((order.branch as any)?.directorEmails)
-          ? (order.branch as any).directorEmails.filter(Boolean)
-          : [];
+        const directorEmails: string[] = (branch?.directorsEmail || "")
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
         const recipients = [...new Set([admin?.email, ...directorEmails].filter(Boolean))] as string[];
         if (recipients.length === 0) return;
 
         const orderTypeLabel = orderType === "TAKE_AWAY" ? "Take Away" : "Dine In";
         const tableLabel = orderType === "TAKE_AWAY" ? "Take Away" : `Table ${tableNumber}`;
-        const itemRows = order.items
+        const itemRows = items
           .map((i) => {
             const variantLabel = i.variant ? ` (${i.variant === "HALF" ? "Half" : "Full"})` : "";
             return `<tr><td style="padding:6px 12px;border-bottom:1px solid #eee;">${i.quantity}× ${i.name}${variantLabel}</td><td style="padding:6px 12px;border-bottom:1px solid #eee;text-align:right;">₹${(i.price * i.quantity).toFixed(0)}</td></tr>`;
@@ -317,8 +319,8 @@ orderRouter.post("/", async (req, res) => {
   </div>
   <div style="padding:20px 24px;">
     <table style="width:100%;border-collapse:collapse;margin-bottom:16px;">
-      <tr><td style="color:#6b7280;font-size:13px;padding:4px 0;">Customer</td><td style="font-weight:600;font-size:14px;">${order.customerName || "Walk-in"}</td></tr>
-      <tr><td style="color:#6b7280;font-size:13px;padding:4px 0;">Mobile</td><td style="font-size:14px;">${order.customerMobile || "—"}</td></tr>
+      <tr><td style="color:#6b7280;font-size:13px;padding:4px 0;">Customer</td><td style="font-weight:600;font-size:14px;">${customerName || "Walk-in"}</td></tr>
+      <tr><td style="color:#6b7280;font-size:13px;padding:4px 0;">Mobile</td><td style="font-size:14px;">${customerMobile || "—"}</td></tr>
       <tr><td style="color:#6b7280;font-size:13px;padding:4px 0;">Type</td><td style="font-size:14px;font-weight:600;color:#1a5c38;">${orderTypeLabel}</td></tr>
       <tr><td style="color:#6b7280;font-size:13px;padding:4px 0;">Location</td><td style="font-size:14px;">${tableLabel}</td></tr>
     </table>
@@ -333,7 +335,7 @@ orderRouter.post("/", async (req, res) => {
 
         await sendEmail({
           to: recipients,
-          subject: `🛎️ New Order #${order.id} — ${order.customerName || "Walk-in"} (${tableLabel})`,
+          subject: `🛎️ New Order #${order.id} — ${customerName || "Walk-in"} (${tableLabel})`,
           html,
         });
       } catch (err) {
@@ -344,9 +346,8 @@ orderRouter.post("/", async (req, res) => {
 
   return res.status(201).json({
     order,
-    ...(invoiceMessage && waMeLink ? { invoiceMessage, waMeLink } : {}),
-    invoicePdfUrl,
-    invoiceFileName: getInvoiceFileName(order.id),
+    invoicePdfUrl: undefined,
+    invoiceFileName: undefined,
   });
 });
 
@@ -625,18 +626,47 @@ orderRouter.get(
       if (role === "EMPLOYEE" && userId != null) {
         const employee = await prisma.employee.findUnique({
           where: { id: userId },
+          select: { branchId: true },
         });
         if (employee?.branchId != null) where.branchId = employee.branchId;
       }
 
+      const limitNum = Math.min(Math.max(Number(req.query.limit) || 300, 1), 1000);
+
       const orders = await prisma.order.findMany({
         where,
         orderBy: { createdAt: "asc" },
-        include: {
-          items: { include: { menuItem: true } },
-          table: true,
-          employee: true,
-          branch: true,
+        take: limitNum,
+        select: {
+          id: true,
+          branchId: true,
+          tableId: true,
+          status: true,
+          paymentStatus: true,
+          orderType: true,
+          totalAmount: true,
+          createdAt: true,
+          updatedAt: true,
+          acceptedAt: true,
+          completedAt: true,
+          customerName: true,
+          customerMobile: true,
+          employeeId: true,
+          shiftId: true,
+          table: { select: { id: true, tableNumber: true } },
+          employee: { select: { id: true, name: true } },
+          items: {
+            orderBy: { id: "asc" },
+            select: {
+              id: true,
+              name: true,
+              quantity: true,
+              price: true,
+              variant: true,
+              isRemoved: true,
+              menuItemId: true,
+            },
+          },
         },
       });
 
@@ -858,6 +888,7 @@ orderRouter.post(
       include: { items: true, table: true, employee: true, branch: true },
     });
     req.app.locals.io?.emit("order:updated", updated);
+    req.app.locals.io?.to(`branch:${updated.branchId}`)?.emit("order:updated", updated);
     publishOrderStatus({
       id: updated.id,
       status: updated.status,
@@ -911,6 +942,7 @@ orderRouter.patch(
     });
 
     req.app.locals.io?.emit("order:updated", order);
+    req.app.locals.io?.to(`branch:${order.branchId}`)?.emit("order:updated", order);
     publishOrderStatus({
       id: order.id,
       status: order.status,
@@ -962,8 +994,11 @@ orderRouter.patch(
 orderRouter.patch(
   "/:id/customer",
   authenticate,
-  requireRole("EMPLOYEE"),
   async (req, res) => {
+    const role = (req as any).user?.role;
+    if (role !== "EMPLOYEE" && role !== "ADMIN") {
+      return res.status(403).json({ message: "Forbidden" });
+    }
     const parsed = updateOrderCustomerSchema.safeParse(req.body);
     if (!parsed.success) {
       return res
@@ -977,13 +1012,46 @@ orderRouter.patch(
     const order = await prisma.order.update({
       where: { id },
       data: {
-        customerMobile: parsed.data.customerMobile,
+        customerMobile: parsed.data.customerMobile ?? null,
         ...(customerName ? { customerName } : {}),
       },
       include: { items: true, table: true },
     });
     req.app.locals.io?.emit("order:updated", order);
     return res.json(order);
+  },
+);
+
+// Admin or Employee: delete customer lead mobile across orders (clears customerMobile)
+orderRouter.delete(
+  "/customer-leads/:mobile",
+  authenticate,
+  async (req, res) => {
+    const user = (req as any).user as { id: number; role: "ADMIN" | "EMPLOYEE" } | undefined;
+    const role = user?.role;
+    if (role !== "EMPLOYEE" && role !== "ADMIN") {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    const raw = String(req.params.mobile || "").replace(/\D/g, "").slice(-10);
+    if (raw.length !== 10 || !/^[6-9]/.test(raw)) {
+      return res.status(400).json({ message: "Valid 10-digit mobile number required" });
+    }
+    const result = await prisma.order.updateMany({
+      where: { customerMobile: raw },
+      data: { customerMobile: null },
+    });
+    try {
+      await prisma.adminNotification.create({
+        data: {
+          type: "CUSTOMER_LEAD_DELETED",
+          message: `Customer lead mobile deleted (${raw}) — cleared from ${result.count} order(s).`,
+          meta: { mobile: raw, clearedCount: result.count, actorRole: role, actorId: user?.id ?? null },
+        },
+      });
+    } catch {
+      // ignore audit logging failures
+    }
+    return res.json({ ok: true, clearedCount: result.count });
   },
 );
 
@@ -1082,6 +1150,7 @@ orderRouter.post(
     });
 
     req.app.locals.io?.emit("order:modified", updatedOrder);
+    req.app.locals.io?.to(`branch:${(updatedOrder as any).branchId}`)?.emit("order:modified", updatedOrder);
 
     return res.json({
       order: updatedOrder,
@@ -1274,6 +1343,7 @@ orderRouter.post(
       }
 
       req.app.locals.io?.emit("order:modified", result.updatedOrder);
+      req.app.locals.io?.to(`branch:${(result.updatedOrder as any).branchId}`)?.emit("order:modified", result.updatedOrder);
       return res.json({
         order: result.updatedOrder,
         oldAmount: result.oldAmount,

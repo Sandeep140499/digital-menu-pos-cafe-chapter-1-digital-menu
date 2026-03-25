@@ -28,6 +28,10 @@ model Branch {
   directorsEmail  String?   // Comma-separated verified director emails (for salary slip copies)
   showTotalAmountToCustomers Boolean @default(true)
   enableNewOrderRinging     Boolean  @default(true)
+  /** Global employee notification sound preset for new orders (admin-controlled). */
+  newOrderSoundPreset       String   @default("ring")
+  /** Global employee notification volume (0..1) for new orders (admin-controlled). */
+  newOrderSoundVolume       Float    @default(1)
   createdAt       DateTime  @default(now())
   employees   Employee[]
   tables      Table[]
@@ -159,6 +163,9 @@ model EmployeeShift {
   createdAt  DateTime  @default(now())
   orders     Order[]
   overtimeRecord EmployeeOvertime?
+
+  @@index([branchId, shiftEnd, status, shiftStart])
+  @@index([employeeId, shiftEnd, shiftStart])
 }
 
 enum ShiftStatus {
@@ -309,6 +316,8 @@ model Order {
   @@index([status])
   @@index([createdAt])
   @@index([customerMobile])
+  @@index([branchId, status, createdAt])
+  @@index([branchId, updatedAt])
 }
 
 model OrderItem {
@@ -327,6 +336,9 @@ model OrderItem {
   removedAt   DateTime? // When item was removed
   removedBy   Int?      // Employee ID who removed it
   removalReason String? // Reason for removal (e.g., "Item not available")
+
+  @@index([orderId])
+  @@index([menuItemId])
 }
 
 model RemovedItemsReport {

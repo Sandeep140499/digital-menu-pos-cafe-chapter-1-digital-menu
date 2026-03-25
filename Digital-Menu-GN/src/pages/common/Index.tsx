@@ -1107,7 +1107,7 @@ const Index = () => {
       setIsSubmittingOrder(true);
       setLastOrderWaMeLink(null);
       try {
-        const response = await fetch(`${API_BASE_URL}/orders`, {
+        const response = await fetch(`${apiBase}/orders`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -1291,7 +1291,7 @@ const Index = () => {
                       variant="outline"
                       className="w-full gap-2 h-10 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
                       onClick={() => {
-                        const url = `${API_BASE_URL}/orders/${lastOrderId}/invoice-pdf`;
+                        const url = `${apiBase}/orders/${lastOrderId}/invoice-pdf`;
                         const a = document.createElement("a");
                         a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer";
                         document.body.appendChild(a); a.click(); a.remove();

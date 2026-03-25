@@ -5,7 +5,10 @@
  */
 export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
-  (import.meta.env.DEV ? "/api" : "http://localhost:4000/api");
+  // In production we default to "/api" (same-origin) so deployments that reverse-proxy
+  // the backend under the same domain work out of the box. Never default to localhost
+  // in production because it breaks on customer devices.
+  (import.meta.env.DEV ? "/api" : "/api");
 
 /** Default request timeout (ms). Prevents UI from hanging when backend is slow. */
 export const API_TIMEOUT_MS = 25000;

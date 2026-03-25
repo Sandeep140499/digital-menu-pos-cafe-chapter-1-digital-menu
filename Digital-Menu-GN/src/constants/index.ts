@@ -4,6 +4,7 @@ export {
   fetchWithTimeout,
   fetchWithTimeoutRetry,
   getFrontendUrl,
+  readApiErrorMessage,
 } from "./api";
 export {
   APP_NAME,

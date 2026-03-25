@@ -83,6 +83,48 @@ export async function fetchWithTimeoutRetry(
  * Set VITE_FRONTEND_URL in production to your deployed domain (e.g. https://yourdomain.com).
  * Falls back to window.location.origin when available (browser), else dev default.
  */
+/**
+ * Human-readable message for failed fetch responses (handles 502–504 HTML bodies from Railway).
+ */
+export async function readApiErrorMessage(res: Response): Promise<string> {
+  const st = res.status;
+  if (st === 503 || st === 502 || st === 504) {
+    return "Server is temporarily unavailable (Railway may be waking up or busy). Wait a minute and try again.";
+  }
+  const raw = await res.text().catch(() => "");
+  const t = raw.trim();
+  if (t.startsWith("<!") || /<html[\s>]/i.test(t)) {
+    return `Server error (${st}). The app may be restarting — try again in a minute.`;
+  }
+  if (t.startsWith("{") || t.startsWith("[")) {
+    try {
+      const err = JSON.parse(t) as {
+        message?: string;
+        errors?: Array<{ path?: (string | number)[]; message?: string }>;
+      };
+      const issues = Array.isArray(err.errors) ? err.errors : [];
+      if (issues.length > 0) {
+        return issues
+          .slice(0, 4)
+          .map((i) => {
+            const p =
+              Array.isArray(i.path) && i.path.length > 0
+                ? i.path.join(".")
+                : "field";
+            return `${p}: ${i.message || "Invalid"}`;
+          })
+          .join(" | ");
+      }
+      if (typeof err.message === "string" && err.message.trim())
+        return err.message.trim();
+    } catch {
+      // fall through
+    }
+  }
+  if (t.length > 0) return t.slice(0, 280);
+  return `Request failed (${st})`;
+}
+
 export function getFrontendUrl(): string {
   if (
     typeof import.meta.env.VITE_FRONTEND_URL === "string" &&

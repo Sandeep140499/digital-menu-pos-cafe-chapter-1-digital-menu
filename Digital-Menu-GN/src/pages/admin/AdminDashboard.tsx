@@ -100,6 +100,7 @@ import {
   API_TIMEOUT_MS,
   fetchWithTimeout,
   fetchWithTimeoutRetry,
+  readApiErrorMessage,
   BREAK_TIME_MINUTES,
   formatBreakTime,
   EMPLOYEE_STATUS_FILTER_OPTIONS,
@@ -5126,32 +5127,18 @@ const AdminDashboard = () => {
         });
         toast({ title: "Success", description: "Branch created" });
       } else {
-        const err = await res.json().catch(() => ({}));
-        const issues: Array<{ path?: (string | number)[]; message?: string }> =
-          Array.isArray((err as any)?.errors) ? (err as any).errors : [];
-        const issueText =
-          issues.length > 0
-            ? issues
-                .slice(0, 4)
-                .map((i) => {
-                  const p = Array.isArray(i.path) && i.path.length > 0 ? i.path.join(".") : "field";
-                  return `${p}: ${i.message || "Invalid"}`;
-                })
-                .join(" | ") + (issues.length > 4 ? ` (+${issues.length - 4} more)` : "")
-            : "";
+        const description = await readApiErrorMessage(res);
         toast({
-          title: "Error",
-          description:
-            issueText ||
-            (err as { message?: string }).message ||
-            "Failed to create branch",
+          title: "Could not create branch",
+          description,
           variant: "destructive",
         });
       }
     } catch {
       toast({
         title: "Error",
-        description: "Failed to create branch",
+        description:
+          "Network error or server unreachable. If the API is on Railway, wait for it to wake up and try again.",
         variant: "destructive",
       });
     } finally {
@@ -5220,25 +5207,18 @@ const AdminDashboard = () => {
         }
         await loadSettings();
       } else {
-        const err = (await res.json().catch(() => ({}))) as {
-          message?: string;
-          errors?: { path?: string[]; message?: string }[];
-        };
-        const firstErr = Array.isArray(err.errors) && err.errors[0];
-        const detail = firstErr
-          ? `${firstErr.message || "Invalid input"}${firstErr.path?.length ? ` (${firstErr.path.join(".")})` : ""}`
-          : err.message;
+        const description = await readApiErrorMessage(res);
         toast({
           title: "Could not save branch",
-          description:
-            detail || "Failed to save branch. Check Logo URL and other fields.",
+          description,
           variant: "destructive",
         });
       }
     } catch {
       toast({
         title: "Error",
-        description: "Failed to update branch",
+        description:
+          "Network error or server unreachable. Try again in a moment.",
         variant: "destructive",
       });
     } finally {

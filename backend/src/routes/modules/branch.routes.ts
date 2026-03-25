@@ -4,13 +4,19 @@ import { prisma } from "../../config/prisma.js";
 import { authenticate, requireRole } from "../../middleware/auth.js";
 import { directorRouter } from "./director.routes.js";
 
+/** Empty string → undefined so optional URLs are truly optional (logo not required). */
+const optionalHttpUrl = z.preprocess(
+  (val) => (val === "" || val === null ? undefined : val),
+  z.string().url().optional(),
+);
+
 const createBranchSchema = z.object({
   name: z.string().min(1),
   location: z.string().optional(),
   timezone: z.string().optional(),
-  logoUrl: z.string().url().optional().nullable(),
+  logoUrl: optionalHttpUrl,
   phone: z.string().optional().nullable(),
-  googleReviewUrl: z.string().url().optional().nullable(),
+  googleReviewUrl: optionalHttpUrl,
   pincode: z.string().optional().nullable(),
   directorsEmail: z.string().optional().nullable(),
 });

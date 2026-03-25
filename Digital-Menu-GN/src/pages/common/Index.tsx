@@ -33,7 +33,11 @@ import { AnimatePresence, motion } from "framer-motion";
 import QRCodeGenerator from "@/components/QRCodeGenerator";
 import LocationMap from "@/components/LocationMap";
 import { useToast } from "@/hooks/use-toast";
-import { API_BASE_URL, fetchWithTimeout } from "@/constants";
+import {
+  API_BASE_URL,
+  API_TIMEOUT_MS,
+  fetchWithTimeout,
+} from "@/constants";
 import { useOrderStatusStream } from "@/hooks/useOrderStatusStream";
 import cafeLogo from "@/assets/logo.png";
 
@@ -88,6 +92,8 @@ function OrderCartDialog({
   removeCartItem,
   onCheckout,
   isSubmittingOrder,
+  /** Which checkout path is in flight (fixes spinner on correct button). */
+  pendingCheckoutType,
   lastCustomerName,
   lastCustomerMobile,
   showTotalAmount,
@@ -106,6 +112,7 @@ function OrderCartDialog({
     orderType: "DINE_IN" | "TAKE_AWAY";
   }) => Promise<void>; // customerMobile optional – for WhatsApp invoice
   isSubmittingOrder: boolean;
+  pendingCheckoutType: "DINE_IN" | "TAKE_AWAY" | null;
   lastCustomerName: string;
   lastCustomerMobile: string;
   showTotalAmount: boolean;
@@ -119,6 +126,7 @@ function OrderCartDialog({
     if (open) {
       setCustomerName(lastCustomerName || "");
       setCustomerMobile(lastCustomerMobile || "");
+      setOrderType("DINE_IN");
     }
   }, [open, lastCustomerName, lastCustomerMobile]);
 
@@ -275,17 +283,21 @@ function OrderCartDialog({
                 !/^\d$/.test(tableNumber.trim())
               }
               className="min-h-[48px] bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-sm disabled:opacity-50"
-              onClick={() =>
-                onCheckout({
+              onClick={() => {
+                setOrderType("DINE_IN");
+                void onCheckout({
                   customerName,
                   customerMobile,
                   tableNumber,
                   orderType: "DINE_IN",
-                })
-              }
+                });
+              }}
             >
-              {isSubmittingOrder && orderType === "DINE_IN" ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+              {isSubmittingOrder && pendingCheckoutType === "DINE_IN" ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                  <span className="text-xs font-semibold">Sending…</span>
+                </span>
               ) : (
                 "DINE IN"
               )}
@@ -301,7 +313,7 @@ function OrderCartDialog({
               onClick={() => {
                 setTableNumber("");
                 setOrderType("TAKE_AWAY");
-                onCheckout({
+                void onCheckout({
                   customerName,
                   customerMobile,
                   tableNumber: "",
@@ -309,8 +321,11 @@ function OrderCartDialog({
                 });
               }}
             >
-              {isSubmittingOrder && orderType === "TAKE_AWAY" ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+              {isSubmittingOrder && pendingCheckoutType === "TAKE_AWAY" ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                  <span className="text-xs font-semibold">Sending…</span>
+                </span>
               ) : (
                 "TAKE AWAY"
               )}
@@ -820,6 +835,9 @@ const Index = () => {
   const [categoryQuery, setCategoryQuery] = useState("");
   const [cartOpen, setCartOpen] = useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
+  const [pendingCheckoutType, setPendingCheckoutType] = useState<
+    "DINE_IN" | "TAKE_AWAY" | null
+  >(null);
   const [menuCategories, setMenuCategories] = useState<any[]>([]);
   const [bestSellerItemIds, setBestSellerItemIds] = useState<number[]>([]);
   const [isLoadingMenu, setIsLoadingMenu] = useState(true);
@@ -1220,13 +1238,15 @@ const Index = () => {
         });
         return;
       }
+      setPendingCheckoutType(formData.orderType);
       setIsSubmittingOrder(true);
       try {
-        const response = await fetch(`${apiBase}/orders`, {
+        const response = await fetchWithTimeout(`${apiBase}/orders`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
+          timeout: Math.max(API_TIMEOUT_MS, 60_000),
           body: JSON.stringify({
             orderType: formData.orderType,
             tableNumber: formData.tableNumber.trim(),
@@ -1285,8 +1305,11 @@ const Index = () => {
           });
         }, 800);
       } catch (error) {
-        const message =
-          error instanceof Error
+        const isTimeout =
+          error instanceof Error && error.name === "AbortError";
+        const message = isTimeout
+          ? "Request timed out. Check your connection and try again, or ask staff for help."
+          : error instanceof Error
             ? error.message
             : "Please try again or call the staff.";
         toast({
@@ -1296,9 +1319,10 @@ const Index = () => {
         });
       } finally {
         setIsSubmittingOrder(false);
+        setPendingCheckoutType(null);
       }
     },
-    [cart, branchId, sessionToken, toast],
+    [cart, branchId, branchContactLoading, sessionToken, toast],
   );
 
   // Poll order status while success screen is shown
@@ -1568,17 +1592,32 @@ const Index = () => {
                         </span>
                       </div>
                       <div className="text-xs text-emerald-100">
-                        {showTotalAmountToCustomers
-                          ? `Total: ₹${cartTotal.toFixed(0)}`
-                          : "Total: —"}
+                        {isSubmittingOrder ? (
+                          <span className="flex items-center gap-1.5">
+                            <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+                            Sending order to kitchen…
+                          </span>
+                        ) : showTotalAmountToCustomers ? (
+                          `Total: ₹${cartTotal.toFixed(0)}`
+                        ) : (
+                          "Total: —"
+                        )}
                       </div>
                     </div>
                     <Button
                       size="sm"
                       className="min-h-[44px] min-w-[120px] touch-manipulation shrink-0 bg-white text-emerald-900 hover:bg-emerald-50"
+                      disabled={isSubmittingOrder}
                       onClick={() => setCartOpen(true)}
                     >
-                      View & Checkout
+                      {isSubmittingOrder ? (
+                        <span className="flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Wait…
+                        </span>
+                      ) : (
+                        "View & Checkout"
+                      )}
                     </Button>
                   </motion.div>
                 )}
@@ -1589,7 +1628,10 @@ const Index = () => {
           {/* Cart Drawer/Dialog - form state lives here so typing does not re-render the menu */}
           <OrderCartDialog
             open={cartOpen}
-            onOpenChange={setCartOpen}
+            onOpenChange={(open) => {
+              if (!open && isSubmittingOrder) return;
+              setCartOpen(open);
+            }}
             cart={cart}
             cartTotal={cartTotal}
             incrementCartItem={incrementCartItem}
@@ -1597,6 +1639,7 @@ const Index = () => {
             removeCartItem={removeCartItem}
             onCheckout={handleCheckout}
             isSubmittingOrder={isSubmittingOrder}
+            pendingCheckoutType={pendingCheckoutType}
             lastCustomerName={lastCustomerName}
             lastCustomerMobile={lastCustomerMobile}
             showTotalAmount={showTotalAmountToCustomers}

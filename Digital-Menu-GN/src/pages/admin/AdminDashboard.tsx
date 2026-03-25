@@ -5010,10 +5010,24 @@ const AdminDashboard = () => {
         toast({ title: "Success", description: "Branch created" });
       } else {
         const err = await res.json().catch(() => ({}));
+        const issues: Array<{ path?: (string | number)[]; message?: string }> =
+          Array.isArray((err as any)?.errors) ? (err as any).errors : [];
+        const issueText =
+          issues.length > 0
+            ? issues
+                .slice(0, 4)
+                .map((i) => {
+                  const p = Array.isArray(i.path) && i.path.length > 0 ? i.path.join(".") : "field";
+                  return `${p}: ${i.message || "Invalid"}`;
+                })
+                .join(" | ") + (issues.length > 4 ? ` (+${issues.length - 4} more)` : "")
+            : "";
         toast({
           title: "Error",
           description:
-            (err as { message?: string }).message || "Failed to create branch",
+            issueText ||
+            (err as { message?: string }).message ||
+            "Failed to create branch",
           variant: "destructive",
         });
       }

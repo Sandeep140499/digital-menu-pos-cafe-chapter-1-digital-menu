@@ -49,10 +49,19 @@ branchRouter.post(
         .status(400)
         .json({ message: "Invalid input", errors: parsed.error.issues });
     }
-    const branch = await prisma.branch.create({
-      data: parsed.data,
-    });
-    return res.status(201).json(branch);
+    try {
+      const branch = await prisma.branch.create({
+        data: parsed.data,
+      });
+      return res.status(201).json(branch);
+    } catch (e: unknown) {
+      const msg = (e as any)?.message ? String((e as any).message) : "Failed to create branch";
+      // Prisma unique violations etc. should be user-friendly.
+      if (msg.includes("Unique constraint") || msg.includes("P2002")) {
+        return res.status(409).json({ message: "A branch with these details already exists." });
+      }
+      return res.status(500).json({ message: msg || "Failed to create branch" });
+    }
   },
 );
 

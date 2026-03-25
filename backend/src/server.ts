@@ -34,7 +34,11 @@ function buildAllowedOriginsFromEnv(): string[] | undefined {
   const list = chunks
     .join(",")
     .split(",")
-    .map((o) => o.trim().replace(/\/$/, ""))
+    .map((o) =>
+      // Railway/Vercel env values are sometimes stored with wrapping quotes.
+      // Normalize so `"https://example.com"` and `'https://example.com'` match the real Origin header.
+      o.trim().replace(/^['"]|['"]$/g, "").replace(/\/$/, ""),
+    )
     .filter(Boolean);
   return [...new Set(list)];
 }

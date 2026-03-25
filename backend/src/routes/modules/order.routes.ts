@@ -40,19 +40,11 @@ const createOrderSchema = z.object({
 }).superRefine((data, ctx) => {
   const table = (data.tableNumber || "").trim();
   if (data.orderType === "DINE_IN") {
-    if (!table) {
+    if (!table || !/^\d$/.test(table)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["tableNumber"],
-        message: "Table number is required for dine-in orders",
-      });
-      return;
-    }
-    if (!/^\d+$/.test(table)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["tableNumber"],
-        message: "Table number must be numeric (e.g., 1, 2, 3)",
+        message: "Please enter your table number",
       });
     }
   }

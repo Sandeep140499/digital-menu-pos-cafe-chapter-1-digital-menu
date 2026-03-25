@@ -239,12 +239,19 @@ function OrderCartDialog({
                 <input
                   value={tableNumber}
                   inputMode="numeric"
+                  maxLength={1}
+                  autoComplete="off"
                   onChange={(e) =>
-                    setTableNumber(e.target.value.replace(/\D/g, ""))
+                    setTableNumber(
+                      e.target.value.replace(/\D/g, "").slice(0, 1),
+                    )
                   }
-                  placeholder="Enter table number (e.g., 1, 2, 3)"
+                  placeholder="One digit only (0–9)"
                   className="w-full rounded-md border px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600"
                 />
+                <span className="text-[10px] text-muted-foreground">
+                  Table number must be a single digit.
+                </span>
               </label>
             )}
           </div>
@@ -264,7 +271,7 @@ function OrderCartDialog({
                 !cart.length ||
                 isSubmittingOrder ||
                 !customerName.trim() ||
-                !tableNumber.trim()
+                !/^\d$/.test(tableNumber.trim())
               }
               className="min-h-[48px] bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-sm disabled:opacity-50"
               onClick={() =>
@@ -1190,21 +1197,14 @@ const Index = () => {
         .slice(0, 10);
       const validMobile =
         mobileTrim.length === 10 && /^[6-9]/.test(mobileTrim) ? mobileTrim : "";
-      if (formData.orderType === "DINE_IN" && !formData.tableNumber.trim()) {
-        toast({
-          title: "Table number required",
-          description:
-            "Please enter your table number.",
-        });
-        return;
-      }
       if (
         formData.orderType === "DINE_IN" &&
-        !/^\d+$/.test(formData.tableNumber.trim())
+        !/^\d$/.test(formData.tableNumber.trim())
       ) {
         toast({
           title: "Invalid table number",
-          description: "Table number must be numeric (e.g., 1, 2, 3).",
+          description: "Please enter your table number.",
+          variant: "destructive",
         });
         return;
       }

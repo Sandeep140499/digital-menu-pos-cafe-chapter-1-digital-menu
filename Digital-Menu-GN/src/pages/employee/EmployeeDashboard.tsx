@@ -1151,7 +1151,10 @@ function AddOrderSection({
   const handleSubmit = async () => {
     if (!cart.length) { toast.error("Add at least one item"); return; }
     if (!customerName.trim()) { toast.error("Customer name is required"); return; }
-    if (orderType === "DINE_IN" && !tableNumber.trim()) { toast.error("Table number is required"); return; }
+    if (orderType === "DINE_IN" && !/^\d$/.test(tableNumber.trim())) {
+      toast.error("Please enter your table number");
+      return;
+    }
     if (!branchId) { toast.error("Branch not loaded. Refresh and try again."); return; }
 
     const mobileTrim = customerMobile.replace(/\D/g, "").slice(0, 10);
@@ -1392,18 +1395,32 @@ function AddOrderSection({
                     <label className="text-xs font-medium text-slate-600 mb-1 block">Table Number <span className="text-red-500">*</span></label>
                     <Input
                       inputMode="numeric"
-                      placeholder="e.g. 5"
+                      maxLength={1}
+                      autoComplete="off"
+                      placeholder="One digit (0–9)"
                       value={tableNumber}
-                      onChange={(e) => setTableNumber(e.target.value.replace(/\D/g, ""))}
+                      onChange={(e) =>
+                        setTableNumber(
+                          e.target.value.replace(/\D/g, "").slice(0, 1),
+                        )
+                      }
                       className="h-9 text-sm"
                     />
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      Single digit only.
+                    </p>
                   </div>
                 )}
               </div>
 
               <Button
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-2 h-10"
-                disabled={submitting || cart.length === 0 || !customerName.trim() || (orderType === "DINE_IN" && !tableNumber.trim())}
+                disabled={
+                  submitting ||
+                  cart.length === 0 ||
+                  !customerName.trim() ||
+                  (orderType === "DINE_IN" && !/^\d$/.test(tableNumber.trim()))
+                }
                 onClick={handleSubmit}
               >
                 {submitting ? (

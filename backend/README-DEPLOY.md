@@ -41,3 +41,15 @@ Use **this folder** as the project/root directory when deploying.
 | `railway.toml` | Railway |
 
 Health check: **GET /** or **GET /api/health**. App listens on **0.0.0.0** and uses **PORT** from env (default 4000).
+
+## Director emails & monthly order archive (optional)
+
+- **Daily business summary** to directors: cron in `src/cron/dailyDirectorReport.ts` (after shift auto-close time). Requires SMTP/Brevo and director emails on branches.
+- **Monthly PDF report** to directors: `src/cron/monthlyDirectorReport.ts` (1st of month, branch timezone).
+
+To **clear all order data after the monthly PDF is sent successfully** (frees DB space; **menu, employees, shifts, branches stay**; **next `Order.id` continues** because PostgreSQL keeps the sequence after `DELETE`):
+
+1. Set **`ORDER_PURGE_AFTER_MONTHLY_REPORT=true`** in Railway env.
+2. If the monthly email fails, **no purge runs** (orders stay safe).
+
+Child rows (`OrderItem`, `PaymentRecord`, etc.) are removed in the same transaction; optional `orderId` on notifications/queries is nulled.

@@ -217,6 +217,32 @@ export async function runMonthlyDirectorReport(): Promise<boolean> {
       ],
     });
     console.log(`[MonthlyDirectorReport] Sent to ${directorEmails.length} director(s) for ${monthKey}`);
+
+    const purgeEnabled =
+      String(process.env.ORDER_PURGE_AFTER_MONTHLY_REPORT || "")
+        .trim()
+        .toLowerCase() === "true";
+    if (purgeEnabled) {
+      try {
+        const { purgeAllOrderData } = await import(
+          "../services/orderArchiveReset.js"
+        );
+        const { deletedOrders } = await purgeAllOrderData();
+        console.log(
+          `[MonthlyDirectorReport] Order archive purge completed after ${monthKey} report (deleted ${deletedOrders} order row(s)); next order id continues from sequence.`,
+        );
+      } catch (pErr: unknown) {
+        console.error(
+          "[MonthlyDirectorReport] Order purge failed (orders NOT cleared):",
+          (pErr as Error)?.message ?? pErr,
+        );
+      }
+    } else {
+      console.log(
+        "[MonthlyDirectorReport] Order purge skipped (set ORDER_PURGE_AFTER_MONTHLY_REPORT=true on Railway to enable after successful email).",
+      );
+    }
+
     return true;
   } catch (e: unknown) {
     console.error("[MonthlyDirectorReport] Send failed:", (e as Error)?.message ?? e);

@@ -224,12 +224,12 @@ export async function runMonthlyDirectorReport(): Promise<boolean> {
         .toLowerCase() === "true";
     if (purgeEnabled) {
       try {
-        const { purgeAllOrderData } = await import(
+        const { purgeOrdersCreatedBetween } = await import(
           "../services/orderArchiveReset.js"
         );
-        const { deletedOrders } = await purgeAllOrderData();
+        const { deletedOrders } = await purgeOrdersCreatedBetween(from, to);
         console.log(
-          `[MonthlyDirectorReport] Order archive purge completed after ${monthKey} report (deleted ${deletedOrders} order row(s)); next order id continues from sequence.`,
+          `[MonthlyDirectorReport] Purged orders for reported month ${monthKey} only (${from.toISOString().slice(0, 10)}…${to.toISOString().slice(0, 10)}): ${deletedOrders} row(s); next Order id continues from sequence.`,
         );
       } catch (pErr: unknown) {
         console.error(

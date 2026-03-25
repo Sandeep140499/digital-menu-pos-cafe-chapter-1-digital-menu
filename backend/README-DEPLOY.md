@@ -47,9 +47,9 @@ Health check: **GET /** or **GET /api/health**. App listens on **0.0.0.0** and u
 - **Daily business summary** to directors: cron in `src/cron/dailyDirectorReport.ts` (after shift auto-close time). Requires SMTP/Brevo and director emails on branches.
 - **Monthly PDF report** to directors: `src/cron/monthlyDirectorReport.ts` (1st of month, branch timezone).
 
-To **clear all order data after the monthly PDF is sent successfully** (frees DB space; **menu, employees, shifts, branches stay**; **next `Order.id` continues** because PostgreSQL keeps the sequence after `DELETE`):
+To **clear only the reported month’s orders** after the monthly PDF email succeeds (same date range as the PDF — the **previous calendar month**; older orders remain; **menu, employees, shifts, branches** unchanged; **next `Order.id` continues** because PostgreSQL keeps the sequence after `DELETE`):
 
 1. Set **`ORDER_PURGE_AFTER_MONTHLY_REPORT=true`** in Railway env.
-2. If the monthly email fails, **no purge runs** (orders stay safe).
+2. If the monthly email fails, **no purge runs**.
 
-Child rows (`OrderItem`, `PaymentRecord`, etc.) are removed in the same transaction; optional `orderId` on notifications/queries is nulled.
+Child rows for those orders (`OrderItem`, `PaymentRecord`, etc.) are removed in the same transaction; optional `orderId` on notifications/queries for those ids is nulled.

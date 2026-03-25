@@ -2,8 +2,8 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm ci
 COPY prisma ./prisma/
+RUN npm ci
 RUN npx prisma generate
 COPY tsconfig.json ./
 COPY src ./src/
@@ -14,8 +14,8 @@ FROM node:20-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev && npm install prisma --save
 COPY prisma ./prisma/
+RUN npm ci --omit=dev
 RUN npx prisma generate
 COPY --from=builder /app/dist ./dist/
 # Do not override PORT here. Railway may inject it at runtime via env vars.

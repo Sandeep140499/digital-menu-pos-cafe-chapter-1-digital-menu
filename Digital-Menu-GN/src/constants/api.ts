@@ -35,6 +35,49 @@ export async function fetchWithTimeout(
   }
 }
 
+function isRetryableFetchError(e: unknown): boolean {
+  if (e instanceof DOMException && e.name === "AbortError") return true;
+  if (e instanceof Error && e.name === "AbortError") return true;
+  // Chrome/Edge: "Failed to fetch"; Firefox: NetworkError when receiving an empty response
+  if (e instanceof TypeError) return true;
+  return false;
+}
+
+/**
+ * Like fetchWithTimeout but retries a few times on timeout / transient network errors.
+ * Use for dashboard batch loads where many parallel requests compete for browser connection slots.
+ */
+export async function fetchWithTimeoutRetry(
+  input: RequestInfo | URL,
+  init?: RequestInit & { timeout?: number },
+  maxAttempts = 3,
+): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const res = await fetchWithTimeout(input, init);
+      // Deployment cold starts / proxy blips often return 502–504 once.
+      if (
+        !res.ok &&
+        [502, 503, 504].includes(res.status) &&
+        attempt < maxAttempts - 1
+      ) {
+        await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+        continue;
+      }
+      return res;
+    } catch (e) {
+      lastError = e;
+      if (attempt < maxAttempts - 1 && isRetryableFetchError(e)) {
+        await new Promise((r) => setTimeout(r, 350 * (attempt + 1)));
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Request failed after retries");
+}
+
 /**
  * Frontend base URL for redirects, email verification links (when built by frontend), etc.
  * Set VITE_FRONTEND_URL in production to your deployed domain (e.g. https://yourdomain.com).

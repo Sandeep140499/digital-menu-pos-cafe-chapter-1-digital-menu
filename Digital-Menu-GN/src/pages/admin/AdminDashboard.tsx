@@ -95,7 +95,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { LoaderButton, StatusBadge } from "@/components/shared";
 import {
   API_BASE_URL,
+  API_TIMEOUT_MS,
   fetchWithTimeout,
+  fetchWithTimeoutRetry,
   BREAK_TIME_MINUTES,
   formatBreakTime,
   EMPLOYEE_STATUS_FILTER_OPTIONS,
@@ -4084,7 +4086,10 @@ const AdminDashboard = () => {
     try {
       setLoading(true);
 
-      const opts = { headers: { Authorization: `Bearer ${token}` } };
+      const opts = {
+        headers: { Authorization: `Bearer ${token}` },
+        timeout: API_TIMEOUT_MS,
+      };
       const requests = [
         { key: "menu", url: `${apiBase}/menu/admin` },
         { key: "employees", url: `${apiBase}/employees` },
@@ -4101,9 +4106,17 @@ const AdminDashboard = () => {
         },
       ] as const;
 
-      const results = await Promise.allSettled(
-        requests.map((r) => fetchWithTimeout(r.url, opts)),
-      );
+      // Batches avoid HTTP/1.1 parallel connection limits (~6 per host) causing queued
+      // requests to hit the global timeout and reject (often reported as "branches" failing).
+      const PARALLEL_BATCH = 5;
+      const results: PromiseSettledResult<Response>[] = [];
+      for (let i = 0; i < requests.length; i += PARALLEL_BATCH) {
+        const batch = requests.slice(i, i + PARALLEL_BATCH);
+        const batchResults = await Promise.allSettled(
+          batch.map((r) => fetchWithTimeoutRetry(r.url, opts)),
+        );
+        results.push(...batchResults);
+      }
 
       const failed: string[] = [];
       const byKey = new Map<

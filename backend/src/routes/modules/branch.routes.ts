@@ -10,15 +10,24 @@ const optionalHttpUrl = z.preprocess(
   z.string().url().optional(),
 );
 
+const newOrderSoundPresetEnum = z.enum(["beep", "ring", "siren", "chime"]);
+
 const createBranchSchema = z.object({
   name: z.string().min(1),
   location: z.string().optional(),
   timezone: z.string().optional(),
   logoUrl: optionalHttpUrl,
-  phone: z.string().optional().nullable(),
+  phone: z.preprocess(
+    (val) => (val === "" || val === null ? undefined : val),
+    z.string().optional().nullable(),
+  ),
   googleReviewUrl: optionalHttpUrl,
   pincode: z.string().optional().nullable(),
   directorsEmail: z.string().optional().nullable(),
+  showTotalAmountToCustomers: z.boolean().optional(),
+  enableNewOrderRinging: z.boolean().optional(),
+  newOrderSoundPreset: newOrderSoundPresetEnum.optional(),
+  newOrderSoundVolume: z.number().min(0).max(1).optional(),
 });
 
 const updateBranchSchema = createBranchSchema.partial();

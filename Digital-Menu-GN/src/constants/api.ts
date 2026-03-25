@@ -88,6 +88,12 @@ export async function fetchWithTimeoutRetry(
  */
 export async function readApiErrorMessage(res: Response): Promise<string> {
   const st = res.status;
+  if (st === 401) {
+    return "Your session expired. Sign in again and retry.";
+  }
+  if (st === 403) {
+    return "You don’t have permission for this action. Use an admin account or ask the owner.";
+  }
   if (st === 503 || st === 502 || st === 504) {
     return "Server is temporarily unavailable (Railway may be waking up or busy). Wait a minute and try again.";
   }

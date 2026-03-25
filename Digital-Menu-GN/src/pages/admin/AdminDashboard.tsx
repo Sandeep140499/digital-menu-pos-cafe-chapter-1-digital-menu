@@ -4192,20 +4192,37 @@ const AdminDashboard = () => {
           overtimeRunning: summary.overtimeRunning ?? [],
         });
       }
+      const parseBranchesPayload = (raw: unknown) => {
+        return Array.isArray(raw)
+          ? raw
+          : Array.isArray((raw as any)?.branches)
+            ? (raw as any).branches
+            : Array.isArray((raw as any)?.data)
+              ? (raw as any).data
+              : [];
+      };
+
       if (branchesRes?.ok) {
         const branchesData = await branchesRes.json();
-        const branchList = Array.isArray(branchesData)
-          ? branchesData
-          : Array.isArray((branchesData as any)?.branches)
-            ? (branchesData as any).branches
-            : Array.isArray((branchesData as any)?.data)
-              ? (branchesData as any).data
-              : [];
+        const branchList = parseBranchesPayload(branchesData);
         setBranches(branchList);
         setBranchesListUnavailable(false);
       } else {
-        setBranches([]);
+        // Transient 503/timeouts must not wipe the list — branches may still exist in the DB.
         setBranchesListUnavailable(true);
+        try {
+          const retry = await fetchWithTimeoutRetry(`${apiBase}/branches`, {
+            headers: { Authorization: `Bearer ${token}` },
+            timeout: API_TIMEOUT_MS,
+          });
+          if (retry.ok) {
+            const branchList = parseBranchesPayload(await retry.json());
+            setBranches(branchList);
+            setBranchesListUnavailable(false);
+          }
+        } catch {
+          // Keep existing branch state (same as employee dialog: do not overwrite with [] on failure).
+        }
       }
 
       if (salarySlipData) {
@@ -5002,20 +5019,34 @@ const AdminDashboard = () => {
   const loadSettings = async () => {
     if (!token) return;
     try {
+      const parseBranchesPayload = (raw: unknown) => {
+        return Array.isArray(raw)
+          ? raw
+          : Array.isArray((raw as any)?.branches)
+            ? (raw as any).branches
+            : Array.isArray((raw as any)?.data)
+              ? (raw as any).data
+              : [];
+      };
+
       const [branchRes, branchesRes, notifRes] = await Promise.all([
-        fetch(`${apiBase}/config/branch`, {
+        fetchWithTimeout(`${apiBase}/config/branch`, {
           headers: { Authorization: `Bearer ${token}` },
+          timeout: API_TIMEOUT_MS,
         }),
-        fetch(`${apiBase}/branches`, {
+        fetchWithTimeoutRetry(`${apiBase}/branches`, {
           headers: { Authorization: `Bearer ${token}` },
+          timeout: API_TIMEOUT_MS,
         }),
         fetch(`${apiBase}/config/notifications`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
       ]);
 
+      let branchDataForFallback: Record<string, unknown> | null = null;
       if (branchRes.ok) {
         const branchData = await branchRes.json();
+        branchDataForFallback = branchData;
         setBranch(branchData);
         setBranchForm({
           name: branchData?.name || "",
@@ -5043,21 +5074,40 @@ const AdminDashboard = () => {
         });
       } else {
         setBranch(null);
+        branchDataForFallback = null;
       }
       if (branchesRes.ok) {
         const branchesData = await branchesRes.json();
-        const branchList = Array.isArray(branchesData)
-          ? branchesData
-          : Array.isArray((branchesData as any)?.branches)
-            ? (branchesData as any).branches
-            : Array.isArray((branchesData as any)?.data)
-              ? (branchesData as any).data
-              : [];
+        const branchList = parseBranchesPayload(branchesData);
         setBranches(branchList);
         setBranchesListUnavailable(false);
       } else {
-        setBranches([]);
         setBranchesListUnavailable(true);
+        try {
+          const retry = await fetchWithTimeoutRetry(`${apiBase}/branches`, {
+            headers: { Authorization: `Bearer ${token}` },
+            timeout: API_TIMEOUT_MS,
+          });
+          if (retry.ok) {
+            const branchList = parseBranchesPayload(await retry.json());
+            setBranches(branchList);
+            setBranchesListUnavailable(false);
+          } else if (
+            branchDataForFallback &&
+            typeof (branchDataForFallback as { id?: unknown }).id === "number"
+          ) {
+            setBranches([branchDataForFallback as (typeof branches)[number]]);
+            setBranchesListUnavailable(false);
+          }
+        } catch {
+          if (
+            branchDataForFallback &&
+            typeof (branchDataForFallback as { id?: unknown }).id === "number"
+          ) {
+            setBranches([branchDataForFallback as (typeof branches)[number]]);
+            setBranchesListUnavailable(false);
+          }
+        }
       }
       if (notifRes.ok) {
         const notifData = await notifRes.json();
@@ -5091,12 +5141,13 @@ const AdminDashboard = () => {
     if (!token || !createBranchForm.name.trim()) return;
     setSavingBranch(true);
     try {
-      const res = await fetch(`${apiBase}/branches`, {
+      const res = await fetchWithTimeoutRetry(`${apiBase}/branches`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
+        timeout: API_TIMEOUT_MS,
         body: JSON.stringify({
           name: createBranchForm.name.trim(),
           location: createBranchForm.location.trim() || undefined,
@@ -9918,7 +9969,7 @@ const AdminDashboard = () => {
     >
       <div className="w-full min-h-full space-y-4 pb-6 relative overflow-x-hidden max-w-full px-0 sm:px-0">
         {hasLoadedOnce &&
-          (branchesListUnavailable || branches.length === 0) && (
+          branches.length === 0 && (
             <Alert className="border-amber-200 bg-amber-50/90 text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
               <Info className="h-4 w-4 text-amber-700 dark:text-amber-300" />
               <AlertTitle className="text-amber-950 dark:text-amber-50">

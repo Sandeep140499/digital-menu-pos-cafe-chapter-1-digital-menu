@@ -37,6 +37,7 @@ import {
   API_BASE_URL,
   API_TIMEOUT_MS,
   fetchWithTimeout,
+  readApiErrorMessage,
 } from "@/constants";
 import { useOrderStatusStream } from "@/hooks/useOrderStatusStream";
 import cafeLogo from "@/assets/logo.png";
@@ -1230,10 +1231,10 @@ const Index = () => {
       }
       if (branchId == null) {
         toast({
-          title: branchContactLoading ? "Loading branch…" : "Branch not loaded",
+          title: branchContactLoading ? "Loading branch…" : "Can’t place order online",
           description: branchContactLoading
-            ? "Please wait a moment and try again."
-            : "Please refresh the page and try again.",
+            ? "Please wait a few seconds and try again."
+            : "The menu isn’t linked to a branch yet, or the server is busy. Call the restaurant or ask staff. (Owners: create a branch in Admin → Settings.)",
           variant: branchContactLoading ? "default" : "destructive",
         });
         return;
@@ -1265,6 +1266,7 @@ const Index = () => {
         });
 
         if (!response.ok) {
+          const clonedForMessage = response.clone();
           const err = (await response.json().catch(() => ({}))) as {
             message?: string;
             errors?: Array<{ path?: (string | number)[]; message?: string }>;
@@ -1279,7 +1281,7 @@ const Index = () => {
             (err.message && err.message !== "Invalid input" ? err.message : null);
           const msg =
             firstDetail ||
-            "Could not place your order. For dine-in, use one digit (0–9) for the table.";
+            (await readApiErrorMessage(clonedForMessage));
           throw new Error(msg);
         }
 
@@ -1555,6 +1557,17 @@ const Index = () => {
           {/* Categories - memoized so cart/dialog updates do not re-render menu (stops blink). QA: Fixed pb reserves space for fixed cart bar so content never overlaps on iPhone when Safari UI changes. */}
           <main className="mx-auto max-w-6xl w-full min-w-0 px-4 py-8 pb-[7.5rem] sm:py-10 sm:pb-10 overflow-x-hidden">
             <div className="space-y-6">
+              {branchId == null && !branchContactLoading && (
+                <div
+                  role="alert"
+                  className="rounded-lg border border-amber-300/80 bg-amber-50 text-amber-950 px-4 py-3 text-sm shadow-sm"
+                >
+                  <p className="font-semibold">Online ordering isn’t available right now.</p>
+                  <p className="mt-1 text-amber-950/90">
+                    We couldn’t connect this menu to the restaurant’s system (this is often temporary). Please call the number above or ask staff to take your order. If you’re the owner, add a branch in Admin → Settings.
+                  </p>
+                </div>
+              )}
               <MenuCategoriesSection
                 menuCategories={menuCategories}
                 categoryQuery={categoryQuery}

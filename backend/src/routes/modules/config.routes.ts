@@ -143,6 +143,21 @@ configRouter.get("/branch-contact", async (_req, res) => {
       showTotalAmountToCustomers: true,
     },
   });
+
+  let orderingOpen = false;
+  if (branch?.id) {
+    const liveShift = await prisma.employeeShift.findFirst({
+      where: {
+        branchId: branch.id,
+        shiftEnd: null,
+        status: "ACTIVE",
+        employee: { status: "ACTIVE" },
+      },
+      select: { id: true },
+    });
+    orderingOpen = !!liveShift;
+  }
+
   return res.json({
     id: branch?.id ?? null,
     name: branch?.name ?? process.env.RESTAURANT_NAME ?? "CAFE CHAPTER 1 RESTRO",
@@ -151,6 +166,8 @@ configRouter.get("/branch-contact", async (_req, res) => {
     googleReviewUrl: branch?.googleReviewUrl ?? process.env.GOOGLE_REVIEW_URL ?? null,
     logoUrl: branch?.logoUrl ?? null,
     showTotalAmountToCustomers: branch?.showTotalAmountToCustomers ?? true,
+    /** True when at least one employee has an active shift — matches POST /orders gate. */
+    orderingOpen,
   });
 });
 

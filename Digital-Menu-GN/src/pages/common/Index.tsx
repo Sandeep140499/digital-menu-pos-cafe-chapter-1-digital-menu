@@ -98,6 +98,8 @@ function OrderCartDialog({
   lastCustomerName,
   lastCustomerMobile,
   showTotalAmount,
+  checkoutEnabled,
+  checkoutDisabledReason,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -117,6 +119,8 @@ function OrderCartDialog({
   lastCustomerName: string;
   lastCustomerMobile: string;
   showTotalAmount: boolean;
+  checkoutEnabled: boolean;
+  checkoutDisabledReason: string;
 }) {
   const [customerName, setCustomerName] = useState("");
   const [customerMobile, setCustomerMobile] = useState("");
@@ -273,11 +277,19 @@ function OrderCartDialog({
             </div>
           )}
 
+          {!checkoutEnabled && (
+            <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+              {checkoutDisabledReason ||
+                "Online ordering is not available right now."}
+            </p>
+          )}
+
           {/* DINE IN / TAKE AWAY — these ARE the order placement buttons */}
           <div className="grid grid-cols-2 gap-2 pt-1">
             <Button
               type="button"
               disabled={
+                !checkoutEnabled ||
                 !cart.length ||
                 isSubmittingOrder ||
                 !customerName.trim() ||
@@ -306,6 +318,7 @@ function OrderCartDialog({
             <Button
               type="button"
               disabled={
+                !checkoutEnabled ||
                 !cart.length ||
                 isSubmittingOrder ||
                 !customerName.trim()
@@ -402,7 +415,7 @@ const MenuCategoriesSection = memo(function MenuCategoriesSection({
   ) => void;
   isLoadingMenu: boolean;
   menuLoadError: string | null;
-  fetchMenu: () => void;
+  fetchMenu: (opts?: { silent?: boolean }) => void;
   lastToggledKeyRef: React.MutableRefObject<string | null>;
 }) {
   const displayCategories = useMemo(() => {
@@ -490,7 +503,7 @@ const MenuCategoriesSection = memo(function MenuCategoriesSection({
             ))}
           </>
         )}
-        {!isLoadingMenu && menuLoadError && (
+        {!isLoadingMenu && menuLoadError && menuCategories.length === 0 && (
           <div className="col-span-full text-center py-16 text-muted-foreground">
             <AlertCircle className="h-16 w-16 mx-auto mb-4 opacity-60 text-amber-500" />
             <p className="text-lg font-medium">Could not load menu</p>
@@ -499,10 +512,21 @@ const MenuCategoriesSection = memo(function MenuCategoriesSection({
               className="mt-4"
               variant="outline"
               size="sm"
-              onClick={() => fetchMenu()}
+              onClick={() => fetchMenu({ silent: false })}
             >
               Retry
             </Button>
+          </div>
+        )}
+        {!isLoadingMenu && menuLoadError && menuCategories.length > 0 && (
+          <div className="col-span-full flex justify-center py-1">
+            <button
+              type="button"
+              onClick={() => fetchMenu({ silent: false })}
+              className="text-xs text-olive-800/70 underline underline-offset-2"
+            >
+              Refresh menu
+            </button>
           </div>
         )}
         {!isLoadingMenu && !menuLoadError && menuCategories.length === 0 && (
@@ -857,7 +881,11 @@ const Index = () => {
     googleReviewUrl: string | null;
     logoUrl: string | null;
     showTotalAmountToCustomers?: boolean;
+    /** From API: at least one active employee shift (required for online orders). */
+    orderingOpen?: boolean;
   } | null>(null);
+  /** True after a successful GET /config/branch-contact (used to avoid scary banners on transient API failures). */
+  const [branchContactResolved, setBranchContactResolved] = useState(false);
   const [branchContactLoading, setBranchContactLoading] = useState(true);
   const showTotalAmountToCustomers =
     branchContact?.showTotalAmountToCustomers ?? true;
@@ -885,6 +913,24 @@ const Index = () => {
 
   const branchId = branchContact?.id ?? null;
   const apiBase = API_BASE_URL;
+
+  const canPlaceOrderOnline =
+    branchContactResolved &&
+    branchId != null &&
+    branchContact?.orderingOpen === true;
+
+  const checkoutDisabledReason = !branchContactResolved
+    ? "Checking whether online ordering is available…"
+    : branchId == null
+      ? "Online ordering is not set up yet. Please order at the counter or call us."
+      : branchContact?.orderingOpen === false
+        ? "Online ordering opens when staff are on shift. Browse the menu, call us, or order at the counter."
+        : "";
+
+  const menuCategoriesRef = useRef<unknown[]>([]);
+  useEffect(() => {
+    menuCategoriesRef.current = menuCategories;
+  }, [menuCategories]);
 
   // Deployment resilience: on cold starts (Railway/Render), menu + branch contact can return 503/timeout.
   // We auto-retry with gentle backoff so customers don't get stuck on a broken first load.
@@ -929,21 +975,27 @@ const Index = () => {
     }
   }, []);
 
-  const fetchMenu = useCallback(async () => {
-    setMenuLoadError(null);
+  const fetchMenu = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = !!opts?.silent;
+    if (!silent) {
+      setMenuLoadError(null);
+    }
     setIsLoadingMenu(true);
     try {
       const res = await fetchWithTimeout(`${apiBase}/menu`);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        // If the backend is warming up (common on deployment), retry automatically.
         const isWarmingUp = res.status === 502 || res.status === 503 || res.status === 504;
-        setMenuLoadError(
-          isWarmingUp
-            ? "Server is starting… menu will load automatically in a few seconds."
-            : data?.message || `Failed to load menu (${res.status})`,
-        );
-        // Keep last known menu on screen (cached/previous) if we have one.
+        const hadMenu = (menuCategoriesRef.current as unknown[]).length > 0;
+        if (!hadMenu) {
+          setMenuLoadError(
+            isWarmingUp
+              ? "Server is starting… tap Retry in a moment."
+              : data?.message || `Failed to load menu (${res.status})`,
+          );
+        } else {
+          setMenuLoadError(null);
+        }
         setMenuCategories((prev) => (prev.length ? prev : []));
         setBestSellerItemIds((prev) => (prev.length ? prev : []));
         if (isWarmingUp) {
@@ -952,12 +1004,11 @@ const Index = () => {
           const delay = Math.min(30_000, 1500 + attempts * 1500);
           if (retryRef.current.menuTimer) window.clearTimeout(retryRef.current.menuTimer);
           retryRef.current.menuTimer = window.setTimeout(() => {
-            fetchMenu();
+            void fetchMenu({ silent: true });
           }, delay);
         }
         return;
       }
-      // Success: reset retry state.
       retryRef.current.menuAttempts = 0;
       if (retryRef.current.menuTimer) {
         window.clearTimeout(retryRef.current.menuTimer);
@@ -967,6 +1018,7 @@ const Index = () => {
       const ids = Array.isArray(data) ? [] : (data?.bestSellerItemIds ?? []);
       setMenuCategories(categories);
       setBestSellerItemIds(ids);
+      setMenuLoadError(null);
       try {
         window.localStorage.setItem(
           MENU_CACHE_KEY,
@@ -977,7 +1029,6 @@ const Index = () => {
       }
     } catch (error) {
       const isTimeout = error instanceof Error && error.name === "AbortError";
-      // If network fails, fall back to last known good cached menu so customers can still order.
       let usedCache = false;
       try {
         const raw = window.localStorage.getItem(MENU_CACHE_KEY);
@@ -993,38 +1044,30 @@ const Index = () => {
               Array.isArray(parsed.bestSellerItemIds) ? parsed.bestSellerItemIds : [],
             );
             usedCache = true;
-            setMenuLoadError(
-              "Connection issue detected. Showing last saved menu — you can still place an order.",
-            );
           }
         }
       } catch {
         // ignore cache parse
       }
-      if (!usedCache) {
+      const hadMenu =
+        usedCache || (menuCategoriesRef.current as unknown[]).length > 0;
+      if (!hadMenu) {
         setMenuLoadError(
           isTimeout
             ? "Request timed out. Please try again."
-            : `Could not reach the server at ${apiBase}. Please try again in a moment.`,
+            : "Could not reach the server. Please try again in a moment.",
         );
-        // Don't wipe any already-rendered menu (cache hydrate) on transient network errors.
         setMenuCategories((prev) => (prev.length ? prev : []));
         setBestSellerItemIds((prev) => (prev.length ? prev : []));
+      } else {
+        setMenuLoadError(null);
       }
-      toast({
-        title: "Error",
-        description:
-          "Menu could not be refreshed right now. If this is the first load, the server may be starting—please wait a moment.",
-        variant: usedCache ? "default" : "destructive",
-      });
-
-      // Auto-retry on first-load failures (especially deployment cold starts).
       const attempts = (retryRef.current.menuAttempts ?? 0) + 1;
       retryRef.current.menuAttempts = attempts;
       const delay = Math.min(30_000, 2000 + attempts * 1500);
       if (retryRef.current.menuTimer) window.clearTimeout(retryRef.current.menuTimer);
       retryRef.current.menuTimer = window.setTimeout(() => {
-        fetchMenu();
+        void fetchMenu({ silent: true });
       }, delay);
     } finally {
       setIsLoadingMenu(false);
@@ -1032,32 +1075,25 @@ const Index = () => {
   }, [apiBase]);
 
   useEffect(() => {
-    fetchMenu();
+    void fetchMenu({ silent: false });
   }, [fetchMenu]);
 
-  // Refetch menu when user returns to the tab so first open / refresh shows all cards without manual refresh
+  const branchContactRef = useRef(branchContact);
   useEffect(() => {
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        fetchMenu();
+    branchContactRef.current = branchContact;
+  }, [branchContact]);
+
+  const fetchBranchContact = useCallback(
+    async (silent: boolean) => {
+      if (!silent) {
+        setBranchContactLoading(true);
       }
-    };
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () =>
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-  }, [fetchMenu]);
-
-  // Fetch branch contact for Call / WhatsApp on menu
-  useEffect(() => {
-    const fetchContact = async () => {
-      setBranchContactLoading(true);
       try {
         const res = await fetchWithTimeout(`${apiBase}/config/branch-contact`);
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           const isWarmingUp = res.status === 502 || res.status === 503 || res.status === 504;
-          // Keep any previously loaded branch contact; don't permanently set branchId null on transient failures.
-          if (!branchContact) {
+          if (!branchContactRef.current) {
             setBranchContact({
               id: null,
               name: "CAFE CHAPTER 1 RESTRO",
@@ -1066,6 +1102,7 @@ const Index = () => {
               googleReviewUrl: null,
               logoUrl: null,
               showTotalAmountToCustomers: true,
+              orderingOpen: false,
             });
           }
           if (isWarmingUp) {
@@ -1075,7 +1112,7 @@ const Index = () => {
             if (retryRef.current.contactTimer)
               window.clearTimeout(retryRef.current.contactTimer);
             retryRef.current.contactTimer = window.setTimeout(() => {
-              fetchContact();
+              void fetchBranchContact(false);
             }, delay);
           }
           return;
@@ -1089,15 +1126,16 @@ const Index = () => {
           googleReviewUrl: data.googleReviewUrl ?? null,
           logoUrl: data.logoUrl ?? null,
           showTotalAmountToCustomers: data.showTotalAmountToCustomers ?? true,
+          orderingOpen: typeof data.orderingOpen === "boolean" ? data.orderingOpen : false,
         });
+        setBranchContactResolved(true);
         retryRef.current.contactAttempts = 0;
         if (retryRef.current.contactTimer) {
           window.clearTimeout(retryRef.current.contactTimer);
           retryRef.current.contactTimer = null;
         }
       } catch (_) {
-        // Keep any previously loaded branch contact; don't permanently set branchId null on transient failures.
-        if (!branchContact) {
+        if (!branchContactRef.current) {
           setBranchContact({
             id: null,
             name: "CAFE CHAPTER 1 RESTRO",
@@ -1106,6 +1144,7 @@ const Index = () => {
             googleReviewUrl: null,
             logoUrl: null,
             showTotalAmountToCustomers: true,
+            orderingOpen: false,
           });
         }
         const attempts = (retryRef.current.contactAttempts ?? 0) + 1;
@@ -1114,14 +1153,43 @@ const Index = () => {
         if (retryRef.current.contactTimer)
           window.clearTimeout(retryRef.current.contactTimer);
         retryRef.current.contactTimer = window.setTimeout(() => {
-          fetchContact();
+          void fetchBranchContact(false);
         }, delay);
       } finally {
-        setBranchContactLoading(false);
+        if (!silent) {
+          setBranchContactLoading(false);
+        }
+      }
+    },
+    [apiBase],
+  );
+
+  useEffect(() => {
+    void fetchBranchContact(false);
+  }, [fetchBranchContact]);
+
+  const branchContactPollRef = useRef<number | null>(null);
+  useEffect(() => {
+    branchContactPollRef.current = window.setInterval(() => {
+      void fetchBranchContact(true);
+    }, 90_000);
+    return () => {
+      if (branchContactPollRef.current)
+        window.clearInterval(branchContactPollRef.current);
+    };
+  }, [fetchBranchContact]);
+
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void fetchMenu({ silent: true });
+        void fetchBranchContact(true);
       }
     };
-    fetchContact();
-  }, [apiBase]);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () =>
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [fetchMenu, fetchBranchContact]);
 
   // Cleanup retry timers on unmount.
   useEffect(() => {
@@ -1229,13 +1297,13 @@ const Index = () => {
         });
         return;
       }
-      if (branchId == null) {
+      if (!canPlaceOrderOnline) {
         toast({
-          title: branchContactLoading ? "Loading branch…" : "Can’t place order online",
-          description: branchContactLoading
-            ? "Please wait a few seconds and try again."
-            : "The menu isn’t linked to a branch yet, or the server is busy. Call the restaurant or ask staff. (Owners: create a branch in Admin → Settings.)",
-          variant: branchContactLoading ? "default" : "destructive",
+          title: "Ordering unavailable",
+          description:
+            checkoutDisabledReason ||
+            "Please try again in a moment or order at the counter.",
+          variant: "destructive",
         });
         return;
       }
@@ -1324,7 +1392,14 @@ const Index = () => {
         setPendingCheckoutType(null);
       }
     },
-    [cart, branchId, branchContactLoading, sessionToken, toast],
+    [
+      cart,
+      branchId,
+      canPlaceOrderOnline,
+      checkoutDisabledReason,
+      sessionToken,
+      toast,
+    ],
   );
 
   // Poll order status while success screen is shown
@@ -1557,17 +1632,18 @@ const Index = () => {
           {/* Categories - memoized so cart/dialog updates do not re-render menu (stops blink). QA: Fixed pb reserves space for fixed cart bar so content never overlaps on iPhone when Safari UI changes. */}
           <main className="mx-auto max-w-6xl w-full min-w-0 px-4 py-8 pb-[7.5rem] sm:py-10 sm:pb-10 overflow-x-hidden">
             <div className="space-y-6">
-              {branchId == null && !branchContactLoading && (
-                <div
-                  role="alert"
-                  className="rounded-lg border border-amber-300/80 bg-amber-50 text-amber-950 px-4 py-3 text-sm shadow-sm"
-                >
-                  <p className="font-semibold">Online ordering isn’t available right now.</p>
-                  <p className="mt-1 text-amber-950/90">
-                    We couldn’t connect this menu to the restaurant’s system (this is often temporary). Please call the number above or ask staff to take your order. If you’re the owner, add a branch in Admin → Settings.
-                  </p>
-                </div>
-              )}
+              {branchContactResolved &&
+                branchId != null &&
+                branchContact?.orderingOpen === false && (
+                  <div
+                    role="status"
+                    className="rounded-lg border border-slate-200 bg-white/90 text-slate-800 px-4 py-3 text-sm shadow-sm"
+                  >
+                    <p className="font-medium">
+                      Browse the menu anytime. Online ordering opens when staff are on shift — or call us to order.
+                    </p>
+                  </div>
+                )}
               <MenuCategoriesSection
                 menuCategories={menuCategories}
                 categoryQuery={categoryQuery}
@@ -1622,6 +1698,11 @@ const Index = () => {
                       className="min-h-[44px] min-w-[120px] touch-manipulation shrink-0 bg-white text-emerald-900 hover:bg-emerald-50"
                       disabled={isSubmittingOrder}
                       onClick={() => setCartOpen(true)}
+                      title={
+                        !canPlaceOrderOnline
+                          ? checkoutDisabledReason || undefined
+                          : undefined
+                      }
                     >
                       {isSubmittingOrder ? (
                         <span className="flex items-center gap-2">
@@ -1656,6 +1737,8 @@ const Index = () => {
             lastCustomerName={lastCustomerName}
             lastCustomerMobile={lastCustomerMobile}
             showTotalAmount={showTotalAmountToCustomers}
+            checkoutEnabled={canPlaceOrderOnline}
+            checkoutDisabledReason={checkoutDisabledReason}
           />
 
           {/* Contact dialog: only shown when branch has phone (button only renders then) */}

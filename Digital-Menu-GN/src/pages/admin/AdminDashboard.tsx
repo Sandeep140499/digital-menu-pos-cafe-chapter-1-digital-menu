@@ -98,6 +98,7 @@ import { LoaderButton, StatusBadge } from "@/components/shared";
 import {
   API_BASE_URL,
   API_TIMEOUT_MS,
+  describeFetchFailure,
   fetchWithTimeout,
   fetchWithTimeoutRetry,
   readApiErrorMessage,
@@ -5141,25 +5142,30 @@ const AdminDashboard = () => {
     if (!token || !createBranchForm.name.trim()) return;
     setSavingBranch(true);
     try {
-      const res = await fetchWithTimeoutRetry(`${apiBase}/branches`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+      // Cold Railway deploys often exceed 25s; give POST room to complete after wake-up.
+      const res = await fetchWithTimeoutRetry(
+        `${apiBase}/branches`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          timeout: Math.max(API_TIMEOUT_MS, 90_000),
+          body: JSON.stringify({
+            name: createBranchForm.name.trim(),
+            location: createBranchForm.location.trim() || undefined,
+            timezone: createBranchForm.timezone || undefined,
+            logoUrl: createBranchForm.logoUrl.trim() || undefined,
+            phone: createBranchForm.phone.trim() || undefined,
+            googleReviewUrl: createBranchForm.googleReviewUrl.trim() || undefined,
+            pincode: createBranchForm.pincode.trim() || undefined,
+            directorsEmail: createBranchForm.directorsEmail.trim() || undefined,
+            showTotalAmountToCustomers: !!createBranchForm.showTotalAmountToCustomers,
+          }),
         },
-        timeout: API_TIMEOUT_MS,
-        body: JSON.stringify({
-          name: createBranchForm.name.trim(),
-          location: createBranchForm.location.trim() || undefined,
-          timezone: createBranchForm.timezone || undefined,
-          logoUrl: createBranchForm.logoUrl.trim() || undefined,
-          phone: createBranchForm.phone.trim() || undefined,
-          googleReviewUrl: createBranchForm.googleReviewUrl.trim() || undefined,
-          pincode: createBranchForm.pincode.trim() || undefined,
-          directorsEmail: createBranchForm.directorsEmail.trim() || undefined,
-          showTotalAmountToCustomers: !!createBranchForm.showTotalAmountToCustomers,
-        }),
-      });
+        5,
+      );
       if (res.ok) {
         const newBranch = await res.json();
         setBranches((prev) => [...prev, newBranch]);
@@ -5185,11 +5191,10 @@ const AdminDashboard = () => {
           variant: "destructive",
         });
       }
-    } catch {
+    } catch (error) {
       toast({
-        title: "Error",
-        description:
-          "Network error or server unreachable. If the API is on Railway, wait for it to wake up and try again.",
+        title: "Could not create branch",
+        description: describeFetchFailure(error),
         variant: "destructive",
       });
     } finally {

@@ -19,6 +19,28 @@ import { jwtConfig } from "./config/auth.js";
 import { prisma } from "./config/prisma.js";
 import { setActiveSockets } from "./services/metrics.js";
 
+/**
+ * Comma-separated origins from env (Railway + Vercel: set at least one full frontend URL).
+ * If none are set, CORS allows any origin (dev-friendly). If any are set, only those match.
+ */
+function buildAllowedOriginsFromEnv(): string[] | undefined {
+  const chunks = [
+    process.env.CORS_ORIGIN,
+    process.env.FRONTEND_URL,
+    process.env.FRONTEND_CUSTOMER_URL,
+    process.env.FRONTEND_DASHBOARD_URL,
+  ].filter(Boolean);
+  if (chunks.length === 0) return undefined;
+  const list = chunks
+    .join(",")
+    .split(",")
+    .map((o) => o.trim().replace(/\/$/, ""))
+    .filter(Boolean);
+  return [...new Set(list)];
+}
+
+const allowedOrigins = buildAllowedOriginsFromEnv();
+
 const app = express();
 const server = http.createServer(app);
 
@@ -27,7 +49,7 @@ const io = new SocketIOServer(server, {
   // - Without a shared adapter (Redis), multi-instance deployments require sticky sessions at the load balancer.
   // - Keep payload sizes small and timeouts sane for mobile networks.
   cors: {
-    origin: process.env.FRONTEND_CUSTOMER_URL?.split(",") ?? "*",
+    origin: allowedOrigins?.length ? allowedOrigins : "*",
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE"],
   },
   pingInterval: 25_000,
@@ -84,10 +106,7 @@ io.on("connection", async (socket) => {
   }
 });
 
-// CORS: allow frontend origin and Authorization header so verify-invite and other API calls work from deployed frontend
-const allowedOrigins = process.env.CORS_ORIGIN
-  ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim()).filter(Boolean)
-  : undefined;
+// CORS: same origins as Socket.IO (merged from CORS_ORIGIN + FRONTEND_* env vars).
 app.use(
   cors({
     origin: (origin, cb) => {
@@ -241,6 +260,11 @@ async function startServer() {
     await prisma.$connect();
 
     server.listen(port, "0.0.0.0", async () => {
+      if (allowedOrigins?.length) {
+        console.log(
+          `🌐 CORS: allowing ${allowedOrigins.length} origin(s) (set CORS_ORIGIN / FRONTEND_URL / FRONTEND_* to add more).`,
+        );
+      }
       // For local development, skip failing on SMTP verification errors.
       if (isMailConfigured()) {
         verifyMailConnection()

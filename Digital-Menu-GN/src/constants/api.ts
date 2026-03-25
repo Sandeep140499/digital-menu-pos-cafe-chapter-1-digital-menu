@@ -79,6 +79,29 @@ export async function fetchWithTimeoutRetry(
 }
 
 /**
+ * User-facing message when fetch throws (timeout, DNS, CORS, wrong API URL) — no Response to parse.
+ */
+export function describeFetchFailure(error: unknown): string {
+  const isAbort =
+    (error instanceof DOMException || error instanceof Error) &&
+    error.name === "AbortError";
+  if (isAbort) {
+    return "The request timed out. Railway cold starts can take 30–90 seconds — wait a bit and try again, or open your API URL in a new tab once to wake the service.";
+  }
+  if (error instanceof TypeError) {
+    const msg = String(error.message || "");
+    if (/failed to fetch|networkerror|load failed/i.test(msg)) {
+      return "Could not reach the API. Confirm VITE_API_BASE_URL in your frontend build matches your Railway URL (ending in /api), then redeploy. If the URL is correct, the backend may be sleeping — retry in a minute.";
+    }
+    return "Could not reach the server. Check your connection and API URL, then try again.";
+  }
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return "Network error or server unreachable. If the API is on Railway, wait for it to wake up and try again.";
+}
+
+/**
  * Frontend base URL for redirects, email verification links (when built by frontend), etc.
  * Set VITE_FRONTEND_URL in production to your deployed domain (e.g. https://yourdomain.com).
  * Falls back to window.location.origin when available (browser), else dev default.

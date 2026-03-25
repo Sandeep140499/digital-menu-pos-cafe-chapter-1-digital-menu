@@ -1252,7 +1252,7 @@ const Index = () => {
                 <div className="text-4xl mb-2">🎉</div>
                 <h3 className="text-xl font-bold">Order Placed!</h3>
                 <p className="text-emerald-100 text-sm mt-1">
-                  {lastOrderType === "TAKE_AWAY" ? "Your take-away order is being prepared." : "Your order is being prepared at the kitchen."}
+                  Thank you for your order — Cafe Chapter 1
                 </p>
               </div>
 
@@ -1269,34 +1269,6 @@ const Index = () => {
                     {lastOrderType === "TAKE_AWAY" ? "Take Away" : "Dine In"}
                   </span>
                 </div>
-                {lastOrderCreatedAt && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Time</span>
-                    <span className="font-medium text-slate-700 flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      {new Date(lastOrderCreatedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
-                    </span>
-                  </div>
-                )}
-                {lastOrderStatus && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Status</span>
-                    <div className="flex items-center gap-1.5">
-                      {lastOrderStatus === "ORDER_COMPLETE" ? (
-                        <CheckCircle2 className="h-4 w-4 text-green-600" />
-                      ) : (
-                        <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-                      )}
-                      <span className={`font-semibold text-xs ${lastOrderStatus === "ORDER_COMPLETE" ? "text-green-700" : lastOrderStatus === "SERVED" ? "text-blue-700" : "text-amber-700"}`}>
-                        {lastOrderStatus === "NEW_ORDER" ? "Received — Preparing" :
-                         lastOrderStatus === "ACCEPTED" ? "Accepted — Preparing" :
-                         lastOrderStatus === "PREPARING" ? "Being Prepared" :
-                         lastOrderStatus === "SERVED" ? "Served!" :
-                         lastOrderStatus === "ORDER_COMPLETE" ? "Completed ✓" : lastOrderStatus}
-                      </span>
-                    </div>
-                  </div>
-                )}
 
                 {/* Action Buttons */}
                 <div className="space-y-2 pt-2">

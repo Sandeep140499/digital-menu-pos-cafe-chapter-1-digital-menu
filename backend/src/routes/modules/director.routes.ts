@@ -25,6 +25,15 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+function getFrontendBaseUrl(): string {
+  const raw =
+    process.env.FRONTEND_URL ||
+    process.env.FRONTEND_DASHBOARD_URL ||
+    process.env.FRONTEND_CUSTOMER_URL ||
+    "http://localhost:5173";
+  return raw.trim().replace(/^['"]|['"]$/g, "").replace(/\/$/, "");
+}
+
 /** GET /api/branches/:id/directors – list verified, pending verification, pending removal */
 export const directorRouter = Router({ mergeParams: true });
 
@@ -97,7 +106,7 @@ directorRouter.post(
       return res.status(503).json({ message: "Email is not configured. Set EMAIL_SMTP_* in .env." });
     }
 
-    const baseUrl = (process.env.FRONTEND_DASHBOARD_URL || process.env.FRONTEND_CUSTOMER_URL || "http://localhost:5173").replace(/\/$/, "");
+    const baseUrl = getFrontendBaseUrl();
     const verifyUrl = `${baseUrl}/api/directors/verify?token=${encodeURIComponent(token)}`;
     const fromName = process.env.EMAIL_FROM_NAME || "Chapter One Cafe";
 
@@ -152,7 +161,7 @@ directorRouter.post(
       return res.status(503).json({ message: "Email is not configured. Set EMAIL_SMTP_* in .env." });
     }
 
-    const baseUrl = (process.env.FRONTEND_DASHBOARD_URL || process.env.FRONTEND_CUSTOMER_URL || "http://localhost:5173").replace(/\/$/, "");
+    const baseUrl = getFrontendBaseUrl();
     const confirmUrl = `${baseUrl}/api/directors/confirm-removal?token=${encodeURIComponent(token)}`;
     const fromName = process.env.EMAIL_FROM_NAME || "Chapter One Cafe";
 

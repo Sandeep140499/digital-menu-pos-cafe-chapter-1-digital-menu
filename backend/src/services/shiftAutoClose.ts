@@ -6,6 +6,7 @@ import { getBusinessDayRange } from "../utils/businessDay.js";
 
 const TIMEZONE = process.env.TZ || "Asia/Kolkata";
 const DEFAULT_WORKING_HOURS = 8;
+const AUTO_CLOSE_ENABLED = String(process.env.AUTO_CLOSE_SHIFTS || "true").toLowerCase() !== "false";
 
 function getShiftDateInTimezone(shiftStart: Date): Date {
   const dateStr = shiftStart.toLocaleDateString("en-CA", { timeZone: TIMEZONE });
@@ -78,6 +79,7 @@ export async function endShiftAndCreateOvertimeIfNeeded(
 }
 
 export async function runAutoCloseAt4AM(): Promise<number> {
+  if (!AUTO_CLOSE_ENABLED) return 0;
   // Robust behavior: close any open shifts that started before today's business-day boundary (04:00).
   // This prevents missing the exact 04:00 minute when the server is sleeping/restarting.
   const now = new Date();
@@ -114,6 +116,7 @@ export async function runAutoCloseAt4AM(): Promise<number> {
 }
 
 export function startAutoCloseCron(): void {
+  if (!AUTO_CLOSE_ENABLED) return;
   // Run frequently so we never miss 04:00 due to cold starts. Cheap query with index-friendly filters.
   const intervalMs = 5 * 60 * 1000;
   // Run once shortly after boot too.

@@ -189,13 +189,26 @@ shiftRouter.post(
     }
 
     // One shift per day: if employee already ended a shift today, they cannot start again until next day
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const timeZone = process.env.TZ || "Asia/Kolkata";
+    const { dateKey: todayBusinessKey } = getBusinessDayRange({
+      date: new Date(),
+      boundaryHour: 4,
+      timeZone,
+    });
     const completedToday = await prisma.employeeShift.findMany({
       where: { employeeId, shiftEnd: { not: null } },
-      select: { shiftEnd: true },
+      select: { shiftStart: true, shiftEnd: true },
     });
     const hasEndedShiftToday = completedToday.some(
-      (s) => s.shiftEnd && s.shiftEnd.toISOString().slice(0, 10) === todayStr
+      (s) => {
+        if (!s.shiftEnd) return false;
+        const { dateKey } = getBusinessDayRange({
+          date: s.shiftStart,
+          boundaryHour: 4,
+          timeZone,
+        });
+        return dateKey === todayBusinessKey;
+      },
     );
     if (hasEndedShiftToday) {
       return res.status(400).json({

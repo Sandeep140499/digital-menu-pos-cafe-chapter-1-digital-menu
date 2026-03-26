@@ -14,9 +14,9 @@ const newOrderSoundPresetEnum = z.enum(["beep", "ring", "siren", "chime"]);
 
 const createBranchSchema = z.object({
   name: z.string().min(1),
-  location: z.string().optional(),
+  location: z.string().min(1),
   timezone: z.string().optional(),
-  logoUrl: optionalHttpUrl,
+  logoUrl: z.string().url(),
   phone: z.preprocess(
     (val) => (val === "" || val === null ? undefined : val),
     z.string().optional().nullable(),

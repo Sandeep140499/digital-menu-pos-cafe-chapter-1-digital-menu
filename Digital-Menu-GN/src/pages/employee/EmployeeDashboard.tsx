@@ -355,9 +355,6 @@ const sidebarItems = [
   { key: "live", label: "Live Orders", icon: ShoppingCart },
   { key: "add-order", label: "Add Order", icon: Plus },
   { key: "all-orders", label: "All Orders", icon: ShoppingCart },
-  { key: "completed", label: "Completed (Unpaid)", icon: CheckCircle },
-  { key: "pending", label: "Pending Payment", icon: CreditCard },
-  { key: "performance", label: "Performance", icon: Bell },
   { key: "shift", label: "My Shift", icon: Clock },
   { key: "profile", label: "Profile", icon: User },
 ];
@@ -1527,6 +1524,7 @@ const EmployeeDashboard = () => {
       totalSales: number | null;
     }[]
   >([]);
+  const [myShiftHistoryLoaded, setMyShiftHistoryLoaded] = useState(false);
   const [myDailyShiftStats, setMyDailyShiftStats] = useState<
     { date: string; totalHours: number; totalSales: number; shifts: number }[]
   >([]);
@@ -1576,81 +1574,7 @@ const EmployeeDashboard = () => {
     fetchEmployeeSettings();
   }, [token]);
 
-  // Performance (API speed) – employee view
-  type ApiPerfRow = {
-    key: string;
-    actor: "ALL" | "ADMIN" | "EMPLOYEE" | "CUSTOMER";
-    count: number;
-    errorCount: number;
-    avgMs: number;
-    p50Ms: number;
-    p95Ms: number;
-    maxMs: number;
-  };
-  type ApiPerfSummary = {
-    now: number;
-    windowMinutes: number;
-    actor: "ALL" | "ADMIN" | "EMPLOYEE" | "CUSTOMER";
-    totalCount: number;
-    totalErrorCount: number;
-    rpm: number;
-    rows: ApiPerfRow[];
-  };
-  const [apiPerfWindowMinutes, setApiPerfWindowMinutes] = useState<number>(60);
-  const [apiPerfLoading, setApiPerfLoading] = useState(false);
   const { stopGlobalLoading } = useGlobalLoading();
-  const [apiPerf, setApiPerf] = useState<ApiPerfSummary | null>(null);
-
-  const loadApiPerf = useCallback(async () => {
-    if (!token) return;
-    setApiPerfLoading(true);
-    try {
-      const params = new URLSearchParams({
-        windowMinutes: String(apiPerfWindowMinutes),
-        top: "30",
-        actor: "EMPLOYEE",
-      });
-      const res = await fetch(`${apiBase}/performance/summary?${params}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        const msg =
-          data && typeof data === "object" && "message" in data
-            ? String((data as { message?: unknown }).message || "")
-            : "";
-        throw new Error(msg || "Failed to load performance");
-      }
-      setApiPerf(data as ApiPerfSummary);
-    } catch (e) {
-      setApiPerf(null);
-    } finally {
-      setApiPerfLoading(false);
-    }
-  }, [token, apiPerfWindowMinutes]);
-
-  useEffect(() => {
-    if (activeSection !== "performance") return;
-    loadApiPerf();
-    const id = window.setInterval(() => loadApiPerf(), 30_000);
-    return () => window.clearInterval(id);
-  }, [activeSection, loadApiPerf]);
-
-  const overallApiPerf = useMemo(() => {
-    const rows = apiPerf?.rows ?? [];
-    const total = rows.reduce((s, r) => s + (r.count || 0), 0);
-    const weightedAvg =
-      total > 0 ? rows.reduce((s, r) => s + (Number(r.avgMs) || 0) * r.count, 0) / total : 0;
-    const weightedP95 =
-      total > 0 ? rows.reduce((s, r) => s + (Number(r.p95Ms) || 0) * r.count, 0) / total : 0;
-    return {
-      rpm: apiPerf?.rpm ?? 0,
-      avgMs: Math.round(weightedAvg),
-      p95Ms: Math.round(weightedP95),
-      totalCount: apiPerf?.totalCount ?? 0,
-      totalErrorCount: apiPerf?.totalErrorCount ?? 0,
-    };
-  }, [apiPerf]);
 
   const mergeOrders = (prev: Order[], next: Order[]) => {
     if (prev.length === 0) return next;
@@ -1916,16 +1840,35 @@ const EmployeeDashboard = () => {
 
   useEffect(() => {
     if (!token) return;
-    fetchWithTimeout(`${apiBase}/employees/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      .then((res) => {
-        if (res.ok) return res.json();
-        return null;
-      })
-      .then((data) => data && setProfile(data))
-      .catch(() => {});
-  }, [token]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const doFetch = async (t: string) =>
+          fetchWithTimeout(`${apiBase}/employees/me`, {
+            headers: { Authorization: `Bearer ${t}` },
+            credentials: "include",
+          });
+
+        let res = await doFetch(token);
+        if (res.status === 401) {
+          const nextToken = await refresh();
+          if (nextToken) res = await doFetch(nextToken);
+        }
+        if (!res.ok) return;
+        const data = await res.json().catch(() => null);
+        const payload =
+          data && typeof data === "object" && "employee" in data
+            ? (data as any).employee
+            : data;
+        if (!cancelled && payload) setProfile(payload);
+      } catch {
+        // ignore – profile is optional UI
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, refresh]);
 
   // Fetch current shift status on load; show Start shift? only once per day when no active shift
   useEffect(() => {
@@ -1938,9 +1881,26 @@ const EmployeeDashboard = () => {
         if (data && data.active) setShiftActive(true);
         if (data?.shift) setCurrentShift(data.shift);
         if (!data?.active) {
+          const getBusinessDayStartFor = (now: Date) => {
+            const startHour = 4; // 04:00 AM
+            const start = new Date(
+              now.getFullYear(),
+              now.getMonth(),
+              now.getDate(),
+              startHour,
+              0,
+              0,
+              0,
+            );
+            if (now.getTime() < start.getTime()) start.setDate(start.getDate() - 1);
+            return start;
+          };
+          const businessDayKey = getBusinessDayStartFor(new Date())
+            .toISOString()
+            .slice(0, 10);
           const todayKey =
             "dm_shift_prompt_dismissed_" +
-            new Date().toISOString().slice(0, 10);
+            businessDayKey;
           const dismissedToday =
             window.sessionStorage.getItem(todayKey) === "1";
           if (!dismissedToday) setShowStartShiftPrompt(true);
@@ -1952,6 +1912,7 @@ const EmployeeDashboard = () => {
   // Load employee shift history (daily in/out + hours)
   useEffect(() => {
     if (!token) return;
+    setMyShiftHistoryLoaded(false);
     fetchWithTimeout(`${apiBase}/shift/my-history`, {
         headers: { Authorization: `Bearer ${token}` },
       })
@@ -1960,8 +1921,9 @@ const EmployeeDashboard = () => {
         if (!data) return;
         setMyShiftHistory(data.shifts ?? []);
         setMyDailyShiftStats(data.dailyStats ?? []);
+        setMyShiftHistoryLoaded(true);
       })
-      .catch(() => {});
+      .catch(() => setMyShiftHistoryLoaded(true));
   }, [token]);
 
   // Approved overtime counter (only after Admin approval)
@@ -1975,17 +1937,43 @@ const EmployeeDashboard = () => {
       .catch(() => {});
   }, [token]);
 
-  const todayIso = new Date().toISOString();
-  const endedShiftToday = myShiftHistory.some(
-    (s) =>
-      s.shiftEnd &&
-      isSameDay(
-        typeof s.shiftEnd === "string"
-          ? s.shiftEnd
-          : new Date(s.shiftEnd).toISOString(),
-        todayIso,
-      ),
-  );
+  const getBusinessDayStartFor = (now: Date) => {
+    const startHour = 4; // 04:00 AM
+    const start = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+      startHour,
+      0,
+      0,
+      0,
+    );
+    if (now.getTime() < start.getTime()) start.setDate(start.getDate() - 1);
+    return start;
+  };
+  // Keep shift "one per day" aligned with backend which uses Asia/Kolkata business day key.
+  // (Backend uses `process.env.TZ || "Asia/Kolkata"` and computes key from shiftStart.)
+  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+  const businessDateKeyIST = (d: string | Date) => {
+    const t = typeof d === "string" ? new Date(d) : d;
+    const ist = new Date(t.getTime() + IST_OFFSET_MS);
+    const y = ist.getUTCFullYear();
+    const m = ist.getUTCMonth();
+    const day = ist.getUTCDate();
+    const hour = ist.getUTCHours();
+    // Business day boundary: 04:00 IST
+    const boundaryDate = new Date(Date.UTC(y, m, day, 0, 0, 0, 0));
+    if (hour < 4) boundaryDate.setUTCDate(boundaryDate.getUTCDate() - 1);
+    return boundaryDate.toISOString().slice(0, 10);
+  };
+
+  const endedShiftToday =
+    myShiftHistoryLoaded &&
+    myShiftHistory.some(
+      (s) =>
+        !!s.shiftEnd &&
+        businessDateKeyIST(s.shiftStart) === businessDateKeyIST(new Date()),
+    );
 
   const startShift = async () => {
     if (!token) return;
@@ -2002,7 +1990,7 @@ const EmployeeDashboard = () => {
     }
     const openShift = myShiftHistory.find((s) => !s.shiftEnd);
     if (openShift) {
-      if (isSameDay(openShift.shiftStart, todayIso)) {
+      if (businessDateKeyIST(openShift.shiftStart) === businessDateKeyIST(new Date())) {
         toast.error(
           "You already started a shift today. End it first or contact admin.",
         );
@@ -2488,22 +2476,64 @@ const EmployeeDashboard = () => {
     }
   }, [token, selectedOrder, removedItemIds, modificationReason, addedItemsCart, pendingQtyByOrderItemId]);
 
+  const getBusinessDayStart = (now: Date) => {
+    const startHour = 4; // 04:00 AM
+    const start = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+      startHour,
+      0,
+      0,
+      0,
+    );
+    // If it's after midnight but before 4 AM, we're still in the previous business day.
+    if (now.getTime() < start.getTime()) start.setDate(start.getDate() - 1);
+    return start;
+  };
+
+  // Live = unpaid, non-rejected orders for current business day (starts 04:00 AM).
+  // This prevents yesterday's pending orders from showing after daily reset.
+  const businessDayStart = useMemo(
+    () => getBusinessDayStart(currentTime),
+    [currentTime],
+  );
+  const businessDayEnd = useMemo(
+    () => new Date(businessDayStart.getTime() + 24 * 60 * 60 * 1000),
+    [businessDayStart],
+  );
+  const ordersInBusinessDay = useMemo(
+    () =>
+      orders.filter((o) => {
+        const t = new Date(o.createdAt);
+        return t >= businessDayStart && t < businessDayEnd;
+      }),
+    [orders, businessDayStart, businessDayEnd],
+  );
+
   const todayStats = useMemo(() => {
-    const ordersToday = orders.length;
-    const paidOrdersList = orders.filter((o) => o.paymentStatus === "PAID");
+    const ordersToday = ordersInBusinessDay.length;
+    const paidOrdersList = ordersInBusinessDay.filter((o) => o.paymentStatus === "PAID");
     const paid = new Set(paidOrdersList.map((o) => o.id)).size; // Unique paid order count
-    const completed = orders.filter(
+    const completed = ordersInBusinessDay.filter(
       (o) => o.status === "ORDER_COMPLETE" && o.paymentStatus !== "PAID",
     ).length; // Completed = completed but not yet paid
-    const pendingPayments = orders.filter(
+    const pendingPayments = ordersInBusinessDay.filter(
       (o) => o.status === "ORDER_COMPLETE" && o.paymentStatus !== "PAID",
     ).length;
     const salesToday = currentShift?.totalSales ?? 0;
     return { ordersToday, completed, paid, pendingPayments, salesToday };
-  }, [orders, currentShift]);
-
-  // Live = all unpaid orders. Sort: ready for payment (ORDER_COMPLETE) first, then in-progress.
-  const liveOrdersRaw = orders.filter((o) => o.paymentStatus !== "PAID");
+  }, [ordersInBusinessDay, currentShift]);
+  const liveOrdersRaw = useMemo(
+    () =>
+      orders.filter((o) => {
+        if (o.paymentStatus === "PAID") return false;
+        if (o.status === "REJECTED") return false;
+        const t = new Date(o.createdAt);
+        return t >= businessDayStart && t < businessDayEnd;
+      }),
+    [orders, businessDayStart, businessDayEnd],
+  );
   const liveOrders = useMemo(
     () =>
       [...liveOrdersRaw].sort((a, b) =>
@@ -2517,25 +2547,31 @@ const EmployeeDashboard = () => {
   );
   const completedOrders = useMemo(
     () =>
-      orders.filter(
+      ordersInBusinessDay.filter(
         (o) => o.status === "ORDER_COMPLETE" && o.paymentStatus !== "PAID",
       ),
-    [orders],
+    [ordersInBusinessDay],
   );
   const pendingPayments = useMemo(
     () =>
-      orders.filter(
+      ordersInBusinessDay.filter(
         (o) => o.status === "ORDER_COMPLETE" && o.paymentStatus !== "PAID",
       ),
-    [orders],
+    [ordersInBusinessDay],
   );
   const paidOrders = useMemo(
-    () => orders.filter((o) => o.paymentStatus === "PAID"),
-    [orders],
+    () => ordersInBusinessDay.filter((o) => o.paymentStatus === "PAID"),
+    [ordersInBusinessDay],
   );
 
   // All orders (no extra filtering) – used by the All Orders tab
   const allOrders = orders;
+
+  const recentOrders = useMemo(() => {
+    return [...ordersInBusinessDay]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 5);
+  }, [ordersInBusinessDay]);
 
   const getStatusColor = useCallback(
     (status: string) =>
@@ -3067,8 +3103,17 @@ const EmployeeDashboard = () => {
                 {data.length} orders in this section
               </CardDescription>
             </div>
-            {isLiveOrders && shiftActive && (
-              <div className="flex justify-end sm:justify-end sm:ml-auto shrink-0">
+            {isLiveOrders && (
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end sm:justify-end sm:ml-auto gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  className="text-xs sm:text-sm min-h-[44px] sm:min-h-0"
+                  onClick={() => setActiveSection("add-order")}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Order
+                </Button>
+                {shiftActive && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -3095,12 +3140,13 @@ const EmployeeDashboard = () => {
                       );
                     }
                   }}
-                  className="text-xs sm:text-sm"
+                  className="text-xs sm:text-sm min-h-[44px] sm:min-h-0"
                 >
                   {currentShift?.status === "PAUSED"
                     ? "Resume Orders"
                     : "Pause Orders"}
                 </Button>
+                )}
               </div>
             )}
           </div>
@@ -3181,6 +3227,9 @@ const EmployeeDashboard = () => {
     const [dateFilter, setDateFilter] = useState<"today" | "last7" | "all">(
       "all",
     );
+    const [statusFilter, setStatusFilter] = useState<
+      "all" | "live" | "ready_for_payment" | "paid" | "rejected"
+    >("all");
     const [paymentFilter, setPaymentFilter] = useState<
       "all" | "paid" | "unpaid"
     >("all");
@@ -3202,6 +3251,22 @@ const EmployeeDashboard = () => {
       } else if (dateFilter === "last7") {
         list = list.filter((o) => new Date(o.createdAt) >= last7Start);
       }
+
+      // Order status grouping (used on All Orders to replace separate Completed/Pending pages)
+      if (statusFilter === "paid") {
+        list = list.filter((o) => o.paymentStatus === "PAID");
+      } else if (statusFilter === "ready_for_payment") {
+        list = list.filter(
+          (o) => o.status === "ORDER_COMPLETE" && o.paymentStatus !== "PAID",
+        );
+      } else if (statusFilter === "live") {
+        list = list.filter(
+          (o) => o.paymentStatus !== "PAID" && o.status !== "ORDER_COMPLETE",
+        );
+      } else if (statusFilter === "rejected") {
+        list = list.filter((o) => o.status === "REJECTED");
+      }
+
       if (paymentFilter === "paid")
         list = list.filter((o) => o.paymentStatus === "PAID");
       else if (paymentFilter === "unpaid")
@@ -3220,7 +3285,7 @@ const EmployeeDashboard = () => {
         (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );
-    }, [rawOrders, dateFilter, paymentFilter, search]);
+    }, [rawOrders, dateFilter, statusFilter, paymentFilter, search]);
 
     const total = filtered.length;
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -3294,9 +3359,11 @@ const EmployeeDashboard = () => {
         ? "bg-green-100 text-green-800 border-green-300"
         : "bg-amber-100 text-amber-800 border-amber-300";
 
+    const isAllOrders = title.toLowerCase().includes("all orders");
     const isCompleted =
       title.toLowerCase().includes("completed") ||
-      title.toLowerCase().includes("paid");
+      title.toLowerCase().includes("paid") ||
+      (isAllOrders && statusFilter === "paid");
 
     return (
       <Card
@@ -3343,6 +3410,30 @@ const EmployeeDashboard = () => {
                   className="pl-9 h-10"
                 />
               </div>
+              {isAllOrders && (
+                <Select
+                  value={statusFilter}
+                  onValueChange={(
+                    v: "all" | "live" | "ready_for_payment" | "paid" | "rejected",
+                  ) => {
+                    setStatusFilter(v);
+                    setPage(1);
+                  }}
+                >
+                  <SelectTrigger className="w-full sm:w-[170px] h-10 min-h-[44px] sm:min-h-0 min-w-0">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="live">Live (In progress)</SelectItem>
+                    <SelectItem value="ready_for_payment">
+                      Ready for payment
+                    </SelectItem>
+                    <SelectItem value="paid">Paid</SelectItem>
+                    <SelectItem value="rejected">Rejected</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
               <Select
                 value={dateFilter}
                 onValueChange={(v: "today" | "last7" | "all") => {
@@ -3359,24 +3450,22 @@ const EmployeeDashboard = () => {
                   <SelectItem value="all">All</SelectItem>
                 </SelectContent>
               </Select>
-              {isCompleted && (
-                <Select
-                  value={paymentFilter}
-                  onValueChange={(v: "all" | "paid" | "unpaid") => {
-                    setPaymentFilter(v);
-                    setPage(1);
-                  }}
-                >
-                  <SelectTrigger className="w-full sm:w-[120px] h-10 min-h-[44px] sm:min-h-0 min-w-0">
-                    <SelectValue placeholder="Payment" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All</SelectItem>
-                    <SelectItem value="paid">Paid</SelectItem>
-                    <SelectItem value="unpaid">Unpaid</SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
+              <Select
+                value={paymentFilter}
+                onValueChange={(v: "all" | "paid" | "unpaid") => {
+                  setPaymentFilter(v);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger className="w-full sm:w-[120px] h-10 min-h-[44px] sm:min-h-0 min-w-0">
+                  <SelectValue placeholder="Payment" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="paid">Paid</SelectItem>
+                  <SelectItem value="unpaid">Unpaid</SelectItem>
+                </SelectContent>
+              </Select>
               <Select
                 value={String(pageSize)}
                 onValueChange={(v) => {
@@ -4051,7 +4140,7 @@ const EmployeeDashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {orders.slice(0, 5).map((order) => (
+              {recentOrders.map((order) => (
                 <div
                   key={order.id}
                   role="button"
@@ -4110,7 +4199,7 @@ const EmployeeDashboard = () => {
                   </div>
                 </div>
               ))}
-              {orders.length === 0 && (
+              {recentOrders.length === 0 && (
                 <div className="text-center py-8 text-muted-foreground">
                   <p className="font-medium">No orders yet</p>
                   <p className="text-sm mt-1">
@@ -4554,159 +4643,6 @@ const EmployeeDashboard = () => {
     [profile],
   );
 
-  const performanceSectionContent = useMemo(
-    () => (
-      <div className="space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <h2 className="text-lg font-bold sm:text-xl">Performance</h2>
-            <p className="text-xs sm:text-sm text-muted-foreground">
-              Live API speed and traffic (employee requests).
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Select
-              value={String(apiPerfWindowMinutes)}
-              onValueChange={(v) => setApiPerfWindowMinutes(Number(v) || 60)}
-            >
-              <SelectTrigger className="w-full sm:w-[150px] min-w-0 min-h-[44px] sm:min-h-0">
-                <SelectValue placeholder="Window" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="15">Last 15 min</SelectItem>
-                <SelectItem value="60">Last 60 min</SelectItem>
-                <SelectItem value="360">Last 6 hours</SelectItem>
-                <SelectItem value="1440">Last 24 hours</SelectItem>
-              </SelectContent>
-            </Select>
-            <LoaderButton
-              size="sm"
-              variant="outline"
-              loading={apiPerfLoading}
-              loadingLabel="Refreshing..."
-              onClick={loadApiPerf}
-              className="min-h-[44px] sm:min-h-0"
-            >
-              <RefreshCw className="h-4 w-4 mr-1" />
-              Refresh
-            </LoaderButton>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <Card className="bg-white">
-            <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Requests / min</p>
-              <p className="mt-1 text-lg font-bold">
-                {overallApiPerf.rpm ? overallApiPerf.rpm.toFixed(1) : "0.0"}
-              </p>
-            </CardContent>
-          </Card>
-          <Card className="bg-white">
-            <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">API Avg (ms)</p>
-              <p className="mt-1 text-lg font-bold">{overallApiPerf.avgMs}</p>
-            </CardContent>
-          </Card>
-          <Card className="bg-white">
-            <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">API P95 (ms)</p>
-              <p className="mt-1 text-lg font-bold text-amber-700">
-                {overallApiPerf.p95Ms}
-              </p>
-            </CardContent>
-          </Card>
-          <Card className="bg-white">
-            <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Errors (5xx)</p>
-              <p className="mt-1 text-lg font-bold text-red-600">
-                {overallApiPerf.totalErrorCount}
-              </p>
-            </CardContent>
-          </Card>
-          <Card className="bg-white">
-            <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Total requests</p>
-              <p className="mt-1 text-lg font-bold">
-                {overallApiPerf.totalCount}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Slow APIs (by P95)</CardTitle>
-            <CardDescription className="text-xs">
-              Endpoints with traffic and latency (employee traffic).
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-2">
-            {apiPerfLoading && !apiPerf ? (
-              <div className="py-8 text-center text-sm text-muted-foreground">
-                Loading…
-              </div>
-            ) : (apiPerf?.rows?.length ?? 0) === 0 ? (
-              <div className="py-8 text-center text-sm text-muted-foreground">
-                No API traffic in this window yet.
-              </div>
-            ) : (
-              <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-slate-50">
-                      <TableHead>API</TableHead>
-                      <TableHead className="text-right whitespace-nowrap">
-                        Hits
-                      </TableHead>
-                      <TableHead className="text-right whitespace-nowrap">
-                        Avg (ms)
-                      </TableHead>
-                      <TableHead className="text-right whitespace-nowrap">
-                        P95 (ms)
-                      </TableHead>
-                      <TableHead className="text-right whitespace-nowrap">
-                        5xx
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {(apiPerf?.rows ?? []).map((r) => (
-                      <TableRow key={r.key}>
-                        <TableCell className="font-medium">{r.key}</TableCell>
-                        <TableCell className="text-right">{r.count}</TableCell>
-                        <TableCell className="text-right">
-                          {Math.round(r.avgMs)}
-                        </TableCell>
-                        <TableCell className="text-right font-semibold text-amber-700">
-                          {Math.round(r.p95Ms)}
-                        </TableCell>
-                        <TableCell className="text-right text-red-600 font-semibold">
-                          {r.errorCount}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    ),
-    [
-      apiPerf,
-      apiPerfLoading,
-      apiPerfWindowMinutes,
-      loadApiPerf,
-      overallApiPerf.avgMs,
-      overallApiPerf.p95Ms,
-      overallApiPerf.rpm,
-      overallApiPerf.totalCount,
-      overallApiPerf.totalErrorCount,
-    ],
-  );
-
   const StartShiftPromptDialog = () => (
     <Dialog
       open={showStartShiftPrompt}
@@ -4991,10 +4927,7 @@ const EmployeeDashboard = () => {
             formatTimeToComplete={formatTimeToComplete}
           />
         )}
-        {activeSection === "completed" && completedSectionContent}
-        {activeSection === "pending" && pendingSectionContent}
         {activeSection === "paid" && paidSectionContent}
-        {activeSection === "performance" && performanceSectionContent}
         {activeSection === "shift" && shiftSectionContent}
         {activeSection === "profile" && profileSectionContent}
       </div>
@@ -5007,10 +4940,7 @@ const EmployeeDashboard = () => {
       token,
       setActiveSection,
       allOrders,
-      completedSectionContent,
-      pendingSectionContent,
       paidSectionContent,
-      performanceSectionContent,
       shiftSectionContent,
       profileSectionContent,
       loading,

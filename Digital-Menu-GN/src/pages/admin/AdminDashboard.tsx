@@ -585,7 +585,6 @@ const adminSidebarSections = [
   {
     title: "Operations",
     items: [
-      { key: "orders", label: "Orders", icon: ShoppingCart },
       { key: "all-orders", label: "All Orders", icon: ShoppingCart },
       { key: "menu", label: "Menu", icon: ChefHat },
       {
@@ -819,7 +818,6 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
                     className="shrink-0 w-full sm:w-auto"
                     onClick={() => {
                       setBranchForm({
-                        ...branchForm,
                         name: b.name,
                         location: b.location || "",
                         timezone: b.timezone || "Asia/Kolkata",
@@ -832,6 +830,16 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
                           typeof (b as any).showTotalAmountToCustomers === "boolean"
                             ? (b as any).showTotalAmountToCustomers
                             : true,
+                        enableNewOrderRinging:
+                          typeof (b as any).enableNewOrderRinging === "boolean"
+                            ? (b as any).enableNewOrderRinging
+                            : true,
+                        newOrderSoundPreset:
+                          (b as any).newOrderSoundPreset || "ring",
+                        newOrderSoundVolume:
+                          typeof (b as any).newOrderSoundVolume === "number"
+                            ? (b as any).newOrderSoundVolume
+                            : 1,
                       });
                       setBranch(b);
                     }}
@@ -1051,7 +1059,7 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
                   <div className="flex flex-col sm:flex-row gap-2 pt-2">
                     <Input
                       type="email"
-                      placeholder="e.g. director@company.com"
+                      placeholder="Type email(s) and tap + Add (comma/space separated)"
                       value={newDirectorEmail}
                       onChange={(e) => setNewDirectorEmail(e.target.value)}
                       className="flex-1 min-w-0"
@@ -1060,42 +1068,67 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-10 gap-1 text-emerald-600 border-emerald-200 hover:bg-emerald-50 shrink-0"
-                      disabled={sendingVerify || !newDirectorEmail.trim()}
+                      className="h-10 gap-1 text-emerald-600 border-emerald-200 hover:bg-emerald-50 shrink-0 min-w-[92px]"
+                      disabled={sendingVerify || !newDirectorEmail.trim() || !branchId}
                       onClick={async () => {
-                        const email = newDirectorEmail.trim();
-                        if (!email) return;
+                        const raw = newDirectorEmail.trim();
+                        if (!raw) return;
+                        const emails = Array.from(
+                          new Set(
+                            raw
+                              .split(/[,\s]+/g)
+                              .map((x) => x.trim())
+                              .filter(Boolean),
+                          ),
+                        );
+                        if (emails.length === 0) return;
                         setSendingVerify(true);
                         try {
-                          const res = await fetch(
-                            `${apiBase}/branches/${branchId}/directors/request-verify`,
-                            {
-                              method: "POST",
-                              headers: {
-                                "Content-Type": "application/json",
-                                Authorization: `Bearer ${token}`,
-                              },
-                              body: JSON.stringify({ email }),
-                            },
+                          const results = await Promise.all(
+                            emails.map(async (email) => {
+                              const res = await fetch(
+                                `${apiBase}/branches/${branchId}/directors/request-verify`,
+                                {
+                                  method: "POST",
+                                  headers: {
+                                    "Content-Type": "application/json",
+                                    Authorization: `Bearer ${token}`,
+                                  },
+                                  body: JSON.stringify({ email }),
+                                },
+                              );
+                              const data = await res.json().catch(() => ({}));
+                              return { email, ok: res.ok, message: (data as any)?.message };
+                            }),
                           );
-                          const data = await res.json().catch(() => ({}));
-                          if (res.ok) {
+                          const okCount = results.filter((r) => r.ok).length;
+                          const fail = results.filter((r) => !r.ok);
+                          if (okCount > 0) {
                             toast({
-                              title: "Verification email sent",
+                              title:
+                                okCount === 1
+                                  ? "Verification email sent"
+                                  : "Verification emails sent",
                               description:
-                                "Director must click the link in the email to be added.",
+                                okCount === 1
+                                  ? "Director must click the link in the email to be added."
+                                  : `${okCount} director(s) will receive a verification email. They must click the link to be added.`,
                             });
-                            setNewDirectorEmail("");
-                            await loadDirectors();
-                          } else {
+                          }
+                          if (fail.length > 0) {
                             toast({
-                              title: "Error",
+                              title: "Some emails failed",
                               description:
-                                (data as { message?: string }).message ||
-                                "Failed to send verification email",
+                                fail
+                                  .slice(0, 3)
+                                  .map((f) => `${f.email}: ${f.message || "Failed"}`)
+                                  .join(" | ") +
+                                (fail.length > 3 ? ` | +${fail.length - 3} more` : ""),
                               variant: "destructive",
                             });
                           }
+                          setNewDirectorEmail("");
+                          await loadDirectors();
                         } catch {
                           toast({
                             title: "Error",
@@ -1107,7 +1140,7 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
                         }
                       }}
                     >
-                      {sendingVerify ? "Sending…" : "Send verification email"}
+                      {sendingVerify ? "Adding…" : "+ Add"}
                     </Button>
                   </div>
                 </>
@@ -1247,7 +1280,7 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
               if (branchForm.name)
                 localStorage.setItem("branch_name", branchForm.name);
             }}
-            disabled={savingBranch}
+            disabled={savingBranch || !branch?.id}
           >
             {savingBranch ? (
               <>
@@ -3582,7 +3615,6 @@ const AdminDashboard = () => {
     "performance",
     "menu",
     "employees",
-    "orders",
     "all-orders",
     "customer-leaderboard",
     "customer-queries",
@@ -3820,6 +3852,8 @@ const AdminDashboard = () => {
     newOrderSoundPreset: "ring",
     newOrderSoundVolume: 1,
   });
+  const [createBranchDirectorInput, setCreateBranchDirectorInput] =
+    useState("");
   const [savingBranch, setSavingBranch] = useState(false);
   const [directorsData, setDirectorsData] = useState<{
     verified: string[];
@@ -4101,10 +4135,12 @@ const AdminDashboard = () => {
         headers: { Authorization: `Bearer ${token}` },
         timeout: API_TIMEOUT_MS,
       };
+      const businessDate = getBusinessDateString();
       const requests = [
         { key: "menu", url: `${apiBase}/menu/admin` },
         { key: "employees", url: `${apiBase}/employees` },
-        { key: "orders", url: `${apiBase}/orders/live` },
+        // Dashboard "Today" uses business day (04:00 → 03:59), not live/unpaid orders.
+        { key: "orders", url: `${apiBase}/orders/all?date=${encodeURIComponent(businessDate)}` },
         { key: "traffic", url: `${apiBase}/config/public-traffic` },
         { key: "dashboardSummary", url: `${apiBase}/reports/dashboard-summary` },
         { key: "activeShifts", url: `${apiBase}/shift/active` },
@@ -4166,7 +4202,12 @@ const AdminDashboard = () => {
       // Read each response body only once (avoid "body stream already read")
       const menuData = menuRes?.ok ? await menuRes.json() : null;
       const empData = employeesRes?.ok ? await employeesRes.json() : null;
-      const ordersData = ordersRes?.ok ? await ordersRes.json() : null;
+      const ordersDataRaw = ordersRes?.ok ? await ordersRes.json() : null;
+      const ordersData: Order[] = Array.isArray(ordersDataRaw)
+        ? (ordersDataRaw as Order[])
+        : Array.isArray((ordersDataRaw as any)?.orders)
+          ? ((ordersDataRaw as any).orders as Order[])
+          : [];
       const salarySlipData = salarySlipsRes?.ok
         ? await salarySlipsRes.json()
         : null;
@@ -4893,8 +4934,6 @@ const AdminDashboard = () => {
       if (!orderStartDate && !orderEndDate && orderDateFilter) {
         params.append("date", orderDateFilter);
       }
-      if (orderTableFilter !== "all")
-        params.append("tableId", orderTableFilter);
 
       const res = await fetch(`${apiBase}/orders/all?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -5139,7 +5178,10 @@ const AdminDashboard = () => {
   };
 
   const handleCreateBranch = async () => {
-    if (!token || !createBranchForm.name.trim()) return;
+    const name = createBranchForm.name.trim();
+    const location = createBranchForm.location.trim();
+    const logoUrl = createBranchForm.logoUrl.trim();
+    if (!token || !name || !location || !logoUrl) return;
     setSavingBranch(true);
     try {
       // Cold Railway deploys often exceed 25s; give POST room to complete after wake-up.
@@ -5153,10 +5195,10 @@ const AdminDashboard = () => {
           },
           timeout: Math.max(API_TIMEOUT_MS, 90_000),
           body: JSON.stringify({
-            name: createBranchForm.name.trim(),
-            location: createBranchForm.location.trim() || undefined,
+            name,
+            location,
             timezone: createBranchForm.timezone || undefined,
-            logoUrl: createBranchForm.logoUrl.trim() || undefined,
+            logoUrl,
             phone: createBranchForm.phone.trim() || undefined,
             googleReviewUrl: createBranchForm.googleReviewUrl.trim() || undefined,
             pincode: createBranchForm.pincode.trim() || undefined,
@@ -5204,11 +5246,11 @@ const AdminDashboard = () => {
 
   // Update branch settings
   const handleUpdateBranch = async () => {
-    const branchToUpdate = branch ?? branches[0];
+    const branchToUpdate = branch;
     if (!token || !branchToUpdate?.id) {
       toast({
         title: "Cannot save",
-        description: "No branch selected. Select a branch above or create one.",
+        description: "Select a branch above (Edit in Branch Settings), then save.",
         variant: "destructive",
       });
       return;
@@ -5360,7 +5402,13 @@ const AdminDashboard = () => {
 
   // Effects for loading data when sections change
   useEffect(() => {
-    if (token && activeSection === "orders") {
+    // Backward compatibility: older builds stored "orders" in localStorage.
+    // We removed "orders" from sidebar; treat it as "all-orders".
+    if (activeSection === "orders") {
+      setActiveSection("all-orders");
+      return;
+    }
+    if (token && activeSection === "all-orders") {
       loadAllOrders();
     }
   }, [token, activeSection, orderDateFilter, orderTableFilter]);
@@ -7316,7 +7364,12 @@ const AdminDashboard = () => {
   const ordersGridContent = useMemo(
     () => (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 min-w-0">
-        {ordersByTable.map((table) => (
+        {(orderTableFilter === "all"
+          ? ordersByTable
+          : ordersByTable.filter(
+              (t) => String(t.tableId) === String(orderTableFilter),
+            )
+        ).map((table) => (
           <Card key={table.tableId} className="overflow-hidden card-gpu">
             <CardHeader className="pb-2 bg-slate-50">
               <div className="flex items-center justify-between">
@@ -7354,7 +7407,11 @@ const AdminDashboard = () => {
             </CardContent>
           </Card>
         ))}
-        {ordersByTable.length === 0 && (
+        {(orderTableFilter === "all"
+          ? ordersByTable.length === 0
+          : ordersByTable.filter(
+              (t) => String(t.tableId) === String(orderTableFilter),
+            ).length === 0) && (
           <Card className="col-span-full">
             <CardContent className="p-8 text-center">
               <ShoppingCart className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-20" />
@@ -7366,7 +7423,7 @@ const AdminDashboard = () => {
         )}
       </div>
     ),
-    [ordersByTable, handleOpenOrderDialog],
+    [ordersByTable, orderTableFilter, handleOpenOrderDialog],
   );
 
   // ORDERS SECTION - Updated with table view and popup
@@ -7411,6 +7468,22 @@ const AdminDashboard = () => {
               ))}
             </SelectContent>
           </Select>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setOrderStartDate("");
+              setOrderEndDate("");
+              setOrderTableFilter("all");
+              // Load without filters immediately for UX
+              loadAllOrders();
+            }}
+            disabled={ordersLoading}
+            title="Reset filters"
+            className="min-h-[44px] sm:min-h-0 shrink-0 w-full sm:w-auto"
+          >
+            Reset
+          </Button>
           <Button
             size="sm"
             variant="outline"
@@ -7731,12 +7804,12 @@ const AdminDashboard = () => {
             Track attendance, hours and sales
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 w-full md:w-auto">
           <Select
             value={hoursEmployeeFilter}
             onValueChange={setHoursEmployeeFilter}
           >
-            <SelectTrigger className="w-40">
+            <SelectTrigger className="w-full sm:w-40 min-h-[44px]">
               <SelectValue placeholder="All Employees" />
             </SelectTrigger>
             <SelectContent>
@@ -7753,26 +7826,23 @@ const AdminDashboard = () => {
                 ))}
             </SelectContent>
           </Select>
-          <div className="flex flex-wrap items-end gap-2">
-            <div className="flex flex-col gap-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full sm:w-auto">
+            <div className="flex flex-col gap-1 min-w-0">
               <Label className="text-xs text-muted-foreground">
                 Start Date
               </Label>
               <Input
                 type="date"
-                className="w-full min-w-[140px] bg-background border border-input"
+                className="w-full min-w-0 bg-background border border-input min-h-[44px]"
                 value={hoursStartDate}
                 onChange={(e) => setHoursStartDate(e.target.value)}
               />
             </div>
-            <span className="text-muted-foreground pb-2 hidden sm:inline">
-              –
-            </span>
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-1 min-w-0">
               <Label className="text-xs text-muted-foreground">End Date</Label>
               <Input
                 type="date"
-                className="w-full min-w-[140px] bg-background border border-input"
+                className="w-full min-w-0 bg-background border border-input min-h-[44px]"
                 value={hoursEndDate}
                 onChange={(e) => setHoursEndDate(e.target.value)}
               />
@@ -7783,7 +7853,7 @@ const AdminDashboard = () => {
             variant="outline"
             onClick={loadShiftHistory}
             disabled={shiftHistoryLoading}
-            className="min-h-[44px] sm:min-h-0"
+            className="min-h-[44px] w-full sm:w-auto"
             title="Search"
           >
             {shiftHistoryLoading ? (
@@ -9818,8 +9888,6 @@ const AdminDashboard = () => {
         return <MenuSection />;
       case "employees":
         return <EmployeesSection />;
-      case "orders":
-        return <OrdersSection />;
       case "all-orders":
         return <OrdersSection />;
       case "customer-leaderboard":
@@ -10381,7 +10449,7 @@ const AdminDashboard = () => {
               />
             </div>
             <div className="grid gap-2">
-              <Label>Location</Label>
+              <Label>Location *</Label>
               <Input
                 placeholder="Address"
                 value={createBranchForm.location}
@@ -10404,7 +10472,7 @@ const AdminDashboard = () => {
               />
             </div>
             <div className="grid gap-2">
-              <Label>Logo URL</Label>
+              <Label>Logo URL *</Label>
               <Input
                 placeholder="https://..."
                 value={createBranchForm.logoUrl}
@@ -10429,6 +10497,89 @@ const AdminDashboard = () => {
                 }
               />
             </div>
+            <div className="grid gap-2">
+              <Label>Directors Email (optional)</Label>
+              <p className="text-xs text-muted-foreground">
+                Add multiple emails (comma/space separated). Directors will receive daily/monthly reports after verification.
+              </p>
+              {createBranchForm.directorsEmail?.trim() ? (
+                <div className="flex flex-wrap gap-2">
+                  {Array.from(
+                    new Set(
+                      createBranchForm.directorsEmail
+                        .split(/[,\s]+/g)
+                        .map((e) => e.trim())
+                        .filter(Boolean),
+                    ),
+                  ).map((email) => (
+                    <span
+                      key={email}
+                      className="inline-flex items-center gap-2 rounded-full border bg-white px-3 py-1 text-xs"
+                    >
+                      <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="max-w-[220px] truncate">{email}</span>
+                      <button
+                        type="button"
+                        className="text-slate-500 hover:text-red-600"
+                        onClick={() => {
+                          const next = Array.from(
+                            new Set(
+                              createBranchForm.directorsEmail
+                                .split(/[,\s]+/g)
+                                .map((e) => e.trim())
+                                .filter(Boolean),
+                            ),
+                          ).filter((x) => x !== email);
+                          setCreateBranchForm((f) => ({
+                            ...f,
+                            directorsEmail: next.join(", "),
+                          }));
+                        }}
+                        aria-label={`Remove ${email}`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Input
+                  type="email"
+                  placeholder="Type email(s) then tap + Add"
+                  value={createBranchDirectorInput}
+                  onChange={(e) => setCreateBranchDirectorInput(e.target.value)}
+                  className="flex-1 min-w-0"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-10 gap-1 text-emerald-600 border-emerald-200 hover:bg-emerald-50 shrink-0 min-w-[92px]"
+                  disabled={!createBranchDirectorInput.trim()}
+                  onClick={() => {
+                    const raw = createBranchDirectorInput.trim();
+                    if (!raw) return;
+                    const incoming = raw
+                      .split(/[,\s]+/g)
+                      .map((e) => e.trim())
+                      .filter(Boolean);
+                    const existing = (createBranchForm.directorsEmail || "")
+                      .split(/[,\s]+/g)
+                      .map((e) => e.trim())
+                      .filter(Boolean);
+                    const merged = Array.from(new Set([...existing, ...incoming]));
+                    setCreateBranchForm((f) => ({
+                      ...f,
+                      directorsEmail: merged.join(", "),
+                    }));
+                    setCreateBranchDirectorInput("");
+                  }}
+                >
+                  + Add
+                </Button>
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button
@@ -10440,7 +10591,12 @@ const AdminDashboard = () => {
             </Button>
             <Button
               onClick={handleCreateBranch}
-              disabled={savingBranch || !createBranchForm.name.trim()}
+              disabled={
+                savingBranch ||
+                !createBranchForm.name.trim() ||
+                !createBranchForm.location.trim() ||
+                !createBranchForm.logoUrl.trim()
+              }
             >
               {savingBranch ? "Creating..." : "Create"}
             </Button>

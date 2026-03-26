@@ -4,7 +4,6 @@ import {
   MapPin,
   Phone,
   QrCode,
-  Search,
   Utensils,
   X,
   Minus,
@@ -464,28 +463,6 @@ const MenuCategoriesSection = memo(function MenuCategoriesSection({
 
   return (
     <>
-      <div className="text-center">
-        <h2 className="text-2xl font-bold text-olive-900 sm:text-3xl">
-          Menu Categories
-        </h2>
-        <p className="mt-2 text-sm text-olive-900/70 sm:text-base">
-          Tap a category to open it.
-        </p>
-      </div>
-
-      <div className="mx-auto w-full max-w-lg">
-        <div className="flex items-center gap-2 rounded-2xl bg-white/90 px-4 min-h-[44px] shadow-sm ring-1 ring-black/5 touch-manipulation">
-          <Search className="h-4 w-4 shrink-0 text-olive-900/60" />
-          <input
-            value={categoryQuery}
-            onChange={(e) => setCategoryQuery(e.target.value)}
-            placeholder="Search categories (e.g., coffee, momos)..."
-            className="w-full min-h-[40px] bg-transparent text-base text-olive-950 placeholder:text-olive-900/45 focus:outline-none"
-            aria-label="Search menu categories"
-          />
-        </div>
-      </div>
-
       <div className="grid gap-3 sm:gap-4 lg:gap-6 grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 w-full max-w-full min-w-0">
         {isLoadingMenu && menuCategories.length === 0 && (
           <>
@@ -1649,18 +1626,6 @@ const Index = () => {
           {/* Categories - memoized so cart/dialog updates do not re-render menu (stops blink). QA: Fixed pb reserves space for fixed cart bar so content never overlaps on iPhone when Safari UI changes. */}
           <main className="mx-auto max-w-6xl w-full min-w-0 px-4 py-8 pb-[7.5rem] sm:py-10 sm:pb-10 overflow-x-hidden">
             <div className="space-y-6">
-              {branchContactResolved &&
-                branchId != null &&
-                branchContact?.orderingOpen === false && (
-                  <div
-                    role="status"
-                    className="rounded-lg border border-slate-200 bg-white/90 text-slate-800 px-4 py-3 text-sm shadow-sm"
-                  >
-                    <p className="font-medium">
-                      Browse the menu anytime. Online ordering opens when staff are on shift — or call us to order.
-                    </p>
-                  </div>
-                )}
               <MenuCategoriesSection
                 menuCategories={menuCategories}
                 categoryQuery={categoryQuery}
@@ -1677,8 +1642,8 @@ const Index = () => {
             </div>
           </main>
 
-          {/* Floating Cart Summary - above browser chrome on mobile. QA: Bar height ~80px + safe area; main has pb-[7.5rem] so content doesn't sit under this bar. */}
-          <div className="fixed bottom-0 inset-x-0 px-4 z-40 pb-[max(1rem,calc(env(safe-area-inset-bottom)+80px))] sm:pb-[max(1rem,env(safe-area-inset-bottom))]">
+          {/* Floating Cart Summary - anchored above safe-area on mobile. */}
+          <div className="fixed bottom-0 inset-x-0 px-4 z-40 pb-[max(1rem,env(safe-area-inset-bottom))]">
             <div className="mx-auto max-w-md">
               <AnimatePresence>
                 {cart.length > 0 && (

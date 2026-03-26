@@ -45,6 +45,25 @@ function buildAllowedOriginsFromEnv(): string[] | undefined {
 
 const allowedOrigins = buildAllowedOriginsFromEnv();
 
+function isLocalDevOrigin(origin: string): boolean {
+  // Allow common local dev origins regardless of env allowlist.
+  // This prevents "CORS: origin not allowed" when production env vars are present locally.
+  try {
+    const u = new URL(origin);
+    const host = u.hostname;
+    const isLocalHost =
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "0.0.0.0" ||
+      host === "::1";
+    return isLocalHost;
+  } catch {
+    return false;
+  }
+}
+
+const isProd = String(process.env.NODE_ENV || "").toLowerCase() === "production";
+
 const app = express();
 const server = http.createServer(app);
 
@@ -116,6 +135,8 @@ app.use(
     origin: (origin, cb) => {
       // Non-browser requests (no Origin) should pass.
       if (!origin) return cb(null, true);
+      // In development, always allow localhost origins (even if an env allowlist is set).
+      if (!isProd && isLocalDevOrigin(origin)) return cb(null, true);
       if (!allowedOrigins || allowedOrigins.length === 0) return cb(null, true);
       if (allowedOrigins.includes(origin)) return cb(null, true);
       return cb(new Error("CORS: origin not allowed"));

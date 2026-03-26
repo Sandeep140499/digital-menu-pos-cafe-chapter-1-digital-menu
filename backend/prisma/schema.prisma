@@ -13,6 +13,7 @@ model Admin {
   email        String   @unique
   passwordHash String
   createdAt    DateTime @default(now())
+  notificationsClearedAt DateTime?
   refreshTokens RefreshToken[]
 }
 

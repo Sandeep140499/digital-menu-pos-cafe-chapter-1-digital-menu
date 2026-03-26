@@ -289,8 +289,13 @@ configRouter.get(
   "/notifications",
   authenticate,
   requireRole("ADMIN"),
-  async (_req, res) => {
+  async (req, res) => {
     try {
+      const admin = await prisma.admin.findUnique({
+        where: { id: req.user!.id },
+        select: { notificationsClearedAt: true },
+      });
+      const clearedAt = admin?.notificationsClearedAt ?? null;
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000); // last 24h
       const [recentOrders, recentPayments, recentErrors, recentQueries] = await Promise.all([
         prisma.order.findMany({
@@ -361,9 +366,19 @@ configRouter.get(
         meta: n.meta ?? undefined,
       }));
 
-      const notifications = [...orderNotifs, ...paymentNotifs, ...systemNotifs, ...queryNotifs, ...adminNotifs].sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      ).slice(0, 50);
+      const notifications = [
+        ...orderNotifs,
+        ...paymentNotifs,
+        ...systemNotifs,
+        ...queryNotifs,
+        ...adminNotifs,
+      ]
+        .filter((n) => (clearedAt ? new Date(n.createdAt) > clearedAt : true))
+        .sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        )
+        .slice(0, 50);
       return res.json(notifications);
     } catch (err) {
       console.error("Notifications API error:", err);

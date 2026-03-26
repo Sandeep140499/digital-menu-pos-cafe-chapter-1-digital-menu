@@ -45,6 +45,7 @@ function extractMessage(payload: unknown): string | undefined {
 
 async function authFetch(path: string, init: RequestInit = {}) {
   const url = path.startsWith("http") ? path : `${API_BASE_URL}${path}`;
+  const csrf = readCookie("csrf") || "";
   return fetch(url, {
     ...init,
     credentials: "include",
@@ -53,7 +54,9 @@ async function authFetch(path: string, init: RequestInit = {}) {
       "Content-Type": "application/json",
       // Double-submit CSRF for auth cookie endpoints
       ...(path.startsWith("/auth/") || path.startsWith("/api/auth/")
-        ? { "X-CSRF-Token": readCookie("csrf") || "" }
+        ? csrf
+          ? { "X-CSRF-Token": csrf }
+          : {}
         : {}),
     },
   });
@@ -89,6 +92,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async (): Promise<string | null> => {
     if (refreshing.current) return refreshing.current;
     refreshing.current = (async () => {
+      // If we don't have a readable CSRF cookie yet, don't even attempt refresh.
+      // (Backend enforces double-submit CSRF and will return 403.)
+      if (!readCookie("csrf")) return null;
       const res = await authFetch("/auth/refresh", { method: "POST" });
       if (!res.ok) {
         // Important: if refresh cookies aren't present (or CSRF fails),
@@ -107,10 +113,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (args: { email: string; password: string; loginAs?: "admin" | "employee" }) => {
-      const res = await authFetch("/auth/login", {
-        method: "POST",
-        body: JSON.stringify(args),
-      });
+      const doLogin = async (payload: typeof args) => {
+        return authFetch("/auth/login", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+      };
+
+      let res = await doLogin(args);
+      // Some deployments still require explicitly specifying the role.
+      // To keep the UI simple (no role picker), retry once as employee on 401.
+      if (res.status === 401 && !args.loginAs) {
+        res = await doLogin({ ...args, loginAs: "employee" });
+      }
       if (!res.ok) {
         const data: unknown = await res.json().catch(() => ({}));
         const msg =

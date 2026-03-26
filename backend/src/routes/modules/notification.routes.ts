@@ -44,6 +44,15 @@ notificationRouter.post(
   authenticate,
   requireRole("ADMIN"),
   async (_req, res) => {
+    // Persist "clear all" across devices for this admin
+    try {
+      await prisma.admin.update({
+        where: { id: _req.user!.id },
+        data: { notificationsClearedAt: new Date() },
+      });
+    } catch {
+      // ignore
+    }
     await prisma.adminNotification.updateMany({
       data: { isRead: true },
     });

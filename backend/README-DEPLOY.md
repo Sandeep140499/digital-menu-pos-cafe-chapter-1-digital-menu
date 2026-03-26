@@ -7,13 +7,13 @@ Use **this folder** as the project/root directory when deploying.
 1. Set **environment variables** (see `.env.example`):
    - **Required:** `DATABASE_URL`, `JWT_SECRET`
    - **Optional:** `PORT` (default 4000), `JWT_EXPIRES_IN`, `EMAIL_*`, `FRONTEND_*_URL`, `GOOGLE_REVIEW_URL`
-   - **Performance (recommended):** add Prisma pool params to `DATABASE_URL`:
-     - `connection_limit=20`
-     - `pool_timeout=20`
+   - **Performance (recommended for Railway free DB):** keep Prisma pool small per instance:
+     - `connection_limit=5`
+     - `pool_timeout=30`
      
      Example:
      
-     `postgresql://USER:PASS@HOST:PORT/DB?sslmode=require&connection_limit=20&pool_timeout=20`
+     `postgresql://USER:PASS@HOST:PORT/DB?sslmode=require&connection_limit=5&pool_timeout=30`
      
      If your Postgres provider offers a **pooler / PgBouncer URL**, prefer using that URL as `DATABASE_URL`
      (this is the most stable setup when 50+ users hit the server together).

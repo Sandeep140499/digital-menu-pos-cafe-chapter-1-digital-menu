@@ -187,12 +187,17 @@ authRouter.post("/login", async (req, res) => {
       .json({ message: "Invalid input", errors: parsed.error.issues });
   }
   const { email, password, loginAs } = parsed.data;
+  const emailNorm = email.trim().toLowerCase();
 
   const tryEmployeeLogin = async () => {
-    const employee = await prisma.employee.findUnique({ where: { email } });
+    const employee = await prisma.employee.findUnique({ where: { email: emailNorm } });
     if (!employee) return null;
     const ok = await bcrypt.compare(password, employee.passwordHash);
     if (!ok) return null;
+    if (String(employee.status || "").toUpperCase() !== "ACTIVE") {
+      res.status(403).json({ message: "Your account is inactive. Please contact admin." });
+      return "handled";
+    }
     if (!employee.emailVerified) {
       res.status(403).json({ message: "Please verify your email before logging in." });
       return "handled";
@@ -209,7 +214,7 @@ authRouter.post("/login", async (req, res) => {
   }
 
   // Default: try admin first, then employee
-  const admin = await prisma.admin.findUnique({ where: { email } });
+  const admin = await prisma.admin.findUnique({ where: { email: emailNorm } });
   if (admin) {
     const ok = await bcrypt.compare(password, admin.passwordHash);
     if (ok) {
@@ -217,7 +222,7 @@ authRouter.post("/login", async (req, res) => {
     }
   }
 
-  const employee = await prisma.employee.findUnique({ where: { email } });
+  const employee = await prisma.employee.findUnique({ where: { email: emailNorm } });
   if (!employee) {
     return res.status(401).json({ message: "Invalid credentials" });
   }
@@ -231,6 +236,9 @@ authRouter.post("/login", async (req, res) => {
     return res
       .status(403)
       .json({ message: "Please verify your email before logging in." });
+  }
+  if (String(employee.status || "").toUpperCase() !== "ACTIVE") {
+    return res.status(403).json({ message: "Your account is inactive. Please contact admin." });
   }
 
   return await issueSession(req as any, res as any, { id: employee.id, role: "EMPLOYEE" });

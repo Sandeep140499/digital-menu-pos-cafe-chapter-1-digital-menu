@@ -2,25 +2,10 @@
  * Auto-close open shifts at 04:00 AM (Asia/Kolkata) and create overtime records when worked > workingHoursPerDay.
  */
 import { prisma } from "../config/prisma.js";
+import { getBusinessDayRange } from "../utils/businessDay.js";
 
 const TIMEZONE = process.env.TZ || "Asia/Kolkata";
 const DEFAULT_WORKING_HOURS = 8;
-const AUTO_CLOSE_HOUR = 4;
-const AUTO_CLOSE_MINUTE = 0;
-
-function is4AMInTimezone(): boolean {
-  const now = new Date();
-  const formatter = new Intl.DateTimeFormat("en-IN", {
-    timeZone: TIMEZONE,
-    hour: "numeric",
-    minute: "numeric",
-    hour12: false,
-  });
-  const parts = formatter.formatToParts(now);
-  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? 0);
-  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? 0);
-  return hour === AUTO_CLOSE_HOUR && minute === AUTO_CLOSE_MINUTE;
-}
 
 function getShiftDateInTimezone(shiftStart: Date): Date {
   const dateStr = shiftStart.toLocaleDateString("en-CA", { timeZone: TIMEZONE });
@@ -93,18 +78,30 @@ export async function endShiftAndCreateOvertimeIfNeeded(
 }
 
 export async function runAutoCloseAt4AM(): Promise<number> {
+  // Robust behavior: close any open shifts that started before today's business-day boundary (04:00).
+  // This prevents missing the exact 04:00 minute when the server is sleeping/restarting.
+  const now = new Date();
+  const { start: todayBoundary } = getBusinessDayRange({
+    date: now,
+    boundaryHour: 4,
+    timeZone: TIMEZONE,
+  });
+
   const openShifts = await prisma.employeeShift.findMany({
-    where: { shiftEnd: null },
+    where: {
+      shiftEnd: null,
+      shiftStart: { lt: todayBoundary },
+    },
     include: { employee: true },
   });
 
   if (openShifts.length === 0) return 0;
 
-  const now = new Date();
   let closed = 0;
   for (const shift of openShifts) {
     try {
-      await endShiftAndCreateOvertimeIfNeeded(shift.id, now, "Auto Closed");
+      // Close at the boundary time (04:00) to match business rules and keep hours correct.
+      await endShiftAndCreateOvertimeIfNeeded(shift.id, todayBoundary, "Auto Closed");
       closed++;
     } catch (e) {
       console.error("Auto-close shift failed:", shift.id, e);
@@ -116,15 +113,14 @@ export async function runAutoCloseAt4AM(): Promise<number> {
   return closed;
 }
 
-let lastMinute = -1;
-
 export function startAutoCloseCron(): void {
-  setInterval(() => {
-    const now = new Date();
-    const minute = now.getMinutes();
-    if (minute === lastMinute) return;
-    lastMinute = minute;
-    if (!is4AMInTimezone()) return;
+  // Run frequently so we never miss 04:00 due to cold starts. Cheap query with index-friendly filters.
+  const intervalMs = 5 * 60 * 1000;
+  // Run once shortly after boot too.
+  setTimeout(() => {
     runAutoCloseAt4AM().catch((e) => console.error("Auto-close cron error:", e));
-  }, 60 * 1000);
+  }, 15 * 1000);
+  setInterval(() => {
+    runAutoCloseAt4AM().catch((e) => console.error("Auto-close cron error:", e));
+  }, intervalMs);
 }

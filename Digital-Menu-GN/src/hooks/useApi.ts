@@ -18,12 +18,12 @@ export function useApi() {
     async <T = unknown>(path: string, options: ApiOptions = {}): Promise<T> => {
       const { method = "GET", body, headers = {} } = options;
       const url = path.startsWith("http") ? path : `${API_BASE_URL}${path}`;
-      const doFetch = async () => {
+      const doFetch = async (authToken: string | null) => {
         const reqHeaders: Record<string, string> = {
           ...headers,
           "Content-Type": "application/json",
         };
-        if (token) reqHeaders.Authorization = `Bearer ${token}`;
+        if (authToken) reqHeaders.Authorization = `Bearer ${authToken}`;
         return fetch(url, {
           method,
           headers: reqHeaders,
@@ -32,11 +32,12 @@ export function useApi() {
         });
       };
 
-      let res = await doFetch();
+      let currentToken = token;
+      let res = await doFetch(currentToken);
       if (res.status === 401) {
-        // Attempt a single refresh + retry.
-        await refresh();
-        res = await doFetch();
+        // Attempt a single refresh + retry with the freshly issued token.
+        currentToken = await refresh();
+        res = await doFetch(currentToken);
       }
 
       const data = await res.json().catch(() => ({}));

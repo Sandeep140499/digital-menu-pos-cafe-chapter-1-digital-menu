@@ -31,6 +31,24 @@ Use **this folder** as the project/root directory when deploying.
   - **Sticky sessions** at the load balancer (no extra infra), or
   - A shared Socket.IO adapter (requires Redis).
 
+## Handling many requests (recommended)
+
+### Option A: Cluster mode (one machine, multiple CPU cores)
+
+Enable multiple Node workers behind one port (helps prevent one busy request from stalling the whole app).
+
+- Set `ENABLE_CLUSTER=true`
+- Set `WEB_CONCURRENCY` to number of workers (e.g. `WEB_CONCURRENCY=4`)
+
+Notes:
+- Background jobs/crons run **only once** (first worker) to avoid duplicate emails/reports.
+- For realtime: WebSocket connections stay on the same worker after upgrade, but if your platform/load balancer does anything unusual, enable **sticky sessions**.
+
+### Option B: Platform load balancer (multiple instances)
+
+Run multiple instances/containers and let the platform load balance (Railway/Render/etc).
+If you do this and use Socket.IO without Redis, ensure **sticky sessions**.
+
 ## Platform config in this folder
 
 | File | For |

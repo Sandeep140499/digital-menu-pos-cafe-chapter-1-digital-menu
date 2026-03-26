@@ -6,6 +6,7 @@ import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import morgan from "morgan";
 import compression from "compression";
+import rateLimit from "express-rate-limit";
 import { Server as SocketIOServer } from "socket.io";
 import "./utils/asyncErrors.js";
 import { router } from "./routes/index.js";
@@ -66,6 +67,22 @@ const isProd = String(process.env.NODE_ENV || "").toLowerCase() === "production"
 
 const app = express();
 const server = http.createServer(app);
+
+// When behind a reverse proxy / load balancer (Render, Railway, Nginx, etc.)
+// trust proxy is needed for correct client IPs (rate limiting) and secure cookies.
+// Use TRUST_PROXY=1 (or "true") to override; default enabled in production.
+const trustProxyRaw = (process.env.TRUST_PROXY || "").trim().toLowerCase();
+const trustProxy =
+  trustProxyRaw === "1" ||
+  trustProxyRaw === "true" ||
+  (trustProxyRaw === "" && isProd);
+if (trustProxy) app.set("trust proxy", 1);
+
+// Server-level timeouts: mitigate slowloris / stuck connections.
+// Values are intentionally conservative for mobile networks.
+server.requestTimeout = Number(process.env.REQUEST_TIMEOUT_MS || 30_000) || 30_000;
+server.headersTimeout = Number(process.env.HEADERS_TIMEOUT_MS || 35_000) || 35_000;
+server.keepAliveTimeout = Number(process.env.KEEP_ALIVE_TIMEOUT_MS || 65_000) || 65_000;
 
 const io = new SocketIOServer(server, {
   // Realtime scaling notes:
@@ -174,7 +191,10 @@ app.use(
 app.use(cookieParser());
 // Compression significantly reduces payload size for menu + dashboards (mobile networks).
 app.use(compression());
-app.use(express.json());
+
+// Body parsing limits: prevents huge payloads from exhausting memory/CPU.
+const JSON_BODY_LIMIT = (process.env.JSON_BODY_LIMIT || "1mb").trim();
+app.use(express.json({ limit: JSON_BODY_LIMIT }));
 app.use(morgan("dev"));
 
 app.get("/", (_req, res) => res.status(200).send("OK"));
@@ -236,6 +256,17 @@ app.get("/api/docs", (_req, res) => {
 });
 
 // Record API performance (latency + traffic) for dashboard
+// Rate limiting: protect CPU/DB during traffic spikes and basic abuse.
+// If you run multiple instances, prefer putting the rate limit at the load balancer or
+// switch to a shared store (Redis). In-memory is still useful for single instance or per-worker protection.
+const apiLimiter = rateLimit({
+  windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS || 60_000) || 60_000,
+  limit: Number(process.env.RATE_LIMIT_MAX || 300) || 300, // requests per window per IP
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "Too many requests, please try again later." },
+});
+app.use("/api", apiLimiter);
 app.use("/api", performanceMiddleware);
 app.use("/api", router);
 
@@ -302,14 +333,19 @@ async function startServer() {
       } else {
         // mail not configured
       }
-      const { startAutoCloseCron } = await import("./services/shiftAutoClose.js");
-      startAutoCloseCron();
-      const { startPendingPaymentCron } = await import("./cron/pendingPaymentAlert.js");
-      startPendingPaymentCron();
-      const { startDailyDirectorReportCron } = await import("./cron/dailyDirectorReport.js");
-      startDailyDirectorReportCron();
-      const { startMonthlyDirectorReportCron } = await import("./cron/monthlyDirectorReport.js");
-      startMonthlyDirectorReportCron();
+      const shouldRunJobs = String(process.env.RUN_BACKGROUND_JOBS || "true").toLowerCase() === "true";
+      if (shouldRunJobs) {
+        const { startAutoCloseCron } = await import("./services/shiftAutoClose.js");
+        startAutoCloseCron();
+        const { startPendingPaymentCron } = await import("./cron/pendingPaymentAlert.js");
+        startPendingPaymentCron();
+        const { startDailyDirectorReportCron } = await import("./cron/dailyDirectorReport.js");
+        startDailyDirectorReportCron();
+        const { startMonthlyDirectorReportCron } = await import("./cron/monthlyDirectorReport.js");
+        startMonthlyDirectorReportCron();
+      } else {
+        console.log("🧵 Background jobs disabled for this worker (RUN_BACKGROUND_JOBS=false).");
+      }
     });
 
     // Graceful shutdown

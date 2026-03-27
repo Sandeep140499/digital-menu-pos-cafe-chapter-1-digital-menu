@@ -107,6 +107,29 @@ function formatPrepDuration(startIso: string, nowMs: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+/** Matches `getBusinessDayRange` in backend (TZ default Asia/Kolkata, boundary 04:00). */
+function getBusinessDateKey(
+  date: Date,
+  boundaryHour = 4,
+  timeZone = 'Asia/Kolkata'
+): string {
+  const dateStr = date.toLocaleDateString('en-CA', { timeZone });
+  const [y0, m0, d0] = dateStr.split('-').map(Number);
+  const timeParts = new Intl.DateTimeFormat('en-IN', {
+    timeZone,
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+  }).formatToParts(date);
+  let hh = Number(timeParts.find(p => p.type === 'hour')?.value ?? 0);
+  if (hh === 24) hh = 0; // en-IN uses 24 for midnight; must count as before 04:00 boundary
+  const businessDate = new Date(Date.UTC(y0, m0 - 1, d0));
+  if (hh < boundaryHour) {
+    businessDate.setUTCDate(businessDate.getUTCDate() - 1);
+  }
+  return businessDate.toISOString().slice(0, 10);
+}
+
 /** Linear POS flow: only these mean “in kitchen” (no separate Preparing/Served in UI). */
 function isOrderInProgressStatus(status: string): boolean {
   return status === 'ACCEPTED' || status === 'PREPARING' || status === 'SERVED';
@@ -1946,21 +1969,7 @@ const EmployeeDashboard = () => {
         if (data && data.active) setShiftActive(true);
         if (data?.shift) setCurrentShift(data.shift);
         if (!data?.active) {
-          const getBusinessDayStartFor = (now: Date) => {
-            const startHour = 4; // 04:00 AM
-            const start = new Date(
-              now.getFullYear(),
-              now.getMonth(),
-              now.getDate(),
-              startHour,
-              0,
-              0,
-              0
-            );
-            if (now.getTime() < start.getTime()) start.setDate(start.getDate() - 1);
-            return start;
-          };
-          const businessDayKey = getBusinessDayStartFor(new Date()).toISOString().slice(0, 10);
+          const businessDayKey = getBusinessDateKey(new Date());
           const todayKey = 'dm_shift_prompt_dismissed_' + businessDayKey;
           const dismissedToday = window.sessionStorage.getItem(todayKey) === '1';
           if (!dismissedToday) setShowStartShiftPrompt(true);
@@ -2077,32 +2086,12 @@ const EmployeeDashboard = () => {
     }
   };
 
-  const getBusinessDayStartFor = (now: Date) => {
-    const startHour = 4; // 04:00 AM
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), startHour, 0, 0, 0);
-    if (now.getTime() < start.getTime()) start.setDate(start.getDate() - 1);
-    return start;
-  };
-  // Keep shift "one per day" aligned with backend which uses Asia/Kolkata business day key.
-  // (Backend uses `process.env.TZ || "Asia/Kolkata"` and computes key from shiftStart.)
-  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
-  const businessDateKeyIST = (d: string | Date) => {
-    const t = typeof d === 'string' ? new Date(d) : d;
-    const ist = new Date(t.getTime() + IST_OFFSET_MS);
-    const y = ist.getUTCFullYear();
-    const m = ist.getUTCMonth();
-    const day = ist.getUTCDate();
-    const hour = ist.getUTCHours();
-    // Business day boundary: 04:00 IST
-    const boundaryDate = new Date(Date.UTC(y, m, day, 0, 0, 0, 0));
-    if (hour < 4) boundaryDate.setUTCDate(boundaryDate.getUTCDate() - 1);
-    return boundaryDate.toISOString().slice(0, 10);
-  };
-
   const endedShiftToday =
     myShiftHistoryLoaded &&
     myShiftHistory.some(
-      s => !!s.shiftEnd && businessDateKeyIST(s.shiftStart) === businessDateKeyIST(new Date())
+      s =>
+        !!s.shiftEnd &&
+        getBusinessDateKey(new Date(s.shiftStart)) === getBusinessDateKey(new Date())
     );
 
   const startShift = async () => {
@@ -2118,7 +2107,7 @@ const EmployeeDashboard = () => {
     }
     const openShift = myShiftHistory.find(s => !s.shiftEnd);
     if (openShift) {
-      if (businessDateKeyIST(openShift.shiftStart) === businessDateKeyIST(new Date())) {
+      if (getBusinessDateKey(new Date(openShift.shiftStart)) === getBusinessDateKey(new Date())) {
         toast.error('You already started a shift today. End it first or contact admin.');
       } else {
         toast.error('Please end your previous shift first. Contact admin if you need help.');

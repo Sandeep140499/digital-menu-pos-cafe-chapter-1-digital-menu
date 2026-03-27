@@ -14,6 +14,9 @@ import {
   requireCsrfDoubleSubmit,
   setAuthCookies,
 } from '../../utils/authTokens.js';
+import { isEmployeeLoginClosedWindow } from '../../utils/businessDay.js';
+
+const EMPLOYEE_LOGIN_TZ = process.env.TZ || 'Asia/Kolkata';
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -200,6 +203,13 @@ authRouter.post('/login', async (req, res) => {
       res.status(403).json({ message: 'Please verify your email before logging in.' });
       return 'handled';
     }
+    if (isEmployeeLoginClosedWindow(new Date(), EMPLOYEE_LOGIN_TZ)) {
+      res.status(403).json({
+        message:
+          'Staff sign-in is closed from 2:30 AM to 4:00 AM (before the daily reset). You can sign in again from 4:00 AM.',
+      });
+      return 'handled';
+    }
     await issueSession(req as any, res as any, { id: employee.id, role: 'EMPLOYEE' });
     return 'handled' as const;
   };
@@ -235,6 +245,13 @@ authRouter.post('/login', async (req, res) => {
   }
   if (String(employee.status || '').toUpperCase() !== 'ACTIVE') {
     return res.status(403).json({ message: 'Your account is inactive. Please contact admin.' });
+  }
+
+  if (isEmployeeLoginClosedWindow(new Date(), EMPLOYEE_LOGIN_TZ)) {
+    return res.status(403).json({
+      message:
+        'Staff sign-in is closed from 2:30 AM to 4:00 AM (before the daily reset). You can sign in again from 4:00 AM.',
+    });
   }
 
   return await issueSession(req as any, res as any, { id: employee.id, role: 'EMPLOYEE' });

@@ -32,11 +32,14 @@ function getLocalPartsInTz(
   });
   const parts = formatter.formatToParts(date);
   const get = (type: string) => parts.find(p => p.type === type)?.value ?? '0';
+  const rawHour = parseInt(get('hour'), 10);
+  // en-CA uses 24 for 00:00–00:59 in some timezones; treat as 0 for business-day cutoff.
+  const hour = rawHour === 24 ? 0 : rawHour;
   return {
     year: parseInt(get('year'), 10),
     month: parseInt(get('month'), 10),
     day: parseInt(get('day'), 10),
-    hour: parseInt(get('hour'), 10),
+    hour,
   };
 }
 

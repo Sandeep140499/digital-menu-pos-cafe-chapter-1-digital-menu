@@ -32,6 +32,7 @@ import {
   Download,
   Loader2,
   Package,
+  CalendarDays,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LoaderButton } from "@/components/shared/LoaderButton";
@@ -350,12 +351,24 @@ type Order = {
   branch?: { id: number; name: string; location?: string | null } | null;
 };
 
+type LeaveRequest = {
+  id: number;
+  leaveType: "SICK" | "CASUAL" | "PAID";
+  startDate: string;
+  endDate: string;
+  reason?: string | null;
+  adminRemarks?: string | null;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  createdAt: string;
+};
+
 const sidebarItems = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "live", label: "Live Orders", icon: ShoppingCart },
   { key: "add-order", label: "Add Order", icon: Plus },
   { key: "all-orders", label: "All Orders", icon: ShoppingCart },
   { key: "shift", label: "My Shift", icon: Clock },
+  { key: "leave", label: "Leave", icon: CalendarDays },
   { key: "profile", label: "Profile", icon: User },
 ];
 
@@ -1534,6 +1547,13 @@ const EmployeeDashboard = () => {
     approvedCount: number;
   } | null>(null);
   const [showStartShiftPrompt, setShowStartShiftPrompt] = useState(false);
+  const [myLeaves, setMyLeaves] = useState<LeaveRequest[]>([]);
+  const [leaveLoading, setLeaveLoading] = useState(false);
+  const [leaveSubmitting, setLeaveSubmitting] = useState(false);
+  const [leaveType, setLeaveType] = useState<"SICK" | "CASUAL" | "PAID">("CASUAL");
+  const [leaveStartDate, setLeaveStartDate] = useState("");
+  const [leaveEndDate, setLeaveEndDate] = useState("");
+  const [leaveReason, setLeaveReason] = useState("");
   const prevNewOrderCountRef = useRef(0);
   const [newOrderSoundPreset, setNewOrderSoundPreset] =
     useState<NewOrderSoundPreset>("ring");
@@ -1620,6 +1640,47 @@ const EmployeeDashboard = () => {
   }, []);
 
   const isShiftPaused = currentShift?.status === "PAUSED";
+
+  const toDateInputValue = (d: Date) => {
+    const x = new Date(d);
+    x.setHours(0, 0, 0, 0);
+    return x.toISOString().slice(0, 10);
+  };
+
+  const getLeaveMinDate = (type: "SICK" | "CASUAL" | "PAID") => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const offset = type === "PAID" ? 15 : type === "CASUAL" ? 2 : 0;
+    today.setDate(today.getDate() + offset);
+    return toDateInputValue(today);
+  };
+
+  const hasLeaveOverlap = useMemo(() => {
+    if (!leaveStartDate || !leaveEndDate) return false;
+    const start = new Date(leaveStartDate);
+    const end = new Date(leaveEndDate);
+    if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) return false;
+    return myLeaves.some((l) => {
+      if (l.status === "REJECTED") return false;
+      const s = new Date(l.startDate);
+      const e = new Date(l.endDate);
+      return s <= end && e >= start;
+    });
+  }, [leaveStartDate, leaveEndDate, myLeaves]);
+
+  // Keep selected dates valid when leave type changes (mobile users often change type after dates).
+  useEffect(() => {
+    const minDate = getLeaveMinDate(leaveType);
+    if (leaveStartDate && leaveStartDate < minDate) {
+      setLeaveStartDate(minDate);
+    }
+    if (leaveEndDate) {
+      const effectiveMinEnd = leaveStartDate && leaveStartDate > minDate ? leaveStartDate : minDate;
+      if (leaveEndDate < effectiveMinEnd) {
+        setLeaveEndDate(effectiveMinEnd);
+      }
+    }
+  }, [leaveType]);
 
   // Instant new-order notifications via Socket.IO (in addition to 10s polling fallback)
   useEffect(() => {
@@ -1936,6 +1997,86 @@ const EmployeeDashboard = () => {
       .then((data) => data && setMyApprovedOvertime(data))
       .catch(() => {});
   }, [token]);
+
+  const loadMyLeaves = useCallback(async () => {
+    if (!token) return;
+    setLeaveLoading(true);
+    try {
+      const res = await fetchWithTimeout(`${apiBase}/leaves/mine`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(
+          (data && typeof data === "object" && "message" in data
+            ? String((data as any).message || "")
+            : "") || "Failed to load leaves",
+        );
+      }
+      const rows =
+        data && typeof data === "object" && "leaves" in data
+          ? (data as { leaves?: unknown }).leaves
+          : [];
+      setMyLeaves(Array.isArray(rows) ? (rows as LeaveRequest[]) : []);
+    } catch {
+      setMyLeaves([]);
+    } finally {
+      setLeaveLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (!token || activeSection !== "leave") return;
+    loadMyLeaves();
+  }, [token, activeSection, loadMyLeaves]);
+
+  const applyLeave = async () => {
+    if (!token || !leaveStartDate || !leaveEndDate) {
+      toast.error("Select start and end date first.");
+      return;
+    }
+    if (new Date(leaveEndDate) < new Date(leaveStartDate)) {
+      toast.error("End date must be after start date.");
+      return;
+    }
+    if (hasLeaveOverlap) {
+      toast.error("Selected dates overlap with an existing leave request.");
+      return;
+    }
+    setLeaveSubmitting(true);
+    try {
+      const res = await fetch(`${apiBase}/leaves/apply`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          leaveType,
+          startDate: leaveStartDate,
+          endDate: leaveEndDate,
+          reason: leaveReason.trim() || undefined,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(
+          (data && typeof data === "object" && "message" in data
+            ? String((data as any).message || "")
+            : "") || "Leave request failed",
+        );
+      }
+      toast.success("Leave request submitted for admin approval.");
+      setLeaveReason("");
+      setLeaveStartDate("");
+      setLeaveEndDate("");
+      await loadMyLeaves();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to apply leave");
+    } finally {
+      setLeaveSubmitting(false);
+    }
+  };
 
   const getBusinessDayStartFor = (now: Date) => {
     const startHour = 4; // 04:00 AM
@@ -4128,6 +4269,24 @@ const EmployeeDashboard = () => {
               <ArrowUpRight className="h-4 w-4 text-muted-foreground shrink-0" />
             </CardContent>
           </Card>
+
+          <Card
+            className="bg-gradient-to-br from-indigo-50 to-white border-indigo-100 min-w-0 hover:border-indigo-200 cursor-pointer transition-colors"
+            onClick={() => setActiveSection("leave")}
+          >
+            <CardContent className="p-2 sm:p-3 flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">Leave</p>
+                <p className="text-base sm:text-lg font-bold text-indigo-700">
+                  Apply / Track
+                </p>
+              </div>
+              <div className="p-1.5 bg-indigo-100 rounded-md shrink-0">
+                <CalendarDays className="h-4 w-4 text-indigo-600" />
+              </div>
+              <ArrowUpRight className="h-4 w-4 text-muted-foreground shrink-0" />
+            </CardContent>
+          </Card>
         </div>
 
         {/* Recent Orders - same Card header style as admin */}
@@ -4643,6 +4802,229 @@ const EmployeeDashboard = () => {
     [profile],
   );
 
+  const leaveSectionContent = useMemo(() => {
+    const minDate = getLeaveMinDate(leaveType);
+    const leaveTypeHint =
+      leaveType === "SICK"
+        ? "Same-day and future dates allowed."
+        : leaveType === "CASUAL"
+          ? "Apply at least 2 days in advance."
+          : "Apply at least 15 days in advance.";
+    return (
+      <div className="space-y-5">
+        <div className="min-w-0">
+          <h2 className="text-xl font-bold tracking-tight">Leave Management</h2>
+          <p className="text-xs sm:text-sm text-muted-foreground">
+            Submit leave requests as per policy. All requests need admin approval.
+          </p>
+        </div>
+
+        <Card className="border-slate-200 shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base sm:text-lg">Apply Leave</CardTitle>
+            <CardDescription>
+              Sick: same day/future | Casual: 2 days advance | Paid: 15 days advance
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 sm:gap-4">
+              <div>
+                <Label className="mb-1.5 block">Employee</Label>
+                <Select value="self" disabled>
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={
+                        profile?.name
+                          ? `${profile.name} · ${profile.email || "—"} · ${profile.phone || "No phone"}`
+                          : "Loading employee..."
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="self">
+                      {profile?.name
+                        ? `${profile.name} · ${profile.email || "—"} · ${profile.phone || "No phone"}`
+                        : "Current employee"}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Applying as current logged-in employee
+                </p>
+              </div>
+              <div>
+                <Label className="mb-1.5 block">Leave Type</Label>
+                <Select
+                  value={leaveType}
+                  onValueChange={(v) =>
+                    setLeaveType(
+                      v === "SICK" || v === "CASUAL" || v === "PAID"
+                        ? v
+                        : "CASUAL",
+                    )
+                  }
+                >
+                  <SelectTrigger className="min-h-[44px]">
+                    <SelectValue placeholder="Select leave type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="SICK">Sick Leave</SelectItem>
+                    <SelectItem value="CASUAL">Casual Leave</SelectItem>
+                    <SelectItem value="PAID">Paid Leave</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="mt-1 text-xs text-muted-foreground">{leaveTypeHint}</p>
+              </div>
+              <div>
+                <Label className="mb-1.5 block">Start Date</Label>
+                <Input
+                  type="date"
+                  value={leaveStartDate}
+                  min={minDate}
+                  className="min-h-[44px]"
+                  onChange={(e) => {
+                    setLeaveStartDate(e.target.value);
+                    if (leaveEndDate && e.target.value && leaveEndDate < e.target.value) {
+                      setLeaveEndDate(e.target.value);
+                    }
+                  }}
+                />
+              </div>
+              <div>
+                <Label className="mb-1.5 block">End Date</Label>
+                <Input
+                  type="date"
+                  value={leaveEndDate}
+                  min={leaveStartDate || minDate}
+                  className="min-h-[44px]"
+                  onChange={(e) => setLeaveEndDate(e.target.value)}
+                />
+              </div>
+            </div>
+            <div>
+              <Label className="mb-1.5 block">Reason (optional)</Label>
+              <Textarea
+                value={leaveReason}
+                onChange={(e) => setLeaveReason(e.target.value)}
+                placeholder="Explain briefly (e.g., fever / personal work)"
+                rows={3}
+              />
+            </div>
+            {hasLeaveOverlap ? (
+              <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                Selected dates overlap with an existing leave request.
+              </p>
+            ) : null}
+            <div className="flex justify-end">
+              <LoaderButton
+                loading={leaveSubmitting}
+                loadingLabel="Submitting..."
+                onClick={applyLeave}
+                disabled={!leaveStartDate || !leaveEndDate || hasLeaveOverlap}
+                className="w-full sm:w-auto min-h-[44px]"
+              >
+                Submit Leave Request
+              </LoaderButton>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 bg-slate-50/60 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">📝 Leave Policy Guidelines</CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-slate-700">
+            <div className="rounded-lg border bg-white p-3">
+              <p className="font-semibold">Sick Leave</p>
+              <p className="text-xs text-muted-foreground mt-1">Same day and future dates are allowed.</p>
+            </div>
+            <div className="rounded-lg border bg-white p-3">
+              <p className="font-semibold">Casual Leave</p>
+              <p className="text-xs text-muted-foreground mt-1">Must be applied at least 2 days in advance.</p>
+            </div>
+            <div className="rounded-lg border bg-white p-3">
+              <p className="font-semibold">Paid Leave</p>
+              <p className="text-xs text-muted-foreground mt-1">Must be applied at least 15 days in advance.</p>
+            </div>
+            <div className="rounded-lg border bg-white p-3">
+              <p className="font-semibold">General Rules</p>
+              <p className="text-xs text-muted-foreground mt-1">Admin approval required. Invalid/restricted and overlapping dates are not allowed.</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">My Leave History</CardTitle>
+            <CardDescription>
+              All requests and statuses.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {leaveLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            ) : myLeaves.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No leave requests yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Dates</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Remarks</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {myLeaves.map((l) => (
+                      <TableRow key={l.id}>
+                        <TableCell>
+                          <Badge variant="outline">{l.leaveType}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          {new Date(l.startDate).toLocaleDateString("en-IN")} to{" "}
+                          {new Date(l.endDate).toLocaleDateString("en-IN")}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              l.status === "APPROVED"
+                                ? "default"
+                                : l.status === "REJECTED"
+                                  ? "destructive"
+                                  : "secondary"
+                            }
+                          >
+                            {l.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm text-slate-600">{l.adminRemarks || "—"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }, [
+    profile,
+    leaveType,
+    myLeaves,
+    leaveLoading,
+    leaveSubmitting,
+    leaveStartDate,
+    leaveEndDate,
+    leaveReason,
+    hasLeaveOverlap,
+  ]);
+
   const StartShiftPromptDialog = () => (
     <Dialog
       open={showStartShiftPrompt}
@@ -4929,6 +5311,7 @@ const EmployeeDashboard = () => {
         )}
         {activeSection === "paid" && paidSectionContent}
         {activeSection === "shift" && shiftSectionContent}
+        {activeSection === "leave" && leaveSectionContent}
         {activeSection === "profile" && profileSectionContent}
       </div>
     ),
@@ -4942,6 +5325,7 @@ const EmployeeDashboard = () => {
       allOrders,
       paidSectionContent,
       shiftSectionContent,
+      leaveSectionContent,
       profileSectionContent,
       loading,
       openOrderPopup,

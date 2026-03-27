@@ -44,11 +44,26 @@ function formatINR(n: number): string {
   return "₹" + Math.round(Number(n) || 0).toLocaleString("en-IN");
 }
 
+function formatPct(n: number): string {
+  return `${Math.round((Number(n) || 0) * 10) / 10}%`;
+}
+
 export async function runMonthlyDirectorReport(): Promise<boolean> {
   const now = new Date();
   const { monthKey, monthLabel, from, to, fromLabel, toLabel, daysInMonth } =
     getPreviousCalendarMonthBounds(now);
   const [snapYear, snapMonth] = monthKey.split("-").map(Number);
+  const prevMonthFrom = new Date(from);
+  prevMonthFrom.setMonth(prevMonthFrom.getMonth() - 1);
+  prevMonthFrom.setDate(1);
+  prevMonthFrom.setHours(0, 0, 0, 0);
+  const prevMonthTo = new Date(from);
+  prevMonthTo.setMilliseconds(-1);
+  const prevMonthDays = new Date(
+    prevMonthFrom.getFullYear(),
+    prevMonthFrom.getMonth() + 1,
+    0,
+  ).getDate();
 
   let snapshotSuccess = false;
   const { computeMonthlyMetrics, upsertMonthlyRevenueSnapshot } = await import(
@@ -94,6 +109,88 @@ export async function runMonthlyDirectorReport(): Promise<boolean> {
   const totalLosses = metrics.totalLoss;
   const avgDailySale = daysInMonth > 0 ? totalRevenue / daysInMonth : 0;
   const avgDailyOrders = daysInMonth > 0 ? totalOrders / daysInMonth : 0;
+  const paymentCollectionRate =
+    totalOrders > 0 ? (paidOrders / totalOrders) * 100 : 0;
+  const monthlyTargetRow = await prisma.monthlyTarget.findUnique({
+    where: { yearMonth: monthKey },
+    select: { targetAmount: true },
+  });
+  const monthlyTarget = Number(monthlyTargetRow?.targetAmount ?? 0);
+  const monthlyTargetSet = monthlyTarget > 0;
+  const targetAchievementPct =
+    monthlyTargetSet ? (totalRevenue / monthlyTarget) * 100 : null;
+  const monthlyExpenses = Number(process.env.MONTHLY_EXPENSES_INR || 0);
+  const totalCostProxy = totalLosses + monthlyExpenses;
+  const netProfit = totalRevenue - totalCostProxy;
+  const profitMarginPct = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+
+  let previousMonthRevenue = 0;
+  let previousMonthOrders = 0;
+  try {
+    const prevMetrics = await computeMonthlyMetrics(
+      prevMonthFrom,
+      prevMonthTo,
+      prevMonthDays,
+    );
+    previousMonthRevenue = prevMetrics.totalSales;
+    previousMonthOrders = prevMetrics.totalOrders;
+  } catch (e: unknown) {
+    console.warn(
+      "[MonthlyDirectorReport] Previous-month metrics unavailable:",
+      (e as Error)?.message ?? e,
+    );
+  }
+  const revenueVsPreviousMonthPct =
+    previousMonthRevenue > 0
+      ? ((totalRevenue - previousMonthRevenue) / previousMonthRevenue) * 100
+      : totalRevenue > 0
+        ? 100
+        : 0;
+  const ordersVsPreviousMonthPct =
+    previousMonthOrders > 0
+      ? ((totalOrders - previousMonthOrders) / previousMonthOrders) * 100
+      : totalOrders > 0
+        ? 100
+        : 0;
+
+  const paidOrdersWithItems = await prisma.order.findMany({
+    where: {
+      createdAt: { gte: from, lte: to },
+      paymentStatus: "PAID",
+    },
+    select: {
+      createdAt: true,
+      totalAmount: true,
+      items: { select: { name: true, quantity: true } },
+    },
+  });
+  const byDay = new Map<string, { orders: number; revenue: number; itemQty: Map<string, number> }>();
+  for (const order of paidOrdersWithItems) {
+    const d = new Date(order.createdAt).toISOString().slice(0, 10);
+    const cur = byDay.get(d) ?? { orders: 0, revenue: 0, itemQty: new Map<string, number>() };
+    cur.orders += 1;
+    cur.revenue += Number(order.totalAmount ?? 0);
+    for (const it of order.items) {
+      cur.itemQty.set(it.name, (cur.itemQty.get(it.name) ?? 0) + (it.quantity ?? 0));
+    }
+    byDay.set(d, cur);
+  }
+  let bestDay:
+    | { date: string; orders: number; revenue: number; topItem: string; topItemQty: number }
+    | null = null;
+  for (const [date, v] of byDay.entries()) {
+    const topItemEntry =
+      [...v.itemQty.entries()].sort((a, b) => b[1] - a[1])[0] ?? ["N/A", 0];
+    if (!bestDay || v.revenue > bestDay.revenue) {
+      bestDay = {
+        date,
+        orders: v.orders,
+        revenue: v.revenue,
+        topItem: topItemEntry[0],
+        topItemQty: topItemEntry[1],
+      };
+    }
+  }
 
   const purgeEnabled =
     String(process.env.ORDER_PURGE_AFTER_MONTHLY_REPORT || "")
@@ -166,6 +263,15 @@ export async function runMonthlyDirectorReport(): Promise<boolean> {
     totalLosses,
     avgDailySale,
     avgDailyOrders,
+    paymentCollectionRate,
+    netProfit,
+    profitMarginPct,
+    targetAchievementPct,
+    monthlyTarget,
+    revenueVsPreviousMonthPct,
+    ordersVsPreviousMonthPct,
+    bestDay,
+    monthlyExpenses,
   });
 
   const subject = `Monthly Director Report – ${monthLabel} (${monthKey})`;
@@ -177,8 +283,19 @@ export async function runMonthlyDirectorReport(): Promise<boolean> {
     `Unique customers (month): ${uniqueCustomers}`,
     `New customers (first order in month): ${newCustomersCount}`,
     `Losses: ${formatINR(totalLosses)}`,
+    monthlyExpenses > 0 ? `Manual monthly expenses: ${formatINR(monthlyExpenses)}` : "",
+    `Net profit (proxy): ${formatINR(netProfit)}`,
+    `Profit margin: ${formatPct(profitMarginPct)}`,
     `Avg daily sale: ${formatINR(avgDailySale)}`,
     `Avg daily orders: ${Math.round(avgDailyOrders * 10) / 10}`,
+    `Payment collection rate: ${formatPct(paymentCollectionRate)}`,
+    monthlyTargetSet
+      ? `Target achievement: ${formatPct(targetAchievementPct ?? 0)} of ${formatINR(monthlyTarget)}`
+      : `Target achievement: target not set`,
+    `Vs previous month - Revenue: ${revenueVsPreviousMonthPct >= 0 ? "+" : ""}${formatPct(revenueVsPreviousMonthPct)}, Orders: ${ordersVsPreviousMonthPct >= 0 ? "+" : ""}${formatPct(ordersVsPreviousMonthPct)}`,
+    bestDay
+      ? `Best day: ${bestDay.date} (${bestDay.orders} paid orders, ${formatINR(bestDay.revenue)}) | Reason: top item ${bestDay.topItem} (${bestDay.topItemQty})`
+      : "",
   ].join("\n");
 
   const html = `
@@ -198,11 +315,32 @@ export async function runMonthlyDirectorReport(): Promise<boolean> {
       <tr><td style="padding:6px 12px;border:1px solid #e2e8f0">Unique customers (month)</td><td style="padding:6px 12px;border:1px solid #e2e8f0;text-align:right">${uniqueCustomers}</td></tr>
       <tr><td style="padding:6px 12px;border:1px solid #e2e8f0">New customers (first order)</td><td style="padding:6px 12px;border:1px solid #e2e8f0;text-align:right">${newCustomersCount}</td></tr>
       <tr><td style="padding:6px 12px;border:1px solid #e2e8f0">Losses</td><td style="padding:6px 12px;border:1px solid #e2e8f0;text-align:right">${formatINR(totalLosses)}</td></tr>
+      ${
+        monthlyExpenses > 0
+          ? `<tr><td style="padding:6px 12px;border:1px solid #e2e8f0">Manual monthly expenses</td><td style="padding:6px 12px;border:1px solid #e2e8f0;text-align:right">${formatINR(monthlyExpenses)}</td></tr>`
+          : ""
+      }
+      <tr><td style="padding:6px 12px;border:1px solid #e2e8f0">Net profit (proxy)</td><td style="padding:6px 12px;border:1px solid #e2e8f0;text-align:right">${formatINR(netProfit)}</td></tr>
+      <tr><td style="padding:6px 12px;border:1px solid #e2e8f0">Profit margin</td><td style="padding:6px 12px;border:1px solid #e2e8f0;text-align:right">${formatPct(profitMarginPct)}</td></tr>
       <tr><td style="padding:6px 12px;border:1px solid #e2e8f0">Avg daily sale</td><td style="padding:6px 12px;border:1px solid #e2e8f0;text-align:right">${formatINR(avgDailySale)}</td></tr>
       <tr><td style="padding:6px 12px;border:1px solid #e2e8f0">Avg daily orders</td><td style="padding:6px 12px;border:1px solid #e2e8f0;text-align:right">${Math.round(avgDailyOrders * 10) / 10}</td></tr>
+      <tr><td style="padding:6px 12px;border:1px solid #e2e8f0">Payment collection rate</td><td style="padding:6px 12px;border:1px solid #e2e8f0;text-align:right">${formatPct(paymentCollectionRate)}</td></tr>
+      ${
+        monthlyTargetSet
+          ? `<tr><td style="padding:6px 12px;border:1px solid #e2e8f0">Target achievement</td><td style="padding:6px 12px;border:1px solid #e2e8f0;text-align:right">${formatPct(targetAchievementPct ?? 0)} of ${formatINR(monthlyTarget)}</td></tr>`
+          : `<tr><td style="padding:6px 12px;border:1px solid #e2e8f0">Target achievement</td><td style="padding:6px 12px;border:1px solid #e2e8f0;text-align:right">Target not set</td></tr>`
+      }
+      <tr><td style="padding:6px 12px;border:1px solid #e2e8f0">Revenue vs previous month</td><td style="padding:6px 12px;border:1px solid #e2e8f0;text-align:right">${revenueVsPreviousMonthPct >= 0 ? "▲" : "▼"} ${formatPct(Math.abs(revenueVsPreviousMonthPct))}</td></tr>
+      <tr><td style="padding:6px 12px;border:1px solid #e2e8f0">Orders vs previous month</td><td style="padding:6px 12px;border:1px solid #e2e8f0;text-align:right">${ordersVsPreviousMonthPct >= 0 ? "▲" : "▼"} ${formatPct(Math.abs(ordersVsPreviousMonthPct))}</td></tr>
     </tbody>
   </table>
+  ${
+    bestDay
+      ? `<p style="margin:0 0 16px 0"><strong>Best performing day:</strong> ${bestDay.date} (${bestDay.orders} paid orders, ${formatINR(bestDay.revenue)}). <strong>Reason:</strong> highest paid revenue; top item was ${bestDay.topItem} (${bestDay.topItemQty} sold).</p>`
+      : ""
+  }
   <p style="color:#64748b;font-size:12px">A detailed PDF report is attached.</p>
+  <p style="color:#64748b;font-size:12px">Note: Net profit uses a proxy (paid revenue minus removed-item losses and optional manual monthly expenses). For full accounting profit, an expense ledger is required.</p>
 </body></html>`;
 
   try {

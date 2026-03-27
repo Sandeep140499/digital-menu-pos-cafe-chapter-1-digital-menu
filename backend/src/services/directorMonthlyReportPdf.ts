@@ -14,10 +14,29 @@ export type MonthlyDirectorReportData = {
   totalLosses: number;
   avgDailySale: number;
   avgDailyOrders: number;
+  paymentCollectionRate: number;
+  netProfit: number;
+  profitMarginPct: number;
+  targetAchievementPct: number | null;
+  monthlyTarget: number;
+  revenueVsPreviousMonthPct: number;
+  ordersVsPreviousMonthPct: number;
+  bestDay: {
+    date: string;
+    orders: number;
+    revenue: number;
+    topItem: string;
+    topItemQty: number;
+  } | null;
+  monthlyExpenses: number;
 };
 
 function formatINR(n: number): string {
   return "₹" + Math.round(Number(n) || 0).toLocaleString("en-IN");
+}
+
+function formatPct(n: number): string {
+  return `${Math.round((Number(n) || 0) * 10) / 10}%`;
 }
 
 export function getMonthlyDirectorReportFileName(monthKey: string): string {
@@ -93,13 +112,51 @@ export async function generateMonthlyDirectorReportPdf(
   drawKVRow("Unique customers (orders this month)", String(data.uniqueCustomers));
   drawKVRow("New customers (first order in month)", String(data.newCustomersCount));
   drawKVRow("Losses (removed items)", formatINR(data.totalLosses));
+  if (data.monthlyExpenses > 0) {
+    drawKVRow("Manual monthly expenses", formatINR(data.monthlyExpenses));
+  }
+  drawKVRow("Net profit (proxy)", formatINR(data.netProfit));
+  drawKVRow("Profit margin", formatPct(data.profitMarginPct));
   drawKVRow("Average daily sale", formatINR(data.avgDailySale));
   drawKVRow("Average daily orders", String(Math.round(data.avgDailyOrders * 10) / 10));
+  drawKVRow("Payment collection rate", formatPct(data.paymentCollectionRate));
+  if (data.monthlyTarget > 0) {
+    drawKVRow(
+      "Target achievement",
+      `${formatPct(data.targetAchievementPct ?? 0)} of ${formatINR(data.monthlyTarget)}`,
+    );
+  } else {
+    drawKVRow("Target achievement", "Target not set");
+  }
+  drawKVRow(
+    "Revenue vs previous month",
+    `${data.revenueVsPreviousMonthPct >= 0 ? "▲" : "▼"} ${formatPct(Math.abs(data.revenueVsPreviousMonthPct))}`,
+  );
+  drawKVRow(
+    "Orders vs previous month",
+    `${data.ordersVsPreviousMonthPct >= 0 ? "▲" : "▼"} ${formatPct(Math.abs(data.ordersVsPreviousMonthPct))}`,
+  );
 
   y -= 18;
+  drawText("Best Performing Day", 13, true);
+  if (data.bestDay) {
+    drawText(
+      `${data.bestDay.date}: ${data.bestDay.orders} paid orders, ${formatINR(data.bestDay.revenue)} revenue`,
+      10,
+    );
+    drawText(
+      `Reason: highest paid revenue; top item ${data.bestDay.topItem} (${data.bestDay.topItemQty} sold).`,
+      10,
+    );
+  } else {
+    drawText("No paid orders data available for best-day analysis.", 10);
+  }
+
+  y -= 12;
   drawText("Notes", 13, true);
   drawText("- Revenue is calculated from orders marked PAID in the month.", 10);
   drawText("- Losses are calculated from removed-items reports.", 10);
+  drawText("- Net profit is a proxy: paid revenue - removed-item loss - optional manual monthly expenses.", 10);
   drawText("- Unique customers: distinct mobiles/sessions with any order in the month.", 10);
   drawText("- New customers: first-ever order (by mobile or session) falls in this month.", 10);
 

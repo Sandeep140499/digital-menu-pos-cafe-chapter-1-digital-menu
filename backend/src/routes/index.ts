@@ -18,6 +18,7 @@ import { performanceRouter } from "./modules/performance.routes.js";
 import { leaveRouter } from "./modules/leave.routes.js";
 import { attendanceRouter } from "./modules/attendance.routes.js";
 import { metricsRouter } from "./modules/metrics.routes.js";
+import { monthlyTargetsRouter } from "./modules/monthlyTargets.routes.js";
 
 export const router = Router();
 
@@ -43,4 +44,5 @@ router.use("/performance", performanceRouter);
 router.use("/metrics", metricsRouter);
 router.use("/leaves", leaveRouter);
 router.use("/attendance", attendanceRouter);
+router.use("/monthly-targets", monthlyTargetsRouter);
 

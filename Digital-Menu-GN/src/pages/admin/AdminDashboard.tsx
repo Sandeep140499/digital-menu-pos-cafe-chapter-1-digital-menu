@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useCallback, memo, useRef } from "react";
 import React from "react";
 import DashboardShell from "@/components/dashboard/DashboardShell";
+import MonthlyTargetSetup from "@/components/MonthlyTargetSetup";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -607,6 +608,7 @@ const adminSidebarSections = [
       { key: "hours", label: "Work Hours", icon: Clock },
       { key: "overtime", label: "Overtime", icon: AlertCircle },
       { key: "late", label: "Late Entries", icon: Clock },
+      { key: "leaves", label: "Leave Requests", icon: FileText },
       { key: "certificates", label: "Certificates", icon: Award },
     ] as SidebarItem[],
   },
@@ -3622,6 +3624,7 @@ const AdminDashboard = () => {
     "hours",
     "overtime",
     "late",
+    "leaves",
     "revenue",
     "salary-slips",
     "certificates",
@@ -3808,6 +3811,14 @@ const AdminDashboard = () => {
   const [lateDateTo, setLateDateTo] = useState<string>("");
   const [lateEmployeeFilter, setLateEmployeeFilter] = useState<string>("all");
   const [lateLoading, setLateLoading] = useState(false);
+  const [leaveRequests, setLeaveRequests] = useState<any[]>([]);
+  const [leaveLoading, setLeaveLoading] = useState(false);
+  const [leaveStatusFilter, setLeaveStatusFilter] = useState<string>("PENDING");
+  const [leaveEmployeeFilter, setLeaveEmployeeFilter] = useState<string>("all");
+  const [leaveDateFrom, setLeaveDateFrom] = useState<string>("");
+  const [leaveDateTo, setLeaveDateTo] = useState<string>("");
+  const [leaveRemarksById, setLeaveRemarksById] = useState<Record<number, string>>({});
+  const [leaveActionLoadingId, setLeaveActionLoadingId] = useState<number | null>(null);
 
   // Settings state
   const [branch, setBranch] = useState<any>(null);
@@ -3968,6 +3979,20 @@ const AdminDashboard = () => {
   const [revenueExpandedYearMonth, setRevenueExpandedYearMonth] = useState<
     string | null
   >(null);
+  const [monthlyTargetInfo, setMonthlyTargetInfo] = useState<{
+    yearMonth: string;
+    monthLabel: string;
+    targetSet: boolean;
+    targetAmount?: number;
+    achievedAmount?: number;
+    achievedPct?: number;
+    expectedPct?: number;
+    daysLeft?: number;
+    status?: "ON_TRACK" | "NEED_TO_PUSH" | "CRITICAL";
+    updatedAt?: string;
+  } | null>(null);
+  const [monthlyTargetInput, setMonthlyTargetInput] = useState("");
+  const [savingMonthlyTarget, setSavingMonthlyTarget] = useState(false);
 
   // Certificates state
   const [certificates, setCertificates] = useState<any[]>([]);
@@ -4151,6 +4176,10 @@ const AdminDashboard = () => {
           key: "monthlyRevenueSnapshots",
           url: `${apiBase}/reports/monthly-revenue-snapshots`,
         },
+        {
+          key: "monthlyTargetCurrent",
+          url: `${apiBase}/monthly-targets/branch/${Number((branch as any)?.id || 0)}`,
+        },
       ] as const;
 
       // Batches avoid HTTP/1.1 parallel connection limits (~6 per host) causing queued
@@ -4198,6 +4227,7 @@ const AdminDashboard = () => {
       const branchesRes = byKey.get("branches");
       const salarySlipsRes = byKey.get("salarySlips");
       const monthlyRevenueRes = byKey.get("monthlyRevenueSnapshots");
+      const monthlyTargetRes = byKey.get("monthlyTargetCurrent");
 
       // Read each response body only once (avoid "body stream already read")
       const menuData = menuRes?.ok ? await menuRes.json() : null;
@@ -4213,6 +4243,9 @@ const AdminDashboard = () => {
         : null;
       const monthlyRevenueData = monthlyRevenueRes?.ok
         ? await monthlyRevenueRes.json()
+        : null;
+      const monthlyTargetData = monthlyTargetRes?.ok
+        ? await monthlyTargetRes.json()
         : null;
       if (trafficRes?.ok) {
         const trafficData = await trafficRes.json();
@@ -4337,6 +4370,38 @@ const AdminDashboard = () => {
         }
         combined.sort((a, b) => b.year - a.year || b.month - a.month);
         setMonthlyRevenueSnapshots(combined);
+      }
+      if (monthlyTargetData && typeof monthlyTargetData === "object") {
+        const y = Number((monthlyTargetData as any).year);
+        const m = Number((monthlyTargetData as any).month);
+        const ym =
+          Number.isFinite(y) && Number.isFinite(m)
+            ? `${y}-${String(m).padStart(2, "0")}`
+            : String((monthlyTargetData as any).yearMonth || "");
+        setMonthlyTargetInfo({
+          yearMonth: ym,
+          monthLabel: String((monthlyTargetData as any).monthLabel || ym),
+          targetSet: Boolean((monthlyTargetData as any).targetSet),
+          targetAmount: Number((monthlyTargetData as any).targetAmount ?? 0),
+          achievedAmount: Number((monthlyTargetData as any).achievedAmount ?? 0),
+          achievedPct: Number((monthlyTargetData as any).achievedPct ?? 0),
+          expectedPct: Number((monthlyTargetData as any).expectedPct ?? 0),
+          daysLeft: Number((monthlyTargetData as any).daysLeft ?? 0),
+          status: (["ON_TRACK", "NEED_TO_PUSH", "CRITICAL"] as const).includes(
+            (monthlyTargetData as any).status,
+          )
+            ? ((monthlyTargetData as any).status as
+                | "ON_TRACK"
+                | "NEED_TO_PUSH"
+                | "CRITICAL")
+            : undefined,
+          updatedAt:
+            typeof (monthlyTargetData as any).updatedAt === "string"
+              ? (monthlyTargetData as any).updatedAt
+              : undefined,
+        });
+      } else {
+        setMonthlyTargetInfo(null);
       }
 
       if (menuData) {
@@ -5039,6 +5104,76 @@ const AdminDashboard = () => {
     }
   }, [token, apiBase, lateDateFrom, lateDateTo, lateEmployeeFilter]);
 
+  const loadLeaves = useCallback(async () => {
+    if (!token) return;
+    setLeaveLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (leaveDateFrom) params.append("startDate", leaveDateFrom);
+      if (leaveDateTo) params.append("endDate", leaveDateTo);
+      if (leaveEmployeeFilter !== "all") params.append("employeeId", leaveEmployeeFilter);
+      if (leaveStatusFilter && leaveStatusFilter !== "all") params.append("status", leaveStatusFilter);
+      const res = await fetch(`${apiBase}/leaves?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const list = Array.isArray(data?.leaves)
+          ? data.leaves
+          : Array.isArray(data)
+            ? data
+            : [];
+        setLeaveRequests(list);
+      }
+    } catch {
+      // ignore (UI handles empty/error states)
+    } finally {
+      setLeaveLoading(false);
+    }
+  }, [token, apiBase, leaveDateFrom, leaveDateTo, leaveEmployeeFilter, leaveStatusFilter]);
+
+  const updateLeaveStatus = useCallback(
+    async (id: number, status: "APPROVED" | "REJECTED") => {
+      if (!token) return;
+      setLeaveActionLoadingId(id);
+      try {
+        const res = await fetch(`${apiBase}/leaves/${id}/status`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            status,
+            remarks: leaveRemarksById[id]?.trim() || undefined,
+          }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          throw new Error(
+            (data && typeof data === "object" && "message" in data
+              ? String((data as any).message || "")
+              : "") || `Failed to ${status.toLowerCase()} leave`,
+          );
+        }
+        toast({
+          title: status === "APPROVED" ? "Leave approved" : "Leave rejected",
+          description: "Employee has been notified by email.",
+        });
+        await loadLeaves();
+      } catch (e) {
+        toast({
+          title: "Action failed",
+          description: e instanceof Error ? e.message : "Could not update leave status",
+          variant: "destructive",
+        });
+      } finally {
+        setLeaveActionLoadingId(null);
+      }
+    },
+    [token, apiBase, leaveRemarksById, loadLeaves, toast],
+  );
+
   // Debounce late filters so Apply feels reliable and avoids spam fetches
   const lateDebounceTimerRef = useRef<number | null>(null);
   useEffect(() => {
@@ -5463,6 +5598,12 @@ const AdminDashboard = () => {
       loadLate();
     }
   }, [token, activeSection, loadLate]);
+
+  useEffect(() => {
+    if (token && activeSection === "leaves") {
+      loadLeaves();
+    }
+  }, [token, activeSection, loadLeaves]);
 
   useEffect(() => {
     if (token && activeSection === "settings") {
@@ -8617,6 +8758,190 @@ const AdminDashboard = () => {
     </div>
   );
 
+  const LeaveRequestsSection = () => (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-xl font-bold">Leave Requests</h2>
+        <p className="text-sm text-muted-foreground">
+          Review employee leave requests and approve/reject with remarks.
+        </p>
+      </div>
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-col sm:flex-row gap-2 flex-wrap">
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">Status</Label>
+              <Select value={leaveStatusFilter} onValueChange={setLeaveStatusFilter}>
+                <SelectTrigger className="w-full sm:w-40">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="PENDING">Pending</SelectItem>
+                  <SelectItem value="APPROVED">Approved</SelectItem>
+                  <SelectItem value="REJECTED">Rejected</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">Employee</Label>
+              <Select value={leaveEmployeeFilter} onValueChange={setLeaveEmployeeFilter}>
+                <SelectTrigger className="w-full sm:w-44">
+                  <SelectValue placeholder="All Employees" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Employees</SelectItem>
+                  {employees.map((emp) => (
+                    <SelectItem key={emp.id} value={String(emp.id)}>
+                      {emp.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">Date From</Label>
+              <Input
+                type="date"
+                value={leaveDateFrom}
+                onChange={(e) => setLeaveDateFrom(e.target.value)}
+                className="w-full sm:w-40"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">Date To</Label>
+              <Input
+                type="date"
+                value={leaveDateTo}
+                onChange={(e) => setLeaveDateTo(e.target.value)}
+                className="w-full sm:w-40"
+              />
+            </div>
+            <div className="flex items-end gap-2">
+              <LoaderButton
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setLeaveStatusFilter("PENDING");
+                  setLeaveEmployeeFilter("all");
+                  setLeaveDateFrom("");
+                  setLeaveDateTo("");
+                }}
+                loading={leaveLoading}
+                loadingLabel="Resetting..."
+              >
+                Reset
+              </LoaderButton>
+              <LoaderButton
+                size="sm"
+                onClick={loadLeaves}
+                loading={leaveLoading}
+                loadingLabel="Loading..."
+              >
+                <Search className="h-4 w-4 mr-1" />
+                Apply
+              </LoaderButton>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {leaveRequests.length === 0 && !leaveLoading ? (
+            <p className="text-center py-8 text-muted-foreground text-sm">
+              No leave requests for selected filters
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-slate-50">
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Dates</TableHead>
+                    <TableHead>Reason</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Remarks</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {leaveRequests.map((l) => (
+                    <TableRow key={l.id}>
+                      <TableCell className="font-medium">
+                        {l.employee?.name ?? "—"}
+                        <div className="text-xs text-muted-foreground">
+                          {l.employee?.employeeCode ?? ""}
+                        </div>
+                      </TableCell>
+                      <TableCell>{l.leaveType}</TableCell>
+                      <TableCell>
+                        {new Date(l.startDate).toLocaleDateString("en-IN")} to{" "}
+                        {new Date(l.endDate).toLocaleDateString("en-IN")}
+                      </TableCell>
+                      <TableCell className="max-w-[220px] truncate" title={l.reason || ""}>
+                        {l.reason || "—"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            l.status === "APPROVED"
+                              ? "default"
+                              : l.status === "REJECTED"
+                                ? "destructive"
+                                : "secondary"
+                          }
+                        >
+                          {l.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="min-w-[220px]">
+                        <Input
+                          placeholder="Optional remarks"
+                          value={leaveRemarksById[l.id] ?? ""}
+                          onChange={(e) =>
+                            setLeaveRemarksById((prev) => ({
+                              ...prev,
+                              [l.id]: e.target.value,
+                            }))
+                          }
+                          disabled={l.status !== "PENDING" || leaveActionLoadingId === l.id}
+                        />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {l.status !== "PENDING" ? (
+                          <span className="text-xs text-muted-foreground">No action</span>
+                        ) : (
+                          <div className="flex items-center justify-end gap-2">
+                            <LoaderButton
+                              size="sm"
+                              variant="outline"
+                              onClick={() => updateLeaveStatus(l.id, "REJECTED")}
+                              loading={leaveActionLoadingId === l.id}
+                              loadingLabel="Saving..."
+                            >
+                              Reject
+                            </LoaderButton>
+                            <LoaderButton
+                              size="sm"
+                              onClick={() => updateLeaveStatus(l.id, "APPROVED")}
+                              loading={leaveActionLoadingId === l.id}
+                              loadingLabel="Saving..."
+                            >
+                              Approve
+                            </LoaderButton>
+                          </div>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+
   // Customer Queries Section
   const CustomerQueriesSection = () => (
     <div className="space-y-6 min-w-0">
@@ -9142,6 +9467,80 @@ const AdminDashboard = () => {
   }, [salarySlips]);
 
   const RevenueSection = () => {
+    const now = new Date();
+    const fallbackYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const activeYm = monthlyTargetInfo?.yearMonth || fallbackYm;
+    const [targetYear, targetMonth] = activeYm.split("-").map(Number);
+    const statusLabel =
+      monthlyTargetInfo?.status === "ON_TRACK"
+        ? "✓ ON TRACK"
+        : monthlyTargetInfo?.status === "NEED_TO_PUSH"
+          ? "⚠️ NEED TO PUSH"
+          : monthlyTargetInfo?.status === "CRITICAL"
+            ? "🔴 CRITICAL"
+            : monthlyTargetInfo?.targetSet
+              ? "—"
+              : "Target not set";
+
+    const saveMonthlyTarget = async () => {
+      if (!token) return;
+      const amount = Number(monthlyTargetInput);
+      if (!Number.isFinite(amount) || amount < 0) {
+        toast({
+          title: "Invalid amount",
+          description: "Please enter a valid non-negative target amount.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setSavingMonthlyTarget(true);
+      try {
+        const res = await fetch(`${apiBase}/monthly-targets/set`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            year: targetYear,
+            month: targetMonth,
+            targetAmount: amount,
+          }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          const msg =
+            data && typeof data === "object" && "message" in data
+              ? String((data as any).message)
+              : "Failed to save monthly target";
+          throw new Error(msg);
+        }
+        setMonthlyTargetInput("");
+        await loadDashboardData();
+        toast({
+          title: "Monthly target saved",
+          description:
+            data &&
+            typeof data === "object" &&
+            "directorNotification" in data &&
+            (data as any).directorNotification === "sent"
+              ? "Directors were notified by email."
+              : "Saved successfully.",
+        });
+      } catch (e) {
+        toast({
+          title: "Could not save target",
+          description:
+            e instanceof Error
+              ? e.message
+              : "Network error. Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setSavingMonthlyTarget(false);
+      }
+    };
+
     return (
       <div className="w-full min-w-0 space-y-6 overflow-hidden">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -9154,6 +9553,15 @@ const AdminDashboard = () => {
             archive), so history stays available after orders are cleared.
           </p>
         </div>
+
+        <MonthlyTargetSetup
+          info={monthlyTargetInfo}
+          inputValue={monthlyTargetInput}
+          onInputChange={setMonthlyTargetInput}
+          onSave={saveMonthlyTarget}
+          saving={savingMonthlyTarget}
+          formatINR={formatINR}
+        />
 
         <Card className="w-full min-w-0 overflow-hidden rounded-xl border border-slate-200 shadow-sm">
           <CardHeader className="px-3 sm:px-6 pb-2">
@@ -9902,6 +10310,8 @@ const AdminDashboard = () => {
         return <OvertimeSection />;
       case "late":
         return <LateSection />;
+      case "leaves":
+        return <LeaveRequestsSection />;
       case "revenue":
         return <RevenueSection />;
       case "salary-slips":
@@ -9950,6 +10360,17 @@ const AdminDashboard = () => {
     revenueExpandedYearMonth,
     branches,
     branchesListUnavailable,
+    leaveRequests,
+    leaveLoading,
+    leaveStatusFilter,
+    leaveEmployeeFilter,
+    leaveDateFrom,
+    leaveDateTo,
+    leaveRemarksById,
+    leaveActionLoadingId,
+    loadLeaves,
+    updateLeaveStatus,
+    employees,
   ]);
 
   if (!ready || !token) {

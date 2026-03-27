@@ -129,13 +129,21 @@ enum LeaveStatus {
   REJECTED
 }
 
+enum LeaveType {
+  SICK
+  CASUAL
+  PAID
+}
+
 model EmployeeLeave {
   id         Int         @id @default(autoincrement())
   employeeId Int
   employee   Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType  LeaveType   @default(CASUAL)
   startDate  DateTime    @db.Date
   endDate    DateTime    @db.Date
   reason     String?
+  adminRemarks String?
   status     LeaveStatus @default(PENDING)
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
@@ -464,4 +472,30 @@ model MonthlyRevenueSnapshot {
   updatedAt             DateTime @updatedAt
 
   @@index([year, month])
+}
+
+model MonthlyTarget {
+  id          Int      @id @default(autoincrement())
+  year        Int
+  month       Int
+  yearMonth   String   @unique
+  targetAmount Float
+  createdBy   Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([year, month])
+}
+
+model DailyRevenueEntry {
+  id            Int      @id @default(autoincrement())
+  businessDate  DateTime @db.Date
+  totalOrders   Int      @default(0)
+  paidOrders    Int      @default(0)
+  totalRevenue  Float    @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([businessDate])
+  @@index([businessDate])
 }

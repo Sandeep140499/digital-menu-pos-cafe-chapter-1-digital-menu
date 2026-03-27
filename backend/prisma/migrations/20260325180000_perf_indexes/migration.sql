@@ -2,8 +2,23 @@
 -- Safe to run multiple times (IF NOT EXISTS).
 
 -- EmployeeShift: fast lookup for "any active employee at branch"
-CREATE INDEX IF NOT EXISTS "EmployeeShift_branchId_shiftEnd_status_shiftStart_idx"
-ON "EmployeeShift" ("branchId", "shiftEnd", "status", "shiftStart");
+-- Guarded because older migration history may not yet have EmployeeShift.status.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'EmployeeShift'
+      AND column_name = 'status'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS "EmployeeShift_branchId_shiftEnd_status_shiftStart_idx"
+    ON "EmployeeShift" ("branchId", "shiftEnd", "status", "shiftStart");
+  ELSE
+    CREATE INDEX IF NOT EXISTS "EmployeeShift_branchId_shiftEnd_shiftStart_idx"
+    ON "EmployeeShift" ("branchId", "shiftEnd", "shiftStart");
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS "EmployeeShift_employeeId_shiftEnd_shiftStart_idx"
 ON "EmployeeShift" ("employeeId", "shiftEnd", "shiftStart");

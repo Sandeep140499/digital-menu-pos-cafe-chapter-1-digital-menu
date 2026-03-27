@@ -37,6 +37,33 @@ const createSalarySlipSchema = z.object({
   deductions: z.array(salaryRowSchema).optional(),
 });
 
+const setMonthlyTargetSchema = z.object({
+  year: z.number().int().min(2000).max(2100),
+  month: z.number().int().min(1).max(12),
+  targetAmount: z.union([z.number(), z.string()]).transform((v) => Number(v) || 0),
+});
+
+function monthLabel(year: number, month: number): string {
+  return new Date(year, month - 1, 1).toLocaleDateString("en-IN", {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function parseDirectorEmails(input: string | null | undefined): string[] {
+  return (input || "")
+    .split(/[,\s]+/)
+    .map((e) => e.trim())
+    .filter((e) => e.length > 0 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+}
+
+async function getAllDirectorEmails(): Promise<string[]> {
+  const branches = await prisma.branch.findMany({
+    select: { directorsEmail: true },
+  });
+  return [...new Set(branches.flatMap((b) => parseDirectorEmails(b.directorsEmail)))];
+}
+
 // Admin: send email (e.g. salary slip HTML) to given addresses
 reportRouter.post(
   "/send-email",
@@ -226,6 +253,144 @@ reportRouter.get(
     });
 
     return res.json({ snapshots, currentMonthLive });
+  },
+);
+
+// Admin: current month target + progress (safe if no target is set)
+reportRouter.get(
+  "/monthly-target/current",
+  authenticate,
+  requireRole("ADMIN"),
+  async (_req, res) => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    const yearMonth = `${year}-${String(month).padStart(2, "0")}`;
+
+    const target = await prisma.monthlyTarget.findUnique({
+      where: { yearMonth },
+    });
+    if (!target) {
+      return res.json({
+        year,
+        month,
+        yearMonth,
+        monthLabel: monthLabel(year, month),
+        targetSet: false,
+      });
+    }
+
+    const monthStart = new Date(year, month - 1, 1, 0, 0, 0, 0);
+    const nowEnd = new Date();
+    const paidAgg = await prisma.order.aggregate({
+      where: {
+        createdAt: { gte: monthStart, lte: nowEnd },
+        paymentStatus: "PAID",
+      },
+      _sum: { totalAmount: true },
+    });
+    const achieved = Number(paidAgg._sum.totalAmount ?? 0);
+    const percent = target.targetAmount > 0 ? (achieved / target.targetAmount) * 100 : 0;
+
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const elapsedDays = Math.max(1, Math.min(daysInMonth, now.getDate()));
+    const expectedPct = (elapsedDays / daysInMonth) * 100;
+    const daysLeft = Math.max(0, daysInMonth - elapsedDays);
+    const status =
+      percent >= expectedPct
+        ? "ON_TRACK"
+        : percent >= expectedPct * 0.8
+          ? "NEED_TO_PUSH"
+          : "CRITICAL";
+
+    return res.json({
+      year,
+      month,
+      yearMonth,
+      monthLabel: monthLabel(year, month),
+      targetSet: true,
+      targetAmount: target.targetAmount,
+      achievedAmount: achieved,
+      achievedPct: percent,
+      expectedPct,
+      daysLeft,
+      status,
+      updatedAt: target.updatedAt,
+    });
+  },
+);
+
+// Admin: set/update monthly target and immediately notify directors
+reportRouter.post(
+  "/monthly-target",
+  authenticate,
+  requireRole("ADMIN"),
+  async (req, res) => {
+    const parsed = setMonthlyTargetSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid input", errors: parsed.error.issues });
+    }
+    const { year, month, targetAmount } = parsed.data;
+    if (!Number.isFinite(targetAmount) || targetAmount < 0) {
+      return res.status(400).json({ message: "targetAmount must be a non-negative number" });
+    }
+
+    const yearMonth = `${year}-${String(month).padStart(2, "0")}`;
+    const row = await prisma.monthlyTarget.upsert({
+      where: { yearMonth },
+      create: {
+        year,
+        month,
+        yearMonth,
+        targetAmount,
+        createdBy: req.user?.id ?? null,
+      },
+      update: {
+        targetAmount,
+      },
+    });
+
+    let directorNotification: "sent" | "skipped" | "failed" = "skipped";
+    if (isMailConfigured()) {
+      const directors = await getAllDirectorEmails();
+      if (directors.length > 0) {
+        const mLabel = monthLabel(year, month);
+        const fromName = process.env.EMAIL_FROM_NAME || "Cafe Chapter 1";
+        const subject = `🎯 Monthly target set – ${mLabel}`;
+        const text =
+          `Monthly target has been set/updated.\n` +
+          `Month: ${mLabel}\n` +
+          `Target: ₹${Math.round(targetAmount).toLocaleString("en-IN")}\n` +
+          `Set by Admin on ${new Date().toLocaleString("en-IN")}`;
+        const html = `
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Monthly Target Set</title></head>
+<body style="font-family:system-ui,sans-serif;max-width:640px;margin:0 auto;padding:24px;color:#334155">
+  <h1 style="color:#047857;margin-bottom:8px">🎯 Monthly Target Updated</h1>
+  <p style="margin:0 0 18px 0;color:#64748b">${mLabel}</p>
+  <table style="width:100%;border-collapse:collapse;margin-bottom:18px">
+    <tbody>
+      <tr><td style="padding:8px 12px;border:1px solid #e2e8f0">Target Amount</td><td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:right">₹${Math.round(targetAmount).toLocaleString("en-IN")}</td></tr>
+      <tr><td style="padding:8px 12px;border:1px solid #e2e8f0">Updated At</td><td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:right">${new Date().toLocaleString("en-IN")}</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:12px;color:#64748b">Automated target notification from ${fromName}.</p>
+</body></html>`;
+        try {
+          await sendEmail({ to: directors, subject, text, html });
+          directorNotification = "sent";
+        } catch (e) {
+          console.error("[MonthlyTarget] Director notification failed:", e);
+          directorNotification = "failed";
+        }
+      }
+    }
+
+    return res.json({
+      message: "Monthly target saved",
+      monthlyTarget: row,
+      directorNotification,
+    });
   },
 );
 

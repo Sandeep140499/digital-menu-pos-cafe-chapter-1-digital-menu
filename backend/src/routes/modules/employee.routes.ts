@@ -1,20 +1,20 @@
-import { Router } from "express";
-import { randomBytes } from "node:crypto";
-import bcrypt from "bcryptjs";
-import { z } from "zod";
-import { prisma } from "../../config/prisma.js";
-import { getFromAddress, isMailConfigured, sendEmail } from "../../config/mailer.js";
-import { authenticate, requireRole } from "../../middleware/auth.js";
-import path from "node:path";
-import fs from "node:fs/promises";
-import { PDFDocument, StandardFonts } from "pdf-lib";
+import { Router } from 'express';
+import { randomBytes } from 'node:crypto';
+import bcrypt from 'bcryptjs';
+import { z } from 'zod';
+import { prisma } from '../../config/prisma.js';
+import { getFromAddress, isMailConfigured, sendEmail } from '../../config/mailer.js';
+import { authenticate, requireRole } from '../../middleware/auth.js';
+import path from 'node:path';
+import fs from 'node:fs/promises';
+import { PDFDocument, StandardFonts } from 'pdf-lib';
 
 function escapeHtml(s: string): string {
   return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 function getVerifyEmployeeEmailContent(params: {
@@ -25,7 +25,8 @@ function getVerifyEmployeeEmailContent(params: {
   loginUrl: string;
   fromName: string;
 }): { html: string; text: string } {
-  const { employeeName, employeeCode, employeeEmail, temporaryPassword, loginUrl, fromName } = params;
+  const { employeeName, employeeCode, employeeEmail, temporaryPassword, loginUrl, fromName } =
+    params;
   const n = escapeHtml(employeeName);
   const code = escapeHtml(employeeCode);
   const email = escapeHtml(employeeEmail);
@@ -34,22 +35,22 @@ function getVerifyEmployeeEmailContent(params: {
 
   const text = [
     `Dear ${employeeName},`,
-    "",
+    '',
     `Welcome to ${fromName}. Your employee account has been verified and is ready to use.`,
-    "",
-    "Your login credentials:",
+    '',
+    'Your login credentials:',
     `  Employee Code: ${employeeCode}`,
     `  Email: ${employeeEmail}`,
     `  Temporary Password: ${temporaryPassword}`,
-    "",
-    "Please sign in using the link below and change your password after your first login.",
-    "",
+    '',
+    'Please sign in using the link below and change your password after your first login.',
+    '',
     `Login: ${loginUrl}`,
-    "",
-    "If you did not request this account, please contact your administrator.",
-    "",
+    '',
+    'If you did not request this account, please contact your administrator.',
+    '',
     `— ${fromName}`,
-  ].join("\n");
+  ].join('\n');
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -125,19 +126,19 @@ function getDirectorPasswordChangeEmailContent(params: {
   const brand = escapeHtml(fromName);
 
   const text = [
-    "Employee password updated by admin",
-    "",
+    'Employee password updated by admin',
+    '',
     `An administrator has set a new password for the following employee.`,
-    "",
+    '',
     `Employee: ${employeeName}`,
     `Email: ${employeeEmail}`,
     `Employee Code: ${employeeCode}`,
     `New Password: ${newPassword}`,
-    "",
-    "Please store this securely. The employee can use these credentials to sign in.",
-    "",
+    '',
+    'Please store this securely. The employee can use these credentials to sign in.',
+    '',
     `— ${fromName}`,
-  ].join("\n");
+  ].join('\n');
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -189,7 +190,7 @@ function getDirectorPasswordChangeEmailContent(params: {
   return { html, text };
 }
 
-const timeStringSchema = z.string().regex(/^\d{1,2}:\d{2}$/, "Use HH:mm 24h format");
+const timeStringSchema = z.string().regex(/^\d{1,2}:\d{2}$/, 'Use HH:mm 24h format');
 
 const createEmployeeSchema = z.object({
   name: z.string().min(1),
@@ -218,15 +219,15 @@ const updateEmployeeSchema = z.object({
   shiftStartTime: timeStringSchema.optional().nullable(),
   shiftEndTime: timeStringSchema.optional().nullable(),
   joiningDate: z.string().optional().nullable(),
-  status: z.enum(["ACTIVE", "INACTIVE", "LEFT"]).optional(),
+  status: z.enum(['ACTIVE', 'INACTIVE', 'LEFT']).optional(),
 });
 
 const updateStatusSchema = z.object({
-  status: z.enum(["ACTIVE", "INACTIVE", "LEFT"]),
+  status: z.enum(['ACTIVE', 'INACTIVE', 'LEFT']),
 });
 
 const adminSetPasswordSchema = z.object({
-  newPassword: z.string().min(6, "Password must be at least 6 characters"),
+  newPassword: z.string().min(6, 'Password must be at least 6 characters'),
 });
 
 const verifyEmailSchema = z.object({
@@ -246,85 +247,92 @@ const updateProfileSchema = z.object({
 
 async function generateNextEmployeeCode() {
   const last = await prisma.employee.findFirst({
-    where: { employeeCode: { startsWith: "CC" } },
-    orderBy: { employeeCode: "desc" },
+    where: { employeeCode: { startsWith: 'CC' } },
+    orderBy: { employeeCode: 'desc' },
   });
 
   if (!last || !last.employeeCode) {
-    return "CC100001";
+    return 'CC100001';
   }
 
-  const numeric = Number(last.employeeCode.replace("CC", "")) || 100000;
+  const numeric = Number(last.employeeCode.replace('CC', '')) || 100000;
   const next = numeric + 1;
-  return `CC${next.toString().padStart(6, "0")}`;
+  return `CC${next.toString().padStart(6, '0')}`;
 }
 
 export const employeeRouter = Router();
 
 // Admin: create employee and send activation email with random password
-employeeRouter.post(
-  "/",
-  authenticate,
-  requireRole("ADMIN"),
-  async (req, res) => {
-    const parsed = createEmployeeSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res
-        .status(400)
-        .json({ message: "Invalid input", errors: parsed.error.issues });
-    }
+employeeRouter.post('/', authenticate, requireRole('ADMIN'), async (req, res) => {
+  const parsed = createEmployeeSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Invalid input', errors: parsed.error.issues });
+  }
 
-    const { name, email, branchId, role, workingHoursPerDay, shiftStartTime, shiftEndTime, joiningDate } = parsed.data;
+  const {
+    name,
+    email,
+    branchId,
+    role,
+    workingHoursPerDay,
+    shiftStartTime,
+    shiftEndTime,
+    joiningDate,
+  } = parsed.data;
 
-    const existing = await prisma.employee.findUnique({ where: { email } });
-    if (existing) {
-      return res.status(409).json({ message: "Employee already exists" });
-    }
+  const existing = await prisma.employee.findUnique({ where: { email } });
+  if (existing) {
+    return res.status(409).json({ message: 'Employee already exists' });
+  }
 
-    const randomPassword = Math.random().toString(36).slice(-8);
-    const passwordHash = await bcrypt.hash(randomPassword, 10);
+  const randomPassword = Math.random().toString(36).slice(-8);
+  const passwordHash = await bcrypt.hash(randomPassword, 10);
 
-    const linkToken = randomBytes(16).toString("hex");
-    const linkExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
+  const linkToken = randomBytes(16).toString('hex');
+  const linkExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
 
-    const employeeCode = await generateNextEmployeeCode();
+  const employeeCode = await generateNextEmployeeCode();
 
-    const employee = await prisma.employee.create({
-      data: {
-        name,
-        email,
-        branchId,
-        role: role ?? undefined,
-        passwordHash,
-        employeeCode,
-        verificationOtp: linkToken,
-        verificationOtpExpiresAt: linkExpires,
-        phone: parsed.data.phone,
-        salary: parsed.data.salary,
-        address: parsed.data.address,
-        pincode: parsed.data.pincode,
-        workingHoursPerDay: workingHoursPerDay ?? undefined,
-        shiftStartTime: shiftStartTime ?? undefined,
-        shiftEndTime: shiftEndTime ?? undefined,
-        joiningDate: joiningDate ? new Date(joiningDate + "T00:00:00.000Z") : undefined,
-      },
-    });
+  const employee = await prisma.employee.create({
+    data: {
+      name,
+      email,
+      branchId,
+      role: role ?? undefined,
+      passwordHash,
+      employeeCode,
+      verificationOtp: linkToken,
+      verificationOtpExpiresAt: linkExpires,
+      phone: parsed.data.phone,
+      salary: parsed.data.salary,
+      address: parsed.data.address,
+      pincode: parsed.data.pincode,
+      workingHoursPerDay: workingHoursPerDay ?? undefined,
+      shiftStartTime: shiftStartTime ?? undefined,
+      shiftEndTime: shiftEndTime ?? undefined,
+      joiningDate: joiningDate ? new Date(joiningDate + 'T00:00:00.000Z') : undefined,
+    },
+  });
 
-    const baseUrl = (process.env.FRONTEND_URL || process.env.FRONTEND_DASHBOARD_URL || process.env.FRONTEND_CUSTOMER_URL || "http://localhost:5173").replace(/\/$/, "");
-    // Public verification endpoints live in the backend under /api. Prefer PUBLIC_API_BASE_URL when set.
-    const apiBaseUrl = (process.env.PUBLIC_API_BASE_URL || baseUrl).replace(/\/$/, "");
-    const confirmUrl = `${apiBaseUrl}/api/employees/confirm-email?token=${encodeURIComponent(linkToken)}`;
-    const fromName =
-      process.env.EMAIL_FROM_NAME || "Cafe Chapter 1 Restro Private Limited";
+  const baseUrl = (
+    process.env.FRONTEND_URL ||
+    process.env.FRONTEND_DASHBOARD_URL ||
+    process.env.FRONTEND_CUSTOMER_URL ||
+    'http://localhost:5173'
+  ).replace(/\/$/, '');
+  // Public verification endpoints live in the backend under /api. Prefer PUBLIC_API_BASE_URL when set.
+  const apiBaseUrl = (process.env.PUBLIC_API_BASE_URL || baseUrl).replace(/\/$/, '');
+  const confirmUrl = `${apiBaseUrl}/api/employees/confirm-email?token=${encodeURIComponent(linkToken)}`;
+  const fromName = process.env.EMAIL_FROM_NAME || 'Cafe Chapter 1 Restro Private Limited';
 
-    if (isMailConfigured()) {
-      try {
-        const n = escapeHtml(name);
-        const pass = escapeHtml(randomPassword);
-        await sendEmail({
-          to: email,
-          subject: "Your employee account is ready – verify your email",
-          text: `Hi ${name},
+  if (isMailConfigured()) {
+    try {
+      const n = escapeHtml(name);
+      const pass = escapeHtml(randomPassword);
+      await sendEmail({
+        to: email,
+        subject: 'Your employee account is ready – verify your email',
+        text: `Hi ${name},
 
 Your employee account has been created.
 
@@ -339,19 +347,20 @@ After verification you can log in with the password above and change it.
 Dashboard: ${baseUrl}/login
 
 This link expires in 24 hours.`,
-          html: `<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:560px;"><p>Hi <strong>${n}</strong>,</p><p>Your employee account has been created.</p><p><strong>Temporary password:</strong> <code style="background:#eee;padding:4px 8px;border-radius:4px;">${pass}</code></p><p>You must <strong>verify your email</strong> before you can log in. Click the button below:</p><p><a href="${escapeHtml(confirmUrl)}" style="display:inline-block;background:#047857;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;">Verify my email</a></p><p style="color:#666;font-size:14px;">Or copy this link: ${escapeHtml(confirmUrl)}</p><p>After verification you can log in with the password above and change it.</p><p><a href="${escapeHtml(baseUrl)}/login">Dashboard login</a></p><p style="color:#999;font-size:12px;">This link expires in 24 hours.</p></body></html>`,
-        });
-      } catch (mailErr) {
-        console.error("Failed to send employee welcome email:", mailErr);
-      }
-    } else {
-      console.warn("Email not configured; welcome email skipped. Set EMAIL_SMTP_* and EMAIL_FROM_ADDRESS in .env");
+        html: `<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:560px;"><p>Hi <strong>${n}</strong>,</p><p>Your employee account has been created.</p><p><strong>Temporary password:</strong> <code style="background:#eee;padding:4px 8px;border-radius:4px;">${pass}</code></p><p>You must <strong>verify your email</strong> before you can log in. Click the button below:</p><p><a href="${escapeHtml(confirmUrl)}" style="display:inline-block;background:#047857;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;">Verify my email</a></p><p style="color:#666;font-size:14px;">Or copy this link: ${escapeHtml(confirmUrl)}</p><p>After verification you can log in with the password above and change it.</p><p><a href="${escapeHtml(baseUrl)}/login">Dashboard login</a></p><p style="color:#999;font-size:12px;">This link expires in 24 hours.</p></body></html>`,
+      });
+    } catch (mailErr) {
+      console.error('Failed to send employee welcome email:', mailErr);
     }
+  } else {
+    console.warn(
+      'Email not configured; welcome email skipped. Set EMAIL_SMTP_* and EMAIL_FROM_ADDRESS in .env'
+    );
+  }
 
-    const { passwordHash: _, verificationOtp: __, verificationOtpExpiresAt: ___, ...safe } = employee;
-    return res.status(201).json(safe);
-  },
-);
+  const { passwordHash: _, verificationOtp: __, verificationOtpExpiresAt: ___, ...safe } = employee;
+  return res.status(201).json(safe);
+});
 
 const certificateSchema = z.object({
   name: z.string().min(1),
@@ -362,87 +371,78 @@ const certificateSchema = z.object({
 });
 
 // Admin: generate and send completion certificate to employee
-employeeRouter.post(
-  "/:id/certificate",
-  authenticate,
-  requireRole("ADMIN"),
-  async (req, res) => {
-    const parsed = certificateSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res
-        .status(400)
-        .json({ message: "Invalid input", errors: parsed.error.issues });
-    }
+employeeRouter.post('/:id/certificate', authenticate, requireRole('ADMIN'), async (req, res) => {
+  const parsed = certificateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Invalid input', errors: parsed.error.issues });
+  }
 
-    const id = Number(req.params.id);
-    const employee = await prisma.employee.findUnique({ where: { id } });
-    if (!employee) {
-      return res.status(404).json({ message: "Employee not found" });
-    }
+  const id = Number(req.params.id);
+  const employee = await prisma.employee.findUnique({ where: { id } });
+  if (!employee) {
+    return res.status(404).json({ message: 'Employee not found' });
+  }
 
-    const { name, position, startDate, endDate, responsibilities } =
-      parsed.data;
+  const { name, position, startDate, endDate, responsibilities } = parsed.data;
 
-    const templatePath = path.resolve(
-      process.cwd(),
-      "assets",
-      "BlueModernCompletionCertificate.pdf",
-    );
+  const templatePath = path.resolve(process.cwd(), 'assets', 'BlueModernCompletionCertificate.pdf');
 
-    let attachmentBuffer: Buffer | null = null;
-    try {
-      const bytes = await fs.readFile(templatePath);
-      const pdfDoc = await PDFDocument.load(bytes);
-      const page = pdfDoc.getPage(0);
-      const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-      const fontSmall = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  let attachmentBuffer: Buffer | null = null;
+  try {
+    const bytes = await fs.readFile(templatePath);
+    const pdfDoc = await PDFDocument.load(bytes);
+    const page = pdfDoc.getPage(0);
+    const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const fontSmall = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-      // These coordinates may need visual tweaking but will render dynamic content
-      page.drawText(name, {
-        x: 220,
-        y: 300,
-        size: 16,
-        font,
-      });
+    // These coordinates may need visual tweaking but will render dynamic content
+    page.drawText(name, {
+      x: 220,
+      y: 300,
+      size: 16,
+      font,
+    });
 
-      page.drawText(position, {
-        x: 220,
-        y: 275,
-        size: 12,
-        font: fontSmall,
-      });
+    page.drawText(position, {
+      x: 220,
+      y: 275,
+      size: 12,
+      font: fontSmall,
+    });
 
-      page.drawText(`From ${startDate} to ${endDate}`, {
-        x: 220,
-        y: 255,
-        size: 11,
-        font: fontSmall,
-      });
+    page.drawText(`From ${startDate} to ${endDate}`, {
+      x: 220,
+      y: 255,
+      size: 11,
+      font: fontSmall,
+    });
 
-      const wrapped = responsibilities.slice(0, 300);
-      page.drawText(wrapped, {
-        x: 80,
-        y: 220,
-        size: 10,
-        font: fontSmall,
-        maxWidth: 430,
-        lineHeight: 12,
-      });
+    const wrapped = responsibilities.slice(0, 300);
+    page.drawText(wrapped, {
+      x: 80,
+      y: 220,
+      size: 10,
+      font: fontSmall,
+      maxWidth: 430,
+      lineHeight: 12,
+    });
 
-      const pdfBytes = await pdfDoc.save();
-      attachmentBuffer = Buffer.from(pdfBytes);
-    } catch {
-      attachmentBuffer = null;
-    }
+    const pdfBytes = await pdfDoc.save();
+    attachmentBuffer = Buffer.from(pdfBytes);
+  } catch {
+    attachmentBuffer = null;
+  }
 
-    if (!isMailConfigured()) {
-      return res.status(503).json({ message: "Email is not configured. Set EMAIL_SMTP_* and EMAIL_FROM_ADDRESS in .env." });
-    }
-    try {
-      await sendEmail({
-        to: employee.email,
-        subject: "Completion Certificate – Cafe Chapter 1",
-        text: `Dear ${name},
+  if (!isMailConfigured()) {
+    return res.status(503).json({
+      message: 'Email is not configured. Set EMAIL_SMTP_* and EMAIL_FROM_ADDRESS in .env.',
+    });
+  }
+  try {
+    await sendEmail({
+      to: employee.email,
+      subject: 'Completion Certificate – Cafe Chapter 1',
+      text: `Dear ${name},
 
 This is to certify that you served as ${position} at Cafe Chapter 1
 from ${startDate} to ${endDate}.
@@ -455,119 +455,116 @@ Please find your completion certificate attached as PDF.
 Best regards,
 Cafe Chapter 1
 `,
-        attachments:
-          attachmentBuffer != null
-            ? [
-                {
-                  filename: "CompletionCertificate.pdf",
-                  content: attachmentBuffer,
-                },
-              ]
-            : [
-                {
-                  filename: "CompletionCertificate.pdf",
-                  path: templatePath,
-                },
-              ],
-      });
-    } catch (e) {
-      console.error("Certificate email failed:", e);
-      return res.status(500).json({ message: "Failed to send email. Check SMTP settings in .env." });
-    }
-    return res.json({ message: "Certificate email sent to employee." });
-  },
-);
+      attachments:
+        attachmentBuffer != null
+          ? [
+              {
+                filename: 'CompletionCertificate.pdf',
+                content: attachmentBuffer,
+              },
+            ]
+          : [
+              {
+                filename: 'CompletionCertificate.pdf',
+                path: templatePath,
+              },
+            ],
+    });
+  } catch (e) {
+    console.error('Certificate email failed:', e);
+    return res.status(500).json({ message: 'Failed to send email. Check SMTP settings in .env.' });
+  }
+  return res.json({ message: 'Certificate email sent to employee.' });
+});
 
 // Admin: list all employees (active list = permanent roster). Filter by status on frontend.
 // Branch included with limited fields so missing columns (e.g. pincode) do not break the API.
-employeeRouter.get(
-  "/",
-  authenticate,
-  requireRole("ADMIN"),
-  async (_req, res) => {
-    const employees = await prisma.employee.findMany({
-      include: {
-        branch: {
-          select: { id: true, name: true, location: true, timezone: true },
-        },
+employeeRouter.get('/', authenticate, requireRole('ADMIN'), async (_req, res) => {
+  const employees = await prisma.employee.findMany({
+    include: {
+      branch: {
+        select: { id: true, name: true, location: true, timezone: true },
       },
-      orderBy: { createdAt: "desc" },
-    });
-    return res.json(employees);
-  },
-);
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+  return res.json(employees);
+});
 
 // Admin: roster-active employees (status ACTIVE). Email verification is separate from roster visibility.
-employeeRouter.get(
-  "/active",
-  authenticate,
-  requireRole("ADMIN"),
-  async (_req, res) => {
-    const employees = await prisma.employee.findMany({
-      where: { status: "ACTIVE" },
-      include: {
-        branch: {
-          select: { id: true, name: true, location: true, timezone: true },
-        },
+employeeRouter.get('/active', authenticate, requireRole('ADMIN'), async (_req, res) => {
+  const employees = await prisma.employee.findMany({
+    where: { status: 'ACTIVE' },
+    include: {
+      branch: {
+        select: { id: true, name: true, location: true, timezone: true },
       },
-      orderBy: { name: "asc" },
-    });
-    return res.json(employees);
-  },
-);
+    },
+    orderBy: { name: 'asc' },
+  });
+  return res.json(employees);
+});
 
 // Admin: update employee (name, phone, salary, address, pincode, status)
-employeeRouter.patch(
-  "/:id",
-  authenticate,
-  requireRole("ADMIN"),
-  async (req, res) => {
-    const parsed = updateEmployeeSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res
-        .status(400)
-        .json({ message: "Invalid input", errors: parsed.error.issues });
-    }
-    const id = Number(req.params.id);
-    const data: Record<string, unknown> = { ...parsed.data };
-    if (parsed.data.joiningDate !== undefined) {
-      data.joiningDate = parsed.data.joiningDate
-        ? new Date(parsed.data.joiningDate + "T00:00:00.000Z")
-        : null;
-    }
-    const employee = await prisma.employee.update({
-      where: { id },
-      data: data as any,
-    });
-    return res.json(employee);
-  },
-);
+employeeRouter.patch('/:id', authenticate, requireRole('ADMIN'), async (req, res) => {
+  const parsed = updateEmployeeSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Invalid input', errors: parsed.error.issues });
+  }
+  const id = Number(req.params.id);
+  const data: Record<string, unknown> = { ...parsed.data };
+  if (parsed.data.joiningDate !== undefined) {
+    data.joiningDate = parsed.data.joiningDate
+      ? new Date(parsed.data.joiningDate + 'T00:00:00.000Z')
+      : null;
+  }
+  const employee = await prisma.employee.update({
+    where: { id },
+    data: data as any,
+  });
+  return res.json(employee);
+});
 
 // Admin: send verification email to employee – they must click the link in that email to verify; only then can they log in.
 // We do NOT set emailVerified here; it is set only when they click the link (GET /verify-email-link).
 employeeRouter.post(
-  "/:id/verify-and-send-invite",
+  '/:id/verify-and-send-invite',
   authenticate,
-  requireRole("ADMIN"),
+  requireRole('ADMIN'),
   async (req, res) => {
     const id = Number(req.params.id);
     const employee = await prisma.employee.findUnique({ where: { id } });
     if (!employee) {
-      return res.status(404).json({ message: "Employee not found" });
+      return res.status(404).json({ message: 'Employee not found' });
     }
     if (employee.emailVerified) {
-      const { passwordHash: _, verificationOtp: __, verificationOtpExpiresAt: ___, ...safe } = employee;
-      return res.status(200).json({ ...safe, _message: "Employee is already verified. They can log in with their existing credentials." });
+      const {
+        passwordHash: _,
+        verificationOtp: __,
+        verificationOtpExpiresAt: ___,
+        ...safe
+      } = employee;
+      return res.status(200).json({
+        ...safe,
+        _message: 'Employee is already verified. They can log in with their existing credentials.',
+      });
     }
-    const token = randomBytes(16).toString("hex");
+    const token = randomBytes(16).toString('hex');
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
-    const baseUrl = (process.env.FRONTEND_URL || process.env.FRONTEND_DASHBOARD_URL || process.env.FRONTEND_CUSTOMER_URL || "http://localhost:5173").replace(/\/$/, "");
+    const baseUrl = (
+      process.env.FRONTEND_URL ||
+      process.env.FRONTEND_DASHBOARD_URL ||
+      process.env.FRONTEND_CUSTOMER_URL ||
+      'http://localhost:5173'
+    ).replace(/\/$/, '');
     // Public verification endpoints live in the backend under /api. Prefer PUBLIC_API_BASE_URL when set.
-    const apiBaseUrl = (process.env.PUBLIC_API_BASE_URL || baseUrl).replace(/\/$/, "");
+    const apiBaseUrl = (process.env.PUBLIC_API_BASE_URL || baseUrl).replace(/\/$/, '');
     const verifyLink = `${apiBaseUrl}/api/employees/verify-email-link?token=${encodeURIComponent(token)}`;
-    const fromName = process.env.EMAIL_FROM_NAME || "Chapter One Cafe";
+    const fromName = process.env.EMAIL_FROM_NAME || 'Chapter One Cafe';
     if (!isMailConfigured()) {
-      return res.status(503).json({ message: "Email is not configured. Set EMAIL_SMTP_* and EMAIL_FROM_ADDRESS in .env." });
+      return res.status(503).json({
+        message: 'Email is not configured. Set EMAIL_SMTP_* and EMAIL_FROM_ADDRESS in .env.',
+      });
     }
     await prisma.employee.update({
       where: { id },
@@ -586,34 +583,43 @@ employeeRouter.post(
       });
     } catch (e: unknown) {
       const err = e as { code?: string; message?: string };
-      console.error("Verify-and-send-invite email failed:", err?.code || err?.message || e);
+      console.error('Verify-and-send-invite email failed:', err?.code || err?.message || e);
       const hint =
-        err?.code === "EAUTH"
-          ? "Check EMAIL_SMTP_USER and EMAIL_SMTP_PASS (use Gmail App Password, not regular password)."
-          : err?.code === "ECONNECTION" || err?.code === "ETIMEDOUT"
-            ? "Check EMAIL_SMTP_HOST, EMAIL_SMTP_PORT, and network/firewall."
-            : "Check server logs and .env (EMAIL_SMTP_*, EMAIL_FROM_ADDRESS).";
+        err?.code === 'EAUTH'
+          ? 'Check EMAIL_SMTP_USER and EMAIL_SMTP_PASS (use Gmail App Password, not regular password).'
+          : err?.code === 'ECONNECTION' || err?.code === 'ETIMEDOUT'
+            ? 'Check EMAIL_SMTP_HOST, EMAIL_SMTP_PORT, and network/firewall.'
+            : 'Check server logs and .env (EMAIL_SMTP_*, EMAIL_FROM_ADDRESS).';
       return res.status(500).json({
-        message: "Failed to send email. " + hint,
-        detail: process.env.NODE_ENV === "development" ? String(err?.message || e) : undefined,
+        message: 'Failed to send email. ' + hint,
+        detail: process.env.NODE_ENV === 'development' ? String(err?.message || e) : undefined,
       });
     }
     const updated = await prisma.employee.findUnique({ where: { id } });
-    const { passwordHash: _, verificationOtp: __, verificationOtpExpiresAt: ___, ...safe } = updated!;
-    return res.json({ ...safe, _message: "Verification email sent. The employee must click the link in that email to verify; only then can they log in." });
-  },
+    const {
+      passwordHash: _,
+      verificationOtp: __,
+      verificationOtpExpiresAt: ___,
+      ...safe
+    } = updated!;
+    return res.json({
+      ...safe,
+      _message:
+        'Verification email sent. The employee must click the link in that email to verify; only then can they log in.',
+    });
+  }
 );
 
 // Admin: resend verification email to employee
 employeeRouter.post(
-  "/:id/resend-verification",
+  '/:id/resend-verification',
   authenticate,
-  requireRole("ADMIN"),
+  requireRole('ADMIN'),
   async (req, res) => {
     const id = Number(req.params.id);
     const employee = await prisma.employee.findUnique({ where: { id } });
     if (!employee) {
-      return res.status(404).json({ message: "Employee not found" });
+      return res.status(404).json({ message: 'Employee not found' });
     }
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const otpExpires = new Date(Date.now() + 1000 * 60 * 60 * 24); // 24 hours
@@ -621,76 +627,71 @@ employeeRouter.post(
       where: { id },
       data: { verificationOtp: otp, verificationOtpExpiresAt: otpExpires },
     });
-    const baseUrl = (process.env.FRONTEND_URL || process.env.FRONTEND_DASHBOARD_URL || process.env.FRONTEND_CUSTOMER_URL || "http://localhost:5173").replace(/\/$/, "");
+    const baseUrl = (
+      process.env.FRONTEND_URL ||
+      process.env.FRONTEND_DASHBOARD_URL ||
+      process.env.FRONTEND_CUSTOMER_URL ||
+      'http://localhost:5173'
+    ).replace(/\/$/, '');
     const verifyUrl = `${baseUrl}/login?verify=1&email=${encodeURIComponent(employee.email)}`;
     if (!isMailConfigured()) {
-      return res.status(503).json({ message: "Email is not configured. Set EMAIL_SMTP_* and EMAIL_FROM_ADDRESS in .env." });
+      return res.status(503).json({
+        message: 'Email is not configured. Set EMAIL_SMTP_* and EMAIL_FROM_ADDRESS in .env.',
+      });
     }
     try {
       await sendEmail({
         to: employee.email,
-        subject: `Verify your email – ${process.env.EMAIL_FROM_NAME || "Cafe Chapter 1 Restro Private Limited"}`,
+        subject: `Verify your email – ${process.env.EMAIL_FROM_NAME || 'Cafe Chapter 1 Restro Private Limited'}`,
         text: `Hi ${employee.name},\n\nYour verification code: ${otp}\n\nYou can also verify by logging in and entering this code.\n\nDashboard: ${baseUrl}\n\nIf you did not request this, please ignore.`,
         html: `<!DOCTYPE html><html><body style="font-family:sans-serif;"><p>Hi ${employee.name},</p><p>Your <strong>verification code</strong>: <code style="background:#eee;padding:4px 8px;">${otp}</code></p><p>Verify at: <a href="${verifyUrl}">${verifyUrl}</a></p><p>If you did not request this, please ignore.</p></body></html>`,
       });
     } catch (e) {
-      console.error("Resend verification email failed:", e);
-      return res.status(500).json({ message: "Failed to send email. Check SMTP settings (e.g. Gmail app password in .env)." });
+      console.error('Resend verification email failed:', e);
+      return res.status(500).json({
+        message: 'Failed to send email. Check SMTP settings (e.g. Gmail app password in .env).',
+      });
     }
-    return res.json({ message: "Verification email sent" });
-  },
+    return res.json({ message: 'Verification email sent' });
+  }
 );
 
 // Employee: get own profile (read-only)
-employeeRouter.get(
-  "/me",
-  authenticate,
-  requireRole("EMPLOYEE"),
-  async (req, res) => {
-    const employee = await prisma.employee.findUnique({
-      where: { id: req.user!.id },
-      include: { branch: true },
-    });
-    if (!employee) return res.status(404).json({ message: "Not found" });
-    const { passwordHash, verificationOtp, verificationOtpExpiresAt, ...rest } = employee;
-    return res.json(rest);
-  },
-);
+employeeRouter.get('/me', authenticate, requireRole('EMPLOYEE'), async (req, res) => {
+  const employee = await prisma.employee.findUnique({
+    where: { id: req.user!.id },
+    include: { branch: true },
+  });
+  if (!employee) return res.status(404).json({ message: 'Not found' });
+  const { passwordHash, verificationOtp, verificationOtpExpiresAt, ...rest } = employee;
+  return res.json(rest);
+});
 
 // Admin: update employee status
-employeeRouter.patch(
-  "/:id/status",
-  authenticate,
-  requireRole("ADMIN"),
-  async (req, res) => {
-    const parsed = updateStatusSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res
-        .status(400)
-        .json({ message: "Invalid input", errors: parsed.error.issues });
-    }
+employeeRouter.patch('/:id/status', authenticate, requireRole('ADMIN'), async (req, res) => {
+  const parsed = updateStatusSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Invalid input', errors: parsed.error.issues });
+  }
 
-    const id = Number(req.params.id);
-    const employee = await prisma.employee.update({
-      where: { id },
-      data: { status: parsed.data.status },
-    });
+  const id = Number(req.params.id);
+  const employee = await prisma.employee.update({
+    where: { id },
+    data: { status: parsed.data.status },
+  });
 
-    return res.json(employee);
-  },
-);
+  return res.json(employee);
+});
 
 // Admin: set employee password and email director(s) with new password
 employeeRouter.post(
-  "/:id/admin-set-password",
+  '/:id/admin-set-password',
   authenticate,
-  requireRole("ADMIN"),
+  requireRole('ADMIN'),
   async (req, res) => {
     const parsed = adminSetPasswordSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res
-        .status(400)
-        .json({ message: "Invalid input", errors: parsed.error.issues });
+      return res.status(400).json({ message: 'Invalid input', errors: parsed.error.issues });
     }
 
     const id = Number(req.params.id);
@@ -700,7 +701,7 @@ employeeRouter.post(
     });
 
     if (!employee) {
-      return res.status(404).json({ message: "Employee not found" });
+      return res.status(404).json({ message: 'Employee not found' });
     }
 
     const newPassword = parsed.data.newPassword;
@@ -710,29 +711,32 @@ employeeRouter.post(
       data: { passwordHash },
     });
 
-    const fromName = process.env.EMAIL_FROM_NAME || "Chapter One Cafe";
+    const fromName = process.env.EMAIL_FROM_NAME || 'Chapter One Cafe';
     if (isMailConfigured() && employee.branch?.directorsEmail) {
       const directorEmails = employee.branch.directorsEmail
         .split(/[,\s]+/)
-        .map((e) => e.trim())
-        .filter((e) => e.length > 0 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+        .map(e => e.trim())
+        .filter(e => e.length > 0 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
       if (directorEmails.length > 0) {
         const { html, text } = getDirectorPasswordChangeEmailContent({
           employeeName: employee.name,
           employeeEmail: employee.email,
-          employeeCode: employee.employeeCode || "",
+          employeeCode: employee.employeeCode || '',
           newPassword,
           fromName,
         });
         try {
-            await sendEmail({
+          await sendEmail({
             to: directorEmails,
             subject: `Employee password updated – ${employee.name}`,
             text,
             html,
           });
         } catch (e: unknown) {
-          console.error("Admin set password: failed to email director(s):", (e as Error)?.message ?? e);
+          console.error(
+            'Admin set password: failed to email director(s):',
+            (e as Error)?.message ?? e
+          );
           // Still return success; password was updated
         }
       }
@@ -740,19 +744,29 @@ employeeRouter.post(
 
     const updated = await prisma.employee.findUnique({
       where: { id },
-      select: { id: true, name: true, email: true, employeeCode: true, status: true, emailVerified: true, role: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        employeeCode: true,
+        status: true,
+        emailVerified: true,
+        role: true,
+      },
     });
     return res.json(updated);
-  },
+  }
 );
 
 // Public: employee clicks "Verify my email" in the account-creation email – we only set emailVerified (keep the password we sent).
-employeeRouter.get("/confirm-email", async (req, res) => {
-  const token = typeof req.query.token === "string" ? req.query.token.trim() : "";
+employeeRouter.get('/confirm-email', async (req, res) => {
+  const token = typeof req.query.token === 'string' ? req.query.token.trim() : '';
   if (!token) {
-    return res.status(400).send(
-      "<!DOCTYPE html><html><body style='font-family:sans-serif;padding:2rem;'><h1>Invalid link</h1><p>Missing token. Use the &quot;Verify my email&quot; button from your welcome email.</p></body></html>",
-    );
+    return res
+      .status(400)
+      .send(
+        "<!DOCTYPE html><html><body style='font-family:sans-serif;padding:2rem;'><h1>Invalid link</h1><p>Missing token. Use the &quot;Verify my email&quot; button from your welcome email.</p></body></html>"
+      );
   }
   const employee = await prisma.employee.findFirst({
     where: {
@@ -761,9 +775,11 @@ employeeRouter.get("/confirm-email", async (req, res) => {
     },
   });
   if (!employee) {
-    return res.status(400).send(
-      "<!DOCTYPE html><html><body style='font-family:sans-serif;padding:2rem;'><h1>Link expired or invalid</h1><p>Verification links expire after 24 hours. Ask your admin to add you again or send a new verification email.</p></body></html>",
-    );
+    return res
+      .status(400)
+      .send(
+        "<!DOCTYPE html><html><body style='font-family:sans-serif;padding:2rem;'><h1>Link expired or invalid</h1><p>Verification links expire after 24 hours. Ask your admin to add you again or send a new verification email.</p></body></html>"
+      );
   }
   await prisma.employee.update({
     where: { id: employee.id },
@@ -773,22 +789,29 @@ employeeRouter.get("/confirm-email", async (req, res) => {
       verificationOtpExpiresAt: null,
     },
   });
-  const baseUrl = (process.env.FRONTEND_URL || process.env.FRONTEND_DASHBOARD_URL || process.env.FRONTEND_CUSTOMER_URL || "http://localhost:5173").replace(/\/$/, "");
+  const baseUrl = (
+    process.env.FRONTEND_URL ||
+    process.env.FRONTEND_DASHBOARD_URL ||
+    process.env.FRONTEND_CUSTOMER_URL ||
+    'http://localhost:5173'
+  ).replace(/\/$/, '');
   const loginUrl = `${baseUrl}/login`;
   const name = escapeHtml(employee.name);
   const loginLink = escapeHtml(loginUrl);
   return res.send(
-    `<!DOCTYPE html><html><body style='font-family:sans-serif;padding:2rem;max-width:560px;margin:0 auto;'><h1>Email verified</h1><p>Hello <strong>${name}</strong>, your email is now verified. You can log in with the <strong>temporary password from your welcome email</strong>. Change it after first login.</p><p><a href="${loginLink}" style="display:inline-block;background:#047857;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;">Log in to dashboard</a></p><p style="color:#666;font-size:14px;">Or copy: <a href="${loginLink}">${loginLink}</a></p></body></html>`,
+    `<!DOCTYPE html><html><body style='font-family:sans-serif;padding:2rem;max-width:560px;margin:0 auto;'><h1>Email verified</h1><p>Hello <strong>${name}</strong>, your email is now verified. You can log in with the <strong>temporary password from your welcome email</strong>. Change it after first login.</p><p><a href="${loginLink}" style="display:inline-block;background:#047857;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;">Log in to dashboard</a></p><p style="color:#666;font-size:14px;">Or copy: <a href="${loginLink}">${loginLink}</a></p></body></html>`
   );
 });
 
 // Public: employee clicks "Verify my email" link (from admin "Verify" button) – set emailVerified and show new password.
-employeeRouter.get("/verify-email-link", async (req, res) => {
-  const token = typeof req.query.token === "string" ? req.query.token.trim() : "";
+employeeRouter.get('/verify-email-link', async (req, res) => {
+  const token = typeof req.query.token === 'string' ? req.query.token.trim() : '';
   if (!token) {
-    return res.status(400).send(
-      "<!DOCTYPE html><html><body style='font-family:sans-serif;padding:2rem;'><h1>Invalid link</h1><p>Missing token. Use the link from your verification email.</p></body></html>",
-    );
+    return res
+      .status(400)
+      .send(
+        "<!DOCTYPE html><html><body style='font-family:sans-serif;padding:2rem;'><h1>Invalid link</h1><p>Missing token. Use the link from your verification email.</p></body></html>"
+      );
   }
   const employee = await prisma.employee.findFirst({
     where: {
@@ -797,11 +820,14 @@ employeeRouter.get("/verify-email-link", async (req, res) => {
     },
   });
   if (!employee) {
-    return res.status(400).send(
-      "<!DOCTYPE html><html><body style='font-family:sans-serif;padding:2rem;'><h1>Link expired or invalid</h1><p>Verification links expire after 24 hours. Ask your admin to send a new verification email.</p></body></html>",
-    );
+    return res
+      .status(400)
+      .send(
+        "<!DOCTYPE html><html><body style='font-family:sans-serif;padding:2rem;'><h1>Link expired or invalid</h1><p>Verification links expire after 24 hours. Ask your admin to send a new verification email.</p></body></html>"
+      );
   }
-  const randomPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-4);
+  const randomPassword =
+    Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-4);
   const passwordHash = await bcrypt.hash(randomPassword, 10);
   await prisma.employee.update({
     where: { id: employee.id },
@@ -812,16 +838,21 @@ employeeRouter.get("/verify-email-link", async (req, res) => {
       verificationOtpExpiresAt: null,
     },
   });
-  const baseUrl = (process.env.FRONTEND_URL || process.env.FRONTEND_DASHBOARD_URL || process.env.FRONTEND_CUSTOMER_URL || "http://localhost:5173").replace(/\/$/, "");
+  const baseUrl = (
+    process.env.FRONTEND_URL ||
+    process.env.FRONTEND_DASHBOARD_URL ||
+    process.env.FRONTEND_CUSTOMER_URL ||
+    'http://localhost:5173'
+  ).replace(/\/$/, '');
   const loginUrl = `${baseUrl}/login`;
-  const fromName = process.env.EMAIL_FROM_NAME || "Chapter One Cafe";
+  const fromName = process.env.EMAIL_FROM_NAME || 'Chapter One Cafe';
 
   // Send follow-up email with employee number, email, password and login URL
   if (isMailConfigured()) {
     try {
       const { html: credHtml, text: credText } = getVerifyEmployeeEmailContent({
         employeeName: employee.name,
-        employeeCode: employee.employeeCode || "",
+        employeeCode: employee.employeeCode || '',
         employeeEmail: employee.email,
         temporaryPassword: randomPassword,
         loginUrl,
@@ -834,7 +865,10 @@ employeeRouter.get("/verify-email-link", async (req, res) => {
         html: credHtml,
       });
     } catch (e: unknown) {
-      console.error("Verify-email-link: failed to send credentials email:", (e as Error)?.message ?? e);
+      console.error(
+        'Verify-email-link: failed to send credentials email:',
+        (e as Error)?.message ?? e
+      );
     }
   }
 
@@ -842,17 +876,15 @@ employeeRouter.get("/verify-email-link", async (req, res) => {
   const pass = escapeHtml(randomPassword);
   const loginLink = escapeHtml(loginUrl);
   return res.send(
-    `<!DOCTYPE html><html><body style='font-family:sans-serif;padding:2rem;max-width:560px;margin:0 auto;'><h1>Email verified</h1><p>Hello <strong>${name}</strong>, your email is now verified. We have sent your <strong>employee number, email, password and login link</strong> to your inbox. You can also use the details below to log in (change your password after first login):</p><p style='background:#f0fdf4;padding:12px 16px;border-radius:8px;font-family:monospace;font-size:18px;'>${pass}</p><p><a href="${loginLink}" style="display:inline-block;background:#047857;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;">Log in to dashboard</a></p><p style="color:#666;font-size:14px;">Or copy this link: <a href="${loginLink}">${loginLink}</a></p></body></html>`,
+    `<!DOCTYPE html><html><body style='font-family:sans-serif;padding:2rem;max-width:560px;margin:0 auto;'><h1>Email verified</h1><p>Hello <strong>${name}</strong>, your email is now verified. We have sent your <strong>employee number, email, password and login link</strong> to your inbox. You can also use the details below to log in (change your password after first login):</p><p style='background:#f0fdf4;padding:12px 16px;border-radius:8px;font-family:monospace;font-size:18px;'>${pass}</p><p><a href="${loginLink}" style="display:inline-block;background:#047857;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;">Log in to dashboard</a></p><p style="color:#666;font-size:14px;">Or copy this link: <a href="${loginLink}">${loginLink}</a></p></body></html>`
   );
 });
 
 // Employee: verify email with OTP (6-digit code entry)
-employeeRouter.post("/verify-email", async (req, res) => {
+employeeRouter.post('/verify-email', async (req, res) => {
   const parsed = verifyEmailSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res
-      .status(400)
-      .json({ message: "Invalid input", errors: parsed.error.issues });
+    return res.status(400).json({ message: 'Invalid input', errors: parsed.error.issues });
   }
 
   const { email, otp } = parsed.data;
@@ -865,7 +897,7 @@ employeeRouter.post("/verify-email", async (req, res) => {
     !employee.verificationOtpExpiresAt ||
     employee.verificationOtpExpiresAt < new Date()
   ) {
-    return res.status(400).json({ message: "Invalid or expired OTP" });
+    return res.status(400).json({ message: 'Invalid or expired OTP' });
   }
 
   await prisma.employee.update({
@@ -877,69 +909,51 @@ employeeRouter.post("/verify-email", async (req, res) => {
     },
   });
 
-  return res.json({ message: "Email verified successfully" });
+  return res.json({ message: 'Email verified successfully' });
 });
 
 // Employee: change password
-employeeRouter.post(
-  "/change-password",
-  authenticate,
-  requireRole("EMPLOYEE"),
-  async (req, res) => {
-    const parsed = changePasswordSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res
-        .status(400)
-        .json({ message: "Invalid input", errors: parsed.error.issues });
-    }
+employeeRouter.post('/change-password', authenticate, requireRole('EMPLOYEE'), async (req, res) => {
+  const parsed = changePasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Invalid input', errors: parsed.error.issues });
+  }
 
-    const employeeId = req.user!.id;
-    const employee = await prisma.employee.findUnique({
-      where: { id: employeeId },
-    });
+  const employeeId = req.user!.id;
+  const employee = await prisma.employee.findUnique({
+    where: { id: employeeId },
+  });
 
-    if (!employee) {
-      return res.status(404).json({ message: "Employee not found" });
-    }
+  if (!employee) {
+    return res.status(404).json({ message: 'Employee not found' });
+  }
 
-    const ok = await bcrypt.compare(
-      parsed.data.currentPassword,
-      employee.passwordHash,
-    );
-    if (!ok) {
-      return res.status(401).json({ message: "Current password is incorrect" });
-    }
+  const ok = await bcrypt.compare(parsed.data.currentPassword, employee.passwordHash);
+  if (!ok) {
+    return res.status(401).json({ message: 'Current password is incorrect' });
+  }
 
-    const newHash = await bcrypt.hash(parsed.data.newPassword, 10);
-    await prisma.employee.update({
-      where: { id: employeeId },
-      data: { passwordHash: newHash },
-    });
+  const newHash = await bcrypt.hash(parsed.data.newPassword, 10);
+  await prisma.employee.update({
+    where: { id: employeeId },
+    data: { passwordHash: newHash },
+  });
 
-    return res.json({ message: "Password updated successfully" });
-  },
-);
+  return res.json({ message: 'Password updated successfully' });
+});
 
 // Employee: update profile (name, profile image)
-employeeRouter.patch(
-  "/me",
-  authenticate,
-  requireRole("EMPLOYEE"),
-  async (req, res) => {
-    const parsed = updateProfileSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res
-        .status(400)
-        .json({ message: "Invalid input", errors: parsed.error.issues });
-    }
+employeeRouter.patch('/me', authenticate, requireRole('EMPLOYEE'), async (req, res) => {
+  const parsed = updateProfileSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Invalid input', errors: parsed.error.issues });
+  }
 
-    const employeeId = req.user!.id;
-    const updated = await prisma.employee.update({
-      where: { id: employeeId },
-      data: parsed.data,
-    });
+  const employeeId = req.user!.id;
+  const updated = await prisma.employee.update({
+    where: { id: employeeId },
+    data: parsed.data,
+  });
 
-    return res.json(updated);
-  },
-);
-
+  return res.json(updated);
+});

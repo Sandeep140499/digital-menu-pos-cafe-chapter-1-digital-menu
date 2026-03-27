@@ -1,11 +1,11 @@
-import { Router } from "express";
-import bcrypt from "bcryptjs";
-import jwt, { type SignOptions } from "jsonwebtoken";
-import { z } from "zod";
-import { prisma } from "../../config/prisma.js";
-import { jwtConfig } from "../../config/auth.js";
-import { isMailConfigured, sendEmail } from "../../config/mailer.js";
-import { authenticate, requireRole } from "../../middleware/auth.js";
+import { Router } from 'express';
+import bcrypt from 'bcryptjs';
+import jwt, { type SignOptions } from 'jsonwebtoken';
+import { z } from 'zod';
+import { prisma } from '../../config/prisma.js';
+import { jwtConfig } from '../../config/auth.js';
+import { isMailConfigured, sendEmail } from '../../config/mailer.js';
+import { authenticate, requireRole } from '../../middleware/auth.js';
 import {
   clearAuthCookies,
   generateCsrfToken,
@@ -13,12 +13,12 @@ import {
   hashRefreshToken,
   requireCsrfDoubleSubmit,
   setAuthCookies,
-} from "../../utils/authTokens.js";
+} from '../../utils/authTokens.js';
 
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
-  loginAs: z.enum(["admin", "employee"]).optional(), // when "employee", try employee first (same email can exist as both)
+  loginAs: z.enum(['admin', 'employee']).optional(), // when "employee", try employee first (same email can exist as both)
 });
 
 const forgotPasswordSchema = z.object({
@@ -32,35 +32,35 @@ const resetPasswordSchema = z.object({
 
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(6),
-  newPassword: z.string().min(6, "New password must be at least 6 characters"),
+  newPassword: z.string().min(6, 'New password must be at least 6 characters'),
 });
 
 function escapeHtml(s: string): string {
   return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 function getAdminPasswordChangeNotificationContent(
   newPassword: string,
-  fromName: string,
+  fromName: string
 ): { html: string; text: string } {
   const pass = escapeHtml(newPassword);
   const brand = escapeHtml(fromName);
 
   const text = [
-    "Admin dashboard password updated",
-    "",
-    "The administrator has changed the dashboard login password. Please store these credentials securely.",
-    "",
+    'Admin dashboard password updated',
+    '',
+    'The administrator has changed the dashboard login password. Please store these credentials securely.',
+    '',
     `New password: ${newPassword}`,
-    "",
-    "Use this password to sign in to the admin dashboard.",
-    "",
+    '',
+    'Use this password to sign in to the admin dashboard.',
+    '',
     `— ${fromName}`,
-  ].join("\n");
+  ].join('\n');
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -112,10 +112,14 @@ function getAdminPasswordChangeNotificationContent(
 
 export const authRouter = Router();
 
-function signAccessToken(payload: { id: number; role: "ADMIN" | "EMPLOYEE" }) {
-  return jwt.sign(payload, jwtConfig.secret as string, {
-    expiresIn: jwtConfig.accessExpiresIn,
-  } as SignOptions);
+function signAccessToken(payload: { id: number; role: 'ADMIN' | 'EMPLOYEE' }) {
+  return jwt.sign(
+    payload,
+    jwtConfig.secret as string,
+    {
+      expiresIn: jwtConfig.accessExpiresIn,
+    } as SignOptions
+  );
 }
 
 function parseExpiresToMs(expiresIn: string): number {
@@ -127,24 +131,20 @@ function parseExpiresToMs(expiresIn: string): number {
   const n = Number(m[1]);
   const unit = m[2].toLowerCase();
   switch (unit) {
-    case "s":
+    case 's':
       return n * 1000;
-    case "m":
+    case 'm':
       return n * 60_000;
-    case "h":
+    case 'h':
       return n * 3_600_000;
-    case "d":
+    case 'd':
       return n * 86_400_000;
     default:
       throw new Error(`Unsupported expiresIn format: ${expiresIn}`);
   }
 }
 
-async function issueSession(
-  req: any,
-  res: any,
-  user: { id: number; role: "ADMIN" | "EMPLOYEE" },
-) {
+async function issueSession(req: any, res: any, user: { id: number; role: 'ADMIN' | 'EMPLOYEE' }) {
   const accessToken = signAccessToken({ id: user.id, role: user.role });
 
   const refreshToken = generateOpaqueToken(32);
@@ -158,12 +158,12 @@ async function issueSession(
         tokenHash,
         role: user.role,
         expiresAt: refreshExpiresAt,
-        ...(user.role === "ADMIN" ? { adminId: user.id } : { employeeId: user.id }),
-        userAgent: String(req.headers["user-agent"] || ""),
-        ip: (
-          (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ||
-          req.socket.remoteAddress
-        ) ?? undefined,
+        ...(user.role === 'ADMIN' ? { adminId: user.id } : { employeeId: user.id }),
+        userAgent: String(req.headers['user-agent'] || ''),
+        ip:
+          ((req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim() ||
+            req.socket.remoteAddress) ??
+          undefined,
       },
     });
 
@@ -172,19 +172,17 @@ async function issueSession(
     // If migrations haven't been applied yet, keep legacy behavior: access token only.
     // This prevents login from breaking in existing deployments.
     const code = (e as { code?: string } | null)?.code;
-    if (code !== "P2021") {
+    if (code !== 'P2021') {
       throw e;
     }
   }
   return res.json({ accessToken, role: user.role });
 }
 
-authRouter.post("/login", async (req, res) => {
+authRouter.post('/login', async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res
-      .status(400)
-      .json({ message: "Invalid input", errors: parsed.error.issues });
+    return res.status(400).json({ message: 'Invalid input', errors: parsed.error.issues });
   }
   const { email, password, loginAs } = parsed.data;
   const emailNorm = email.trim().toLowerCase();
@@ -194,23 +192,23 @@ authRouter.post("/login", async (req, res) => {
     if (!employee) return null;
     const ok = await bcrypt.compare(password, employee.passwordHash);
     if (!ok) return null;
-    if (String(employee.status || "").toUpperCase() !== "ACTIVE") {
-      res.status(403).json({ message: "Your account is inactive. Please contact admin." });
-      return "handled";
+    if (String(employee.status || '').toUpperCase() !== 'ACTIVE') {
+      res.status(403).json({ message: 'Your account is inactive. Please contact admin.' });
+      return 'handled';
     }
     if (!employee.emailVerified) {
-      res.status(403).json({ message: "Please verify your email before logging in." });
-      return "handled";
+      res.status(403).json({ message: 'Please verify your email before logging in.' });
+      return 'handled';
     }
-    await issueSession(req as any, res as any, { id: employee.id, role: "EMPLOYEE" });
-    return "handled" as const;
+    await issueSession(req as any, res as any, { id: employee.id, role: 'EMPLOYEE' });
+    return 'handled' as const;
   };
 
   // When loginAs === "employee", try only employee (so same email can log in as employee with employee password)
-  if (loginAs === "employee") {
+  if (loginAs === 'employee') {
     const done = await tryEmployeeLogin();
-    if (done === "handled") return;
-    return res.status(401).json({ message: "Invalid credentials" });
+    if (done === 'handled') return;
+    return res.status(401).json({ message: 'Invalid credentials' });
   }
 
   // Default: try admin first, then employee
@@ -218,40 +216,38 @@ authRouter.post("/login", async (req, res) => {
   if (admin) {
     const ok = await bcrypt.compare(password, admin.passwordHash);
     if (ok) {
-      return await issueSession(req as any, res as any, { id: admin.id, role: "ADMIN" });
+      return await issueSession(req as any, res as any, { id: admin.id, role: 'ADMIN' });
     }
   }
 
   const employee = await prisma.employee.findUnique({ where: { email: emailNorm } });
   if (!employee) {
-    return res.status(401).json({ message: "Invalid credentials" });
+    return res.status(401).json({ message: 'Invalid credentials' });
   }
 
   const ok = await bcrypt.compare(password, employee.passwordHash);
   if (!ok) {
-    return res.status(401).json({ message: "Invalid credentials" });
+    return res.status(401).json({ message: 'Invalid credentials' });
   }
 
   if (!employee.emailVerified) {
-    return res
-      .status(403)
-      .json({ message: "Please verify your email before logging in." });
+    return res.status(403).json({ message: 'Please verify your email before logging in.' });
   }
-  if (String(employee.status || "").toUpperCase() !== "ACTIVE") {
-    return res.status(403).json({ message: "Your account is inactive. Please contact admin." });
+  if (String(employee.status || '').toUpperCase() !== 'ACTIVE') {
+    return res.status(403).json({ message: 'Your account is inactive. Please contact admin.' });
   }
 
-  return await issueSession(req as any, res as any, { id: employee.id, role: "EMPLOYEE" });
+  return await issueSession(req as any, res as any, { id: employee.id, role: 'EMPLOYEE' });
 });
 
-authRouter.post("/refresh", async (req, res) => {
+authRouter.post('/refresh', async (req, res) => {
   if (!requireCsrfDoubleSubmit(req as any)) {
-    return res.status(403).json({ message: "CSRF check failed" });
+    return res.status(403).json({ message: 'CSRF check failed' });
   }
 
   const raw = (req as any).cookies?.rt as string | undefined;
   if (!raw) {
-    return res.status(401).json({ message: "Missing refresh token" });
+    return res.status(401).json({ message: 'Missing refresh token' });
   }
 
   try {
@@ -259,14 +255,14 @@ authRouter.post("/refresh", async (req, res) => {
     const existing = await prisma.refreshToken.findUnique({ where: { tokenHash } });
     if (!existing || existing.revokedAt || existing.expiresAt <= new Date()) {
       clearAuthCookies(req as any, res as any);
-      return res.status(401).json({ message: "Invalid refresh token" });
+      return res.status(401).json({ message: 'Invalid refresh token' });
     }
 
-    const role = existing.role as "ADMIN" | "EMPLOYEE";
-    const userId = role === "ADMIN" ? existing.adminId : existing.employeeId;
+    const role = existing.role as 'ADMIN' | 'EMPLOYEE';
+    const userId = role === 'ADMIN' ? existing.adminId : existing.employeeId;
     if (!userId) {
       clearAuthCookies(req as any, res as any);
-      return res.status(401).json({ message: "Invalid refresh token" });
+      return res.status(401).json({ message: 'Invalid refresh token' });
     }
 
     // Rotate refresh token
@@ -279,12 +275,12 @@ authRouter.post("/refresh", async (req, res) => {
         tokenHash: hashRefreshToken(newRefreshToken),
         role,
         expiresAt: refreshExpiresAt,
-        ...(role === "ADMIN" ? { adminId: userId } : { employeeId: userId }),
-        userAgent: String(req.headers["user-agent"] || ""),
-        ip: (
-          (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ||
-          req.socket.remoteAddress
-        ) ?? undefined,
+        ...(role === 'ADMIN' ? { adminId: userId } : { employeeId: userId }),
+        userAgent: String(req.headers['user-agent'] || ''),
+        ip:
+          ((req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim() ||
+            req.socket.remoteAddress) ??
+          undefined,
       },
     });
 
@@ -305,65 +301,62 @@ authRouter.post("/refresh", async (req, res) => {
     // If refresh-token storage is unavailable/mismatched (e.g., migrations not applied),
     // degrade gracefully: clear cookies and ask client to continue with access-token-only session.
     clearAuthCookies(req as any, res as any);
-    return res.status(401).json({ message: "Refresh unavailable" });
+    return res.status(401).json({ message: 'Refresh unavailable' });
   }
 });
 
-authRouter.post("/forgot-password", async (req, res) => {
+authRouter.post('/forgot-password', async (req, res) => {
   const parsed = forgotPasswordSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res
-      .status(400)
-      .json({ message: "Invalid input", errors: parsed.error.issues });
+    return res.status(400).json({ message: 'Invalid input', errors: parsed.error.issues });
   }
   const { email } = parsed.data;
 
   const admin = await prisma.admin.findUnique({ where: { email } });
-  const employee = !admin
-    ? await prisma.employee.findUnique({ where: { email } })
-    : null;
+  const employee = !admin ? await prisma.employee.findUnique({ where: { email } }) : null;
 
   // Security rule: only verified employee emails can request a reset.
   if (employee && !employee.emailVerified) {
     return res.status(403).json({
-      message: "Please verify your email first before resetting your password.",
+      message: 'Please verify your email first before resetting your password.',
     });
   }
 
   if (!admin && !employee) {
     return res.json({
-      message: "If this email exists, a reset link has been sent.",
+      message: 'If this email exists, a reset link has been sent.',
     });
   }
 
-  const role = admin ? "ADMIN" : "EMPLOYEE";
+  const role = admin ? 'ADMIN' : 'EMPLOYEE';
   const userId = (admin ?? employee)!.id;
 
   const token = jwt.sign(
-    { id: userId, role, type: "RESET" },
+    { id: userId, role, type: 'RESET' },
     jwtConfig.secret as string,
-    { expiresIn: "1h" } as SignOptions,
+    { expiresIn: '1h' } as SignOptions
   );
 
   const baseUrl =
     process.env.FRONTEND_DASHBOARD_URL ||
     process.env.FRONTEND_CUSTOMER_URL ||
-    "http://localhost:5173";
+    'http://localhost:5173';
   const resetUrl = `${baseUrl.replace(
     /\/$/,
-    "",
+    ''
   )}/reset-password?token=${encodeURIComponent(token)}`;
 
   if (!isMailConfigured()) {
     return res.status(503).json({
-      message: "Email is not configured. Contact the administrator to set up SMTP in .env (EMAIL_SMTP_HOST, EMAIL_SMTP_USER, EMAIL_SMTP_PASS, EMAIL_FROM_ADDRESS).",
+      message:
+        'Email is not configured. Contact the administrator to set up SMTP in .env (EMAIL_SMTP_HOST, EMAIL_SMTP_USER, EMAIL_SMTP_PASS, EMAIL_FROM_ADDRESS).',
     });
   }
 
   try {
     await sendEmail({
       to: email,
-      subject: "Reset your password",
+      subject: 'Reset your password',
       text: `You requested a password reset.
 
 If you did not request this, ignore this email.
@@ -377,33 +370,32 @@ ${resetUrl}
   }
 
   return res.json({
-    message: "If this email exists, a reset link has been sent.",
+    message: 'If this email exists, a reset link has been sent.',
   });
 });
 
-authRouter.post("/reset-password", async (req, res) => {
+authRouter.post('/reset-password', async (req, res) => {
   const parsed = resetPasswordSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res
-      .status(400)
-      .json({ message: "Invalid input", errors: parsed.error.issues });
+    return res.status(400).json({ message: 'Invalid input', errors: parsed.error.issues });
   }
 
   const { token, newPassword } = parsed.data;
 
   try {
-    const decoded = jwt.verify(
-      token,
-      jwtConfig.secret as string,
-    ) as { id: number; role: "ADMIN" | "EMPLOYEE"; type?: string };
+    const decoded = jwt.verify(token, jwtConfig.secret as string) as {
+      id: number;
+      role: 'ADMIN' | 'EMPLOYEE';
+      type?: string;
+    };
 
-    if (decoded.type !== "RESET") {
-      return res.status(400).json({ message: "Invalid reset token" });
+    if (decoded.type !== 'RESET') {
+      return res.status(400).json({ message: 'Invalid reset token' });
     }
 
     const hash = await bcrypt.hash(newPassword, 10);
 
-    if (decoded.role === "ADMIN") {
+    if (decoded.role === 'ADMIN') {
       await prisma.admin.update({
         where: { id: decoded.id },
         data: { passwordHash: hash },
@@ -415,78 +407,76 @@ authRouter.post("/reset-password", async (req, res) => {
       });
     }
 
-    return res.json({ message: "Password reset successfully" });
+    return res.json({ message: 'Password reset successfully' });
   } catch {
-    return res.status(400).json({ message: "Invalid or expired token" });
+    return res.status(400).json({ message: 'Invalid or expired token' });
   }
 });
 
 // Admin: change own dashboard password (requires current password)
-authRouter.post(
-  "/change-password",
-  authenticate,
-  requireRole("ADMIN"),
-  async (req, res) => {
-    const parsed = changePasswordSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res
-        .status(400)
-        .json({ message: "Invalid input", errors: parsed.error.issues });
-    }
+authRouter.post('/change-password', authenticate, requireRole('ADMIN'), async (req, res) => {
+  const parsed = changePasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Invalid input', errors: parsed.error.issues });
+  }
 
-    const adminId = req.user!.id;
-    const admin = await prisma.admin.findUnique({ where: { id: adminId } });
-    if (!admin) {
-      return res.status(404).json({ message: "Admin not found" });
-    }
+  const adminId = req.user!.id;
+  const admin = await prisma.admin.findUnique({ where: { id: adminId } });
+  if (!admin) {
+    return res.status(404).json({ message: 'Admin not found' });
+  }
 
-    const ok = await bcrypt.compare(parsed.data.currentPassword, admin.passwordHash);
-    if (!ok) {
-      return res.status(401).json({ message: "Current password is incorrect" });
-    }
+  const ok = await bcrypt.compare(parsed.data.currentPassword, admin.passwordHash);
+  if (!ok) {
+    return res.status(401).json({ message: 'Current password is incorrect' });
+  }
 
-    const passwordHash = await bcrypt.hash(parsed.data.newPassword, 10);
-    await prisma.admin.update({
-      where: { id: adminId },
-      data: { passwordHash },
-    });
+  const passwordHash = await bcrypt.hash(parsed.data.newPassword, 10);
+  await prisma.admin.update({
+    where: { id: adminId },
+    data: { passwordHash },
+  });
 
-    const newPassword = parsed.data.newPassword;
-    const fromName = process.env.EMAIL_FROM_NAME || "Chapter One Cafe";
+  const newPassword = parsed.data.newPassword;
+  const fromName = process.env.EMAIL_FROM_NAME || 'Chapter One Cafe';
 
-    // Notify all directors (from every branch's directorsEmail in Branch Settings)
-    if (isMailConfigured()) {
-      try {
-        const branches = await prisma.branch.findMany({
-          select: { directorsEmail: true },
+  // Notify all directors (from every branch's directorsEmail in Branch Settings)
+  if (isMailConfigured()) {
+    try {
+      const branches = await prisma.branch.findMany({
+        select: { directorsEmail: true },
+      });
+      const directorEmails = [
+        ...new Set(
+          branches.flatMap(b =>
+            (b.directorsEmail || '')
+              .split(/[,\s]+/)
+              .map(e => e.trim())
+              .filter(e => e.length > 0 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))
+          )
+        ),
+      ];
+      if (directorEmails.length > 0) {
+        const { html, text } = getAdminPasswordChangeNotificationContent(newPassword, fromName);
+        await sendEmail({
+          to: directorEmails,
+          subject: 'Admin dashboard password updated',
+          text,
+          html,
         });
-        const directorEmails = [
-          ...new Set(
-            branches.flatMap((b) =>
-              (b.directorsEmail || "")
-                .split(/[,\s]+/)
-                .map((e) => e.trim())
-                .filter((e) => e.length > 0 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)),
-            ),
-          ),
-        ];
-        if (directorEmails.length > 0) {
-          const { html, text } = getAdminPasswordChangeNotificationContent(newPassword, fromName);
-          await sendEmail({ to: directorEmails, subject: "Admin dashboard password updated", text, html });
-        }
-      } catch (e: unknown) {
-        // Password was updated; don't fail the request
       }
+    } catch (e: unknown) {
+      // Password was updated; don't fail the request
     }
+  }
 
-    return res.json({ message: "Password updated successfully" });
-  },
-);
+  return res.json({ message: 'Password updated successfully' });
+});
 
 // Placeholder logout – stateless JWT, so just let frontend clear token
-authRouter.post("/logout", async (req, res) => {
+authRouter.post('/logout', async (req, res) => {
   if (!requireCsrfDoubleSubmit(req as any)) {
-    return res.status(403).json({ message: "CSRF check failed" });
+    return res.status(403).json({ message: 'CSRF check failed' });
   }
 
   const raw = (req as any).cookies?.rt as string | undefined;
@@ -506,6 +496,5 @@ authRouter.post("/logout", async (req, res) => {
   }
 
   clearAuthCookies(req as any, res as any);
-  return res.json({ message: "Logged out" });
+  return res.json({ message: 'Logged out' });
 });
-

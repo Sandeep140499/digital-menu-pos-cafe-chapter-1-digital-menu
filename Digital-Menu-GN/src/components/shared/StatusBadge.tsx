@@ -1,6 +1,6 @@
-import { Badge } from "@/components/ui/badge";
-import { STATUS_STYLES } from "@/constants/theme";
-import { cn } from "@/lib/utils";
+import { Badge } from '@/components/ui/badge';
+import { STATUS_STYLES } from '@/constants/theme';
+import { cn } from '@/lib/utils';
 
 type StatusKey = keyof typeof STATUS_STYLES;
 
@@ -15,23 +15,20 @@ export type StatusBadgeProps = {
  */
 export function StatusBadge({ status, className }: StatusBadgeProps) {
   const style = STATUS_STYLES[status as StatusKey] ?? {
-    variant: "secondary" as const,
-    className: "bg-muted text-muted-foreground",
+    variant: 'secondary' as const,
+    className: 'bg-muted text-muted-foreground',
   };
   const label =
-    status === "ACTIVE"
-      ? "Active"
-      : status === "INACTIVE"
-        ? "Inactive"
-        : status === "LEFT"
-          ? "Left"
+    status === 'ACTIVE'
+      ? 'Active'
+      : status === 'INACTIVE'
+        ? 'Inactive'
+        : status === 'LEFT'
+          ? 'Left'
           : status;
   return (
-    <Badge
-      variant={style.variant}
-      className={cn(style.className, "text-xs", className)}
-    >
-      {status === "ACTIVE" ? "🟢 " : ""}
+    <Badge variant={style.variant} className={cn(style.className, 'text-xs', className)}>
+      {status === 'ACTIVE' ? '🟢 ' : ''}
       {label}
     </Badge>
   );

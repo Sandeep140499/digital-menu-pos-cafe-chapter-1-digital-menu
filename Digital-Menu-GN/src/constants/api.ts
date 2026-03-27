@@ -8,7 +8,7 @@ export const API_BASE_URL =
   // In production we default to "/api" (same-origin) so deployments that reverse-proxy
   // the backend under the same domain work out of the box. Never default to localhost
   // in production because it breaks on customer devices.
-  (import.meta.env.DEV ? "/api" : "/api");
+  (import.meta.env.DEV ? '/api' : '/api');
 
 /** Default request timeout (ms). Prevents UI from hanging when backend is slow. */
 export const API_TIMEOUT_MS = 25000;
@@ -36,8 +36,8 @@ export async function fetchWithTimeout(
 }
 
 function isRetryableFetchError(e: unknown): boolean {
-  if (e instanceof DOMException && e.name === "AbortError") return true;
-  if (e instanceof Error && e.name === "AbortError") return true;
+  if (e instanceof DOMException && e.name === 'AbortError') return true;
+  if (e instanceof Error && e.name === 'AbortError') return true;
   // Chrome/Edge: "Failed to fetch"; Firefox: NetworkError when receiving an empty response
   if (e instanceof TypeError) return true;
   return false;
@@ -50,32 +50,28 @@ function isRetryableFetchError(e: unknown): boolean {
 export async function fetchWithTimeoutRetry(
   input: RequestInfo | URL,
   init?: RequestInit & { timeout?: number },
-  maxAttempts = 3,
+  maxAttempts = 3
 ): Promise<Response> {
   let lastError: unknown;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       const res = await fetchWithTimeout(input, init);
       // Deployment cold starts / proxy blips often return 502–504 once.
-      if (
-        !res.ok &&
-        [502, 503, 504].includes(res.status) &&
-        attempt < maxAttempts - 1
-      ) {
-        await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+      if (!res.ok && [502, 503, 504].includes(res.status) && attempt < maxAttempts - 1) {
+        await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
         continue;
       }
       return res;
     } catch (e) {
       lastError = e;
       if (attempt < maxAttempts - 1 && isRetryableFetchError(e)) {
-        await new Promise((r) => setTimeout(r, 350 * (attempt + 1)));
+        await new Promise(r => setTimeout(r, 350 * (attempt + 1)));
         continue;
       }
       throw e;
     }
   }
-  throw lastError instanceof Error ? lastError : new Error("Request failed after retries");
+  throw lastError instanceof Error ? lastError : new Error('Request failed after retries');
 }
 
 /**
@@ -83,22 +79,21 @@ export async function fetchWithTimeoutRetry(
  */
 export function describeFetchFailure(error: unknown): string {
   const isAbort =
-    (error instanceof DOMException || error instanceof Error) &&
-    error.name === "AbortError";
+    (error instanceof DOMException || error instanceof Error) && error.name === 'AbortError';
   if (isAbort) {
-    return "The request timed out. Railway cold starts can take 30–90 seconds — wait a bit and try again, or open your API URL in a new tab once to wake the service.";
+    return 'The request timed out. Railway cold starts can take 30–90 seconds — wait a bit and try again, or open your API URL in a new tab once to wake the service.';
   }
   if (error instanceof TypeError) {
-    const msg = String(error.message || "");
+    const msg = String(error.message || '');
     if (/failed to fetch|networkerror|load failed/i.test(msg)) {
-      return "Could not reach the API. Confirm VITE_API_BASE_URL in your frontend build matches your Railway URL (ending in /api), then redeploy. If the URL is correct, the backend may be sleeping — retry in a minute.";
+      return 'Could not reach the API. Confirm VITE_API_BASE_URL in your frontend build matches your Railway URL (ending in /api), then redeploy. If the URL is correct, the backend may be sleeping — retry in a minute.';
     }
-    return "Could not reach the server. Check your connection and API URL, then try again.";
+    return 'Could not reach the server. Check your connection and API URL, then try again.';
   }
   if (error instanceof Error && error.message) {
     return error.message;
   }
-  return "Network error or server unreachable. If the API is on Railway, wait for it to wake up and try again.";
+  return 'Network error or server unreachable. If the API is on Railway, wait for it to wake up and try again.';
 }
 
 /**
@@ -112,20 +107,20 @@ export function describeFetchFailure(error: unknown): string {
 export async function readApiErrorMessage(res: Response): Promise<string> {
   const st = res.status;
   if (st === 401) {
-    return "Your session expired. Sign in again and retry.";
+    return 'Your session expired. Sign in again and retry.';
   }
   if (st === 403) {
-    return "You don’t have permission for this action. Use an admin account or ask the owner.";
+    return 'You don’t have permission for this action. Use an admin account or ask the owner.';
   }
   if (st === 503 || st === 502 || st === 504) {
-    return "Server is temporarily unavailable (Railway may be waking up or busy). Wait a minute and try again.";
+    return 'Server is temporarily unavailable (Railway may be waking up or busy). Wait a minute and try again.';
   }
-  const raw = await res.text().catch(() => "");
+  const raw = await res.text().catch(() => '');
   const t = raw.trim();
-  if (t.startsWith("<!") || /<html[\s>]/i.test(t)) {
+  if (t.startsWith('<!') || /<html[\s>]/i.test(t)) {
     return `Server error (${st}). The app may be restarting — try again in a minute.`;
   }
-  if (t.startsWith("{") || t.startsWith("[")) {
+  if (t.startsWith('{') || t.startsWith('[')) {
     try {
       const err = JSON.parse(t) as {
         message?: string;
@@ -135,17 +130,13 @@ export async function readApiErrorMessage(res: Response): Promise<string> {
       if (issues.length > 0) {
         return issues
           .slice(0, 4)
-          .map((i) => {
-            const p =
-              Array.isArray(i.path) && i.path.length > 0
-                ? i.path.join(".")
-                : "field";
-            return `${p}: ${i.message || "Invalid"}`;
+          .map(i => {
+            const p = Array.isArray(i.path) && i.path.length > 0 ? i.path.join('.') : 'field';
+            return `${p}: ${i.message || 'Invalid'}`;
           })
-          .join(" | ");
+          .join(' | ');
       }
-      if (typeof err.message === "string" && err.message.trim())
-        return err.message.trim();
+      if (typeof err.message === 'string' && err.message.trim()) return err.message.trim();
     } catch {
       // fall through
     }
@@ -155,14 +146,11 @@ export async function readApiErrorMessage(res: Response): Promise<string> {
 }
 
 export function getFrontendUrl(): string {
-  if (
-    typeof import.meta.env.VITE_FRONTEND_URL === "string" &&
-    import.meta.env.VITE_FRONTEND_URL
-  ) {
-    return import.meta.env.VITE_FRONTEND_URL.replace(/\/$/, "");
+  if (typeof import.meta.env.VITE_FRONTEND_URL === 'string' && import.meta.env.VITE_FRONTEND_URL) {
+    return import.meta.env.VITE_FRONTEND_URL.replace(/\/$/, '');
   }
-  if (typeof window !== "undefined" && window.location?.origin) {
+  if (typeof window !== 'undefined' && window.location?.origin) {
     return window.location.origin;
   }
-  return import.meta.env.DEV ? "http://localhost:3000" : "";
+  return import.meta.env.DEV ? 'http://localhost:3000' : '';
 }

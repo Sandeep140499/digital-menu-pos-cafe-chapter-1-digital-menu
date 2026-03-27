@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.log
+.env*
+coverage/
+.nyc_output/
+.cache/
+temp/
+tmp/
+*.tgz
+*.tar.gz

@@ -1,16 +1,17 @@
 /**
  * Auto-close open shifts at 04:00 AM (Asia/Kolkata) and create overtime records when worked > workingHoursPerDay.
  */
-import { prisma } from "../config/prisma.js";
-import { getBusinessDayRange } from "../utils/businessDay.js";
+import { prisma } from '../config/prisma.js';
+import { getBusinessDayRange } from '../utils/businessDay.js';
 
-const TIMEZONE = process.env.TZ || "Asia/Kolkata";
+const TIMEZONE = process.env.TZ || 'Asia/Kolkata';
 const DEFAULT_WORKING_HOURS = 8;
-const AUTO_CLOSE_ENABLED = String(process.env.AUTO_CLOSE_SHIFTS || "true").toLowerCase() !== "false";
+const AUTO_CLOSE_ENABLED =
+  String(process.env.AUTO_CLOSE_SHIFTS || 'true').toLowerCase() !== 'false';
 
 function getShiftDateInTimezone(shiftStart: Date): Date {
-  const dateStr = shiftStart.toLocaleDateString("en-CA", { timeZone: TIMEZONE });
-  const [y, m, d] = dateStr.split("-").map(Number);
+  const dateStr = shiftStart.toLocaleDateString('en-CA', { timeZone: TIMEZONE });
+  const [y, m, d] = dateStr.split('-').map(Number);
   return new Date(Date.UTC(y, m - 1, d));
 }
 
@@ -25,15 +26,14 @@ export async function endShiftAndCreateOvertimeIfNeeded(
   });
   if (!shift || shift.shiftEnd != null) return;
 
-  const totalHours =
-    (shiftEnd.getTime() - shift.shiftStart.getTime()) / (1000 * 60 * 60);
+  const totalHours = (shiftEnd.getTime() - shift.shiftStart.getTime()) / (1000 * 60 * 60);
 
   await prisma.employeeShift.update({
     where: { id: shiftId },
     data: {
       shiftEnd,
       totalHours,
-      status: "ENDED",
+      status: 'ENDED',
       endReason,
     },
   });
@@ -44,12 +44,12 @@ export async function endShiftAndCreateOvertimeIfNeeded(
     await prisma.order.updateMany({
       where: {
         shiftId,
-        status: { in: ["NEW_ORDER", "ACCEPTED", "PREPARING", "SERVED"] as any },
+        status: { in: ['NEW_ORDER', 'ACCEPTED', 'PREPARING', 'SERVED'] as any },
       },
       data: {
         employeeId: null,
         shiftId: null,
-        status: "NEW_ORDER" as any,
+        status: 'NEW_ORDER' as any,
       },
     });
   } catch {
@@ -72,7 +72,7 @@ export async function endShiftAndCreateOvertimeIfNeeded(
         totalHours: Math.round(totalHours * 100) / 100,
         overtimeHours,
         reason: endReason,
-        status: "PENDING",
+        status: 'PENDING',
       },
     });
   }
@@ -103,10 +103,10 @@ export async function runAutoCloseAt4AM(): Promise<number> {
   for (const shift of openShifts) {
     try {
       // Close at the boundary time (04:00) to match business rules and keep hours correct.
-      await endShiftAndCreateOvertimeIfNeeded(shift.id, todayBoundary, "Auto Closed");
+      await endShiftAndCreateOvertimeIfNeeded(shift.id, todayBoundary, 'Auto Closed');
       closed++;
     } catch (e) {
-      console.error("Auto-close shift failed:", shift.id, e);
+      console.error('Auto-close shift failed:', shift.id, e);
     }
   }
   if (closed > 0) {
@@ -121,9 +121,9 @@ export function startAutoCloseCron(): void {
   const intervalMs = 5 * 60 * 1000;
   // Run once shortly after boot too.
   setTimeout(() => {
-    runAutoCloseAt4AM().catch((e) => console.error("Auto-close cron error:", e));
+    runAutoCloseAt4AM().catch(e => console.error('Auto-close cron error:', e));
   }, 15 * 1000);
   setInterval(() => {
-    runAutoCloseAt4AM().catch((e) => console.error("Auto-close cron error:", e));
+    runAutoCloseAt4AM().catch(e => console.error('Auto-close cron error:', e));
   }, intervalMs);
 }

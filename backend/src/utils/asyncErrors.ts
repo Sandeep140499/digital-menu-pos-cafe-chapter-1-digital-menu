@@ -1,2 +1,1 @@
-import "express-async-errors";
-
+import 'express-async-errors';

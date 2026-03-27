@@ -1,13 +1,13 @@
-import { Navigate } from "react-router-dom";
-import type { ReactNode } from "react";
-import { useAuth } from "@/hooks/useAuth";
+import { Navigate } from 'react-router-dom';
+import type { ReactNode } from 'react';
+import { useAuth } from '@/hooks/useAuth';
 
 export function RequireAuth({
   children,
   role,
 }: {
   children: ReactNode;
-  role?: "ADMIN" | "EMPLOYEE";
+  role?: 'ADMIN' | 'EMPLOYEE';
 }) {
   const { isAuthenticated, role: currentRole, ready } = useAuth();
 
@@ -25,4 +25,3 @@ export function RequireAuth({
 
   return children;
 }
-

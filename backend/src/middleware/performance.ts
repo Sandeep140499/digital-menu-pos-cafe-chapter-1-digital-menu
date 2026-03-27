@@ -1,7 +1,8 @@
-import type { NextFunction, Request, Response } from "express";
-import { httpRequestDurationMs, httpRequestsTotal } from "../services/metrics.js";
+import type { NextFunction, Request, Response } from 'express';
+import { httpRequestDurationMs, httpRequestsTotal } from '../services/metrics.js';
+import { logger, logPerformance } from '../utils/logger.js';
 
-type Actor = "ADMIN" | "EMPLOYEE" | "CUSTOMER";
+type Actor = 'ADMIN' | 'EMPLOYEE' | 'CUSTOMER';
 
 export type PerfEvent = {
   ts: number; // epoch ms
@@ -15,7 +16,7 @@ export type PerfEvent = {
 
 type SummaryRow = {
   key: string; // `${method} ${path}`
-  actor: Actor | "ALL";
+  actor: Actor | 'ALL';
   count: number;
   errorCount: number;
   avgMs: number;
@@ -33,20 +34,20 @@ function percentile(sortedAsc: number[], p: number): number {
 
 function normalizePath(rawPath: string): string {
   // strip querystring if present
-  const base = rawPath.split("?")[0] || rawPath;
+  const base = rawPath.split('?')[0] || rawPath;
   // normalize common ID segments so metrics group better
   return base
-    .replace(/\/\d+(?=\/|$)/g, "/:id")
+    .replace(/\/\d+(?=\/|$)/g, '/:id')
     .replace(
       /\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?=\/|$)/gi,
-      "/:uuid",
+      '/:uuid'
     );
 }
 
 function getActor(req: Request): Actor {
   const role = (req as any).user?.role;
-  if (role === "ADMIN" || role === "EMPLOYEE") return role;
-  return "CUSTOMER";
+  if (role === 'ADMIN' || role === 'EMPLOYEE') return role;
+  return 'CUSTOMER';
 }
 
 export class PerformanceStore {
@@ -67,7 +68,7 @@ export class PerformanceStore {
   snapshot(windowMs: number) {
     const now = Date.now();
     const minTs = now - windowMs;
-    const inWindow = this.events.filter((e) => e.ts >= minTs && e.ts <= now);
+    const inWindow = this.events.filter(e => e.ts >= minTs && e.ts <= now);
     return { now, windowMs, events: inWindow };
   }
 
@@ -80,7 +81,7 @@ export class PerformanceStore {
     rows: SummaryRow[];
   } {
     const { now, windowMs, events } = this.snapshot(params.windowMs);
-    const filtered = params.actor ? events.filter((e) => e.actor === params.actor) : events;
+    const filtered = params.actor ? events.filter(e => e.actor === params.actor) : events;
 
     const byKey = new Map<string, PerfEvent[]>();
     for (const e of filtered) {
@@ -92,9 +93,9 @@ export class PerformanceStore {
 
     const rows: SummaryRow[] = [];
     for (const [key, arr] of byKey.entries()) {
-      const durations = arr.map((e) => e.durationMs).sort((a, b) => a - b);
+      const durations = arr.map(e => e.durationMs).sort((a, b) => a - b);
       const count = arr.length;
-      const errorCount = arr.filter((e) => e.status >= 500).length;
+      const errorCount = arr.filter(e => e.status >= 500).length;
       const bytesSentTotal = arr.reduce((s, e) => s + (e.bytesSent || 0), 0);
       const sum = durations.reduce((s, v) => s + v, 0);
       const avgMs = count ? sum / count : 0;
@@ -103,7 +104,7 @@ export class PerformanceStore {
       const maxMs = durations[durations.length - 1] ?? 0;
       rows.push({
         key,
-        actor: params.actor ?? "ALL",
+        actor: params.actor ?? 'ALL',
         count,
         errorCount,
         avgMs,
@@ -123,7 +124,7 @@ export class PerformanceStore {
 
     const top = Math.min(Math.max(params.top ?? 30, 1), 200);
     const totalCount = filtered.length;
-    const totalErrorCount = filtered.filter((e) => e.status >= 500).length;
+    const totalErrorCount = filtered.filter(e => e.status >= 500).length;
     const totalBytesSent = filtered.reduce((s, e) => s + (e.bytesSent || 0), 0);
     return { now, windowMs, totalCount, totalErrorCount, totalBytesSent, rows: rows.slice(0, top) };
   }
@@ -144,44 +145,97 @@ export function performanceMiddleware(req: Request, res: Response, next: NextFun
   const origEnd = res.end.bind(res) as any;
   (res as any).write = (chunk: any, encoding?: any, cb?: any) => {
     try {
-      if (chunk) bytesSent += Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(String(chunk), encoding);
+      if (chunk)
+        bytesSent += Buffer.isBuffer(chunk)
+          ? chunk.length
+          : Buffer.byteLength(String(chunk), encoding);
     } catch {}
     return origWrite(chunk, encoding, cb);
   };
   (res as any).end = (chunk?: any, encoding?: any, cb?: any) => {
     try {
-      if (chunk) bytesSent += Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(String(chunk), encoding);
+      if (chunk)
+        bytesSent += Buffer.isBuffer(chunk)
+          ? chunk.length
+          : Buffer.byteLength(String(chunk), encoding);
     } catch {}
     return origEnd(chunk, encoding, cb);
   };
 
-  res.on("finish", () => {
+  res.on('finish', () => {
     // don't self-measure the performance endpoints (avoids feedback loops)
-    const original = req.originalUrl || req.url || "";
-    if (original.startsWith("/api/performance")) return;
+    const original = req.originalUrl || req.url || '';
+    if (original.startsWith('/api/performance')) return;
 
     const end = process.hrtime.bigint();
     const durationMs = Number(end - start) / 1_000_000;
-    const path = normalizePath(original.replace(/^\/api/, "") || "/");
+    const path = normalizePath(original.replace(/^\/api/, '') || '/');
     const status = res.statusCode ?? 0;
     const actor = getActor(req);
-    perfStore.add({
+
+    const perfEvent: PerfEvent = {
       ts,
       actor,
-      method: (req.method || "GET").toUpperCase(),
+      method: (req.method || 'GET').toUpperCase(),
       path,
       status,
       durationMs,
       bytesSent,
+    };
+
+    perfStore.add(perfEvent);
+
+    // Enhanced performance logging
+    logPerformance(`${req.method} ${path}`, durationMs, {
+      statusCode: status,
+      actor,
+      userId: (req as any).user?.id,
+      branchId: (req as any).branchId,
+      userAgent: req.get('User-Agent'),
+      ip: req.ip,
     });
+
+    // Alert on slow endpoints
+    if (durationMs > 3000) {
+      logger.warn('Slow API endpoint detected', {
+        method: req.method,
+        path,
+        duration: `${durationMs}ms`,
+        statusCode: status,
+        actor,
+        userId: (req as any).user?.id,
+        branchId: (req as any).branchId,
+      });
+    }
+
+    // Alert on high error rates
+    if (status >= 500) {
+      logger.error('API endpoint error', {
+        method: req.method,
+        path,
+        duration: `${durationMs}ms`,
+        statusCode: status,
+        actor,
+        userId: (req as any).user?.id,
+        branchId: (req as any).branchId,
+        userAgent: req.get('User-Agent'),
+      });
+    }
+
     try {
-      httpRequestsTotal.labels((req.method || "GET").toUpperCase(), path, String(status), actor).inc();
-      httpRequestDurationMs.labels((req.method || "GET").toUpperCase(), path, String(status), actor).observe(durationMs);
-    } catch {
+      httpRequestsTotal
+        .labels((req.method || 'GET').toUpperCase(), path, String(status), actor)
+        .inc();
+      httpRequestDurationMs
+        .labels((req.method || 'GET').toUpperCase(), path, String(status), actor)
+        .observe(durationMs);
+    } catch (error) {
       // metrics should never break request handling
+      logger.error('Metrics collection failed', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
   });
 
   next();
 }
-

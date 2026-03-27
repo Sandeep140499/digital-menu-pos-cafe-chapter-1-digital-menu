@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { API_BASE_URL } from "@/constants";
+import { useEffect, useMemo, useState } from 'react';
+import { API_BASE_URL } from '@/constants';
 
 export type OrderStatusStreamPayload = {
   id: number;
@@ -20,8 +20,8 @@ export function useOrderStatusStream(orderId: number | null, enabled = true) {
 
   useEffect(() => {
     if (!enabled || !streamUrl) return;
-    if (typeof window === "undefined") return;
-    if (typeof EventSource === "undefined") return;
+    if (typeof window === 'undefined') return;
+    if (typeof EventSource === 'undefined') return;
 
     let es: EventSource | null = null;
     let reconnectTimer: number | null = null;
@@ -30,7 +30,7 @@ export function useOrderStatusStream(orderId: number | null, enabled = true) {
       es = new EventSource(streamUrl, { withCredentials: true });
       setIsConnected(true);
 
-      es.addEventListener("snapshot", (e) => {
+      es.addEventListener('snapshot', e => {
         try {
           setPayload(JSON.parse((e as MessageEvent).data));
         } catch {
@@ -38,7 +38,7 @@ export function useOrderStatusStream(orderId: number | null, enabled = true) {
         }
       });
 
-      es.addEventListener("status", (e) => {
+      es.addEventListener('status', e => {
         try {
           setPayload(JSON.parse((e as MessageEvent).data));
         } catch {
@@ -46,7 +46,7 @@ export function useOrderStatusStream(orderId: number | null, enabled = true) {
         }
       });
 
-      es.addEventListener("error", () => {
+      es.addEventListener('error', () => {
         setIsConnected(false);
         try {
           es?.close();
@@ -79,4 +79,3 @@ export function useOrderStatusStream(orderId: number | null, enabled = true) {
 
   return { payload, isConnected, streamUrl };
 }
-

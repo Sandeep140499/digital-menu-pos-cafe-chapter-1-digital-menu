@@ -1,30 +1,30 @@
-import { Router } from "express";
-import { promRegistry, getActiveSocketsValue } from "../../services/metrics.js";
-import { perfStore } from "../../middleware/performance.js";
+import { Router } from 'express';
+import { promRegistry, getActiveSocketsValue } from '../../services/metrics.js';
+import { perfStore } from '../../middleware/performance.js';
 
 export const metricsRouter = Router();
 
-function isAuthorized(req: import("express").Request): boolean {
-  const token = process.env.METRICS_TOKEN ? String(process.env.METRICS_TOKEN) : "";
+function isAuthorized(req: import('express').Request): boolean {
+  const token = process.env.METRICS_TOKEN ? String(process.env.METRICS_TOKEN) : '';
   if (!token) return false;
-  const header = String(req.headers.authorization || "");
-  if (header.startsWith("Bearer ") && header.slice(7) === token) return true;
+  const header = String(req.headers.authorization || '');
+  if (header.startsWith('Bearer ') && header.slice(7) === token) return true;
   if (req.query.token && String(req.query.token) === token) return true;
   return false;
 }
 
 // Prometheus scrape endpoint (recommended: protect with METRICS_TOKEN)
-metricsRouter.get("/", async (req, res) => {
+metricsRouter.get('/', async (req, res) => {
   // In dev, allow without token. In production, require token.
-  if (process.env.NODE_ENV === "production" && !isAuthorized(req)) {
-    return res.status(401).json({ message: "Unauthorized" });
+  if (process.env.NODE_ENV === 'production' && !isAuthorized(req)) {
+    return res.status(401).json({ message: 'Unauthorized' });
   }
-  res.setHeader("Content-Type", promRegistry.contentType);
+  res.setHeader('Content-Type', promRegistry.contentType);
   return res.send(await promRegistry.metrics());
 });
 
 // Lightweight JSON summary for the Admin dashboard (no Prometheus needed)
-metricsRouter.get("/summary", async (req, res) => {
+metricsRouter.get('/summary', async (req, res) => {
   // This endpoint is used by the Admin UI; keep it available without token
   // but don't leak detailed internal labels.
   const windowMinutes = Math.min(Math.max(Number(req.query.windowMinutes) || 60, 1), 24 * 60);
@@ -38,7 +38,7 @@ metricsRouter.get("/summary", async (req, res) => {
       totalCount: data.totalCount,
       totalErrorCount: data.totalErrorCount,
       totalBytesSent: data.totalBytesSent,
-      top: data.rows.map((r) => ({
+      top: data.rows.map(r => ({
         key: r.key,
         count: r.count,
         errorCount: r.errorCount,
@@ -53,4 +53,3 @@ metricsRouter.get("/summary", async (req, res) => {
     },
   });
 });
-

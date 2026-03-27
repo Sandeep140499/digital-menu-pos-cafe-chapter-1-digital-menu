@@ -1,11 +1,8 @@
-import { LeaveStatus } from "@prisma/client";
-import { prisma } from "../config/prisma.js";
+import { LeaveStatus } from '@prisma/client';
+import { prisma } from '../config/prisma.js';
 
 /** Customers whose first order (by mobile/session identity) is in [from, to]. */
-export async function countNewCustomersFirstOrderInRange(
-  from: Date,
-  to: Date,
-): Promise<number> {
+export async function countNewCustomersFirstOrderInRange(from: Date, to: Date): Promise<number> {
   const rows = await prisma.$queryRaw<{ c: bigint }[]>`
     WITH cust AS (
       SELECT
@@ -30,7 +27,7 @@ export async function countNewCustomersFirstOrderInRange(
     WHERE first_ts >= ${from} AND first_ts <= ${to}
   `;
   const n = rows[0]?.c;
-  return typeof n === "bigint" ? Number(n) : Number(n ?? 0);
+  return typeof n === 'bigint' ? Number(n) : Number(n ?? 0);
 }
 
 export type MonthlyMetrics = {
@@ -49,21 +46,21 @@ export type MonthlyMetrics = {
 export async function computeMonthlyMetrics(
   from: Date,
   to: Date,
-  daysInMonth: number,
+  daysInMonth: number
 ): Promise<MonthlyMetrics> {
   const [totalOrders, paidAgg, paidOrdersCount] = await Promise.all([
     prisma.order.count({ where: { createdAt: { gte: from, lte: to } } }),
     prisma.order.aggregate({
       where: {
         createdAt: { gte: from, lte: to },
-        paymentStatus: "PAID" as const,
+        paymentStatus: 'PAID' as const,
       },
       _sum: { totalAmount: true },
     }),
     prisma.order.count({
       where: {
         createdAt: { gte: from, lte: to },
-        paymentStatus: "PAID" as const,
+        paymentStatus: 'PAID' as const,
       },
     }),
   ]);
@@ -76,7 +73,7 @@ export async function computeMonthlyMetrics(
   });
   const customerSet = new Set<string>();
   for (const r of customerRows) {
-    const m = (r.customerMobile || "").replace(/\D/g, "").slice(-10);
+    const m = (r.customerMobile || '').replace(/\D/g, '').slice(-10);
     if (m.length === 10) customerSet.add(`m:${m}`);
     else if (r.sessionToken) customerSet.add(`s:${r.sessionToken}`);
   }
@@ -92,7 +89,7 @@ export async function computeMonthlyMetrics(
   const otAgg = await prisma.employeeOvertime.aggregate({
     where: {
       shiftDate: { gte: from, lte: to },
-      status: "APPROVED",
+      status: 'APPROVED',
     },
     _sum: { overtimeHours: true },
   });
@@ -136,10 +133,9 @@ export async function upsertMonthlyRevenueSnapshot(
   to: Date,
   daysInMonth: number,
   /** When provided, skips a second full recompute (e.g. monthly job already computed metrics for PDF). */
-  precomputed?: MonthlyMetrics,
+  precomputed?: MonthlyMetrics
 ): Promise<MonthlyMetrics> {
-  const metrics =
-    precomputed ?? (await computeMonthlyMetrics(from, to, daysInMonth));
+  const metrics = precomputed ?? (await computeMonthlyMetrics(from, to, daysInMonth));
   await prisma.monthlyRevenueSnapshot.upsert({
     where: { yearMonth },
     create: {

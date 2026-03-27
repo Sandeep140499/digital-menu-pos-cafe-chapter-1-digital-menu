@@ -1,9 +1,10 @@
-import { useEffect, useState, useMemo, useCallback, memo, useRef } from "react";
-import React from "react";
-import DashboardShell from "@/components/dashboard/DashboardShell";
-import MonthlyTargetSetup from "@/components/MonthlyTargetSetup";
-import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/useAuth";
+import { useEffect, useState, useMemo, useCallback, memo, useRef } from 'react';
+import React from 'react';
+import DashboardShell from '@/components/dashboard/DashboardShell';
+import MonthlyTargetSetup from '@/components/MonthlyTargetSetup';
+import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
+import { PageLoader, InlineLoader, LoadingButton } from '@/components/shared';
 import {
   LayoutDashboard,
   Utensils,
@@ -46,21 +47,29 @@ import {
   MinusCircle,
   X,
   Lock,
-} from "lucide-react";
-import { useGlobalLoading } from "@/components/GlobalLoadingProvider";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip as RechartsTooltip, Legend as RechartsLegend, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+} from 'lucide-react';
+import { useGlobalLoading } from '@/components/GlobalLoadingProvider';
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip as RechartsTooltip,
+  Legend as RechartsLegend,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+} from 'recharts';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Dialog,
   DialogContent,
@@ -68,17 +77,17 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-} from "@/components/ui/dialog";
+} from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Checkbox } from "@/components/ui/checkbox";
+} from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Table,
   TableBody,
@@ -86,16 +95,16 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from '@/components/ui/table';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Separator } from "@/components/ui/separator";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { LoaderButton, StatusBadge } from "@/components/shared";
+} from '@/components/ui/dropdown-menu';
+import { Separator } from '@/components/ui/separator';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { LoaderButton, StatusBadge } from '@/components/shared';
 import {
   API_BASE_URL,
   API_TIMEOUT_MS,
@@ -109,53 +118,53 @@ import {
   MENU_CATEGORY_FILTER_OPTIONS,
   MENU_SORT_OPTIONS,
   STATUS_BUTTON_ACTIVE,
-} from "@/constants";
-import { formatHours } from "@/utils/timeFormatter";
-import { calculateLate } from "@/utils/lateCalculator";
-import { getBusinessDateString } from "@/utils/businessDate";
-import cafeLogo from "@/assets/logo.png";
+} from '@/constants';
+import { formatHours } from '@/utils/timeFormatter';
+import { calculateLate } from '@/utils/lateCalculator';
+import { getBusinessDateString } from '@/utils/businessDate';
+import cafeLogo from '@/assets/logo.png';
 
 const apiBase = API_BASE_URL;
 
 // Payslip brand colors (Cafe Chapter 1)
-const PAYSLIP_COFFEE = "#6B3E26";
-const PAYSLIP_LATTE = "#C9A27E";
-const PAYSLIP_GREEN = "#2E7D32";
+const PAYSLIP_COFFEE = '#6B3E26';
+const PAYSLIP_LATTE = '#C9A27E';
+const PAYSLIP_GREEN = '#2E7D32';
 
 // Salary slip dialog – module-level constants (used by SalarySlipDialog to avoid re-creation/flash)
 const SALARY_MONTH_NAMES = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
 ];
 // 12 predefined colors for month-wise salary slip rows (Jan–Dec)
 const SALARY_MONTH_COLORS = [
-  "#FEF3C7",
-  "#FCE7F3",
-  "#DBEAFE",
-  "#D1FAE5",
-  "#E0E7FF",
-  "#FFEDD5",
-  "#FEE2E2",
-  "#E5E7EB",
-  "#F3E8FF",
-  "#CCFBF1",
-  "#FEF9C3",
-  "#E2E8F0",
+  '#FEF3C7',
+  '#FCE7F3',
+  '#DBEAFE',
+  '#D1FAE5',
+  '#E0E7FF',
+  '#FFEDD5',
+  '#FEE2E2',
+  '#E5E7EB',
+  '#F3E8FF',
+  '#CCFBF1',
+  '#FEF9C3',
+  '#E2E8F0',
 ];
 const SALARY_CARD_CLASS =
-  "rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md";
+  'rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md';
 const SALARY_INPUT_CLASS =
-  "h-11 rounded-lg border border-slate-200 px-3 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none";
+  'h-11 rounded-lg border border-slate-200 px-3 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none';
 
 function monthNumberToName(month: number | null | undefined): string | undefined {
   if (month == null) return undefined;
@@ -166,15 +175,12 @@ function monthNumberToName(month: number | null | undefined): string | undefined
 function getNextSalaryNumberModule(
   existingSlips: { salaryNumber?: string; month?: string; year?: number }[],
   payYear: number,
-  payMonthName: string,
+  payMonthName: string
 ): string {
-  const mm = String(SALARY_MONTH_NAMES.indexOf(payMonthName) + 1).padStart(
-    2,
-    "0",
-  );
+  const mm = String(SALARY_MONTH_NAMES.indexOf(payMonthName) + 1).padStart(2, '0');
   const prefix = `CC1/${mm}/${payYear}/`;
   const existingForMonth = existingSlips.filter(
-    (s) => s.year === payYear && s.month === payMonthName,
+    s => s.year === payYear && s.month === payMonthName
   );
   let maxSeq = 0;
   for (const s of existingForMonth) {
@@ -183,18 +189,13 @@ function getNextSalaryNumberModule(
     const num = parseInt(sn.slice(prefix.length), 10);
     if (!isNaN(num)) maxSeq = Math.max(maxSeq, num);
   }
-  return `${prefix}${String(maxSeq + 1).padStart(5, "0")}`;
+  return `${prefix}${String(maxSeq + 1).padStart(5, '0')}`;
 }
 
 /** Get background color for a salary slip row by month (0–11 => Jan–Dec). */
-function getSalarySlipMonthColor(slip: {
-  month?: string;
-  year?: number;
-}): string {
-  const idx = SALARY_MONTH_NAMES.indexOf(slip.month ?? "");
-  return idx >= 0 && idx < SALARY_MONTH_COLORS.length
-    ? SALARY_MONTH_COLORS[idx]
-    : "#ffffff";
+function getSalarySlipMonthColor(slip: { month?: string; year?: number }): string {
+  const idx = SALARY_MONTH_NAMES.indexOf(slip.month ?? '');
+  return idx >= 0 && idx < SALARY_MONTH_COLORS.length ? SALARY_MONTH_COLORS[idx] : '#ffffff';
 }
 
 /** Build payslip HTML from stored slip data (for View PDF / Download PDF – no stored PDFs). */
@@ -219,24 +220,21 @@ function buildPayslipHtmlFromSlip(
     companyAddress: string;
     companyPincode: string;
     phone: string;
-  },
+  }
 ): string {
-  const payMonthName = slip.month ?? "January";
+  const payMonthName = slip.month ?? 'January';
   const payYear = slip.year ?? new Date().getFullYear();
   const payDate = slip.createdAt
-    ? new Date(slip.createdAt).toISOString().split("T")[0]
-    : `${payYear}-${String(SALARY_MONTH_NAMES.indexOf(payMonthName) + 1).padStart(2, "0")}-01`;
-  const mm = String(SALARY_MONTH_NAMES.indexOf(payMonthName) + 1).padStart(
-    2,
-    "0",
-  );
+    ? new Date(slip.createdAt).toISOString().split('T')[0]
+    : `${payYear}-${String(SALARY_MONTH_NAMES.indexOf(payMonthName) + 1).padStart(2, '0')}-01`;
+  const mm = String(SALARY_MONTH_NAMES.indexOf(payMonthName) + 1).padStart(2, '0');
   const payPeriodLabel = `${mm} - ${payMonthName} ${payYear}`;
-  const allowanceRows = (slip.allowances ?? []).map((r) => ({
-    name: r.name ?? "",
+  const allowanceRows = (slip.allowances ?? []).map(r => ({
+    name: r.name ?? '',
     amount: Number(r.amount) || 0,
   }));
-  const deductionRows = (slip.deductions ?? []).map((r) => ({
-    name: r.name ?? "",
+  const deductionRows = (slip.deductions ?? []).map(r => ({
+    name: r.name ?? '',
     amount: Number(r.amount) || 0,
   }));
   const basicSalary = Number(slip.basicSalary) || 0;
@@ -244,9 +242,7 @@ function buildPayslipHtmlFromSlip(
   const totalDeductions = deductionRows.reduce((s, r) => s + r.amount, 0);
   const grossEarnings = basicSalary + totalAllowances;
   const netSalary =
-    slip.netSalary != null
-      ? Number(slip.netSalary)
-      : grossEarnings - totalDeductions;
+    slip.netSalary != null ? Number(slip.netSalary) : grossEarnings - totalDeductions;
   return buildPayslipPrintHtmlModule({
     logoUrl: opts.logoUrl,
     companyName: opts.companyName,
@@ -294,20 +290,18 @@ function buildPayslipPrintHtmlModule(data: {
   netSalary: number;
 }): string {
   const addr =
-    data.companyAddress +
-    (data.companyPincode ? `, ${data.companyPincode}` : "") +
-    ", India";
+    data.companyAddress + (data.companyPincode ? `, ${data.companyPincode}` : '') + ', India';
   const rows = (arr: { name: string; amount: number }[]) =>
     arr
       .map(
-        (r) =>
-          `<tr><td style="padding:6px 8px;border-bottom:1px solid #e2e8f0">${r.name || "—"}</td><td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right">₹${r.amount || 0}</td></tr>`,
+        r =>
+          `<tr><td style="padding:6px 8px;border-bottom:1px solid #e2e8f0">${r.name || '—'}</td><td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right">₹${r.amount || 0}</td></tr>`
       )
-      .join("");
+      .join('');
   const slipNoRow = data.salaryNumber
     ? `<p style="margin:4px 0"><strong>Salary Slip No.:</strong> ${data.salaryNumber}</p>`
-    : "";
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Salary Slip</title><style>body{font-family:system-ui,sans-serif;margin:0;padding:24px;background:#fff}.watermark{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:0.06;z-index:0}.watermark img{max-width:90%;max-height:90%;object-fit:contain}.main{position:relative;z-index:1}table{width:100%;border-collapse:collapse;margin:16px 0}.th{background:#f1f5f9;padding:8px;text-align:left;font-weight:600}.th-r{text-align:right}.net{border-top:2px solid #047857;margin-top:16px;padding-top:12px;font-size:18px;font-weight:700;color:#047857}</style></head><body><div class="watermark"><img src="${data.logoUrl}" alt="" /></div><div class="main"><div style="border-bottom:2px solid #e2e8f0;padding-bottom:16px;margin-bottom:16px"><img src="${data.logoUrl}" alt="" style="height:64px;margin-bottom:8px" /><p style="font-weight:700;font-size:18px;margin:0">${data.companyName}</p><p style="color:#475569;font-size:14px;margin:4px 0">${addr}</p>${data.phone ? `<p style="font-size:12px;color:#64748b">Ph: ${data.phone}</p>` : ""}<p style="font-weight:600;margin-top:12px">Salary Slip — ${data.payMonthName} ${data.payYear}</p></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;margin-bottom:16px;font-size:14px">${slipNoRow}<p style="margin:4px 0"><strong>Employee Name:</strong> ${data.selectedEmployee?.name ?? "—"}</p><p style="margin:4px 0"><strong>Employee ID:</strong> ${data.selectedEmployee?.employeeCode ?? "—"}</p><p style="margin:4px 0"><strong>Pay Period:</strong> ${data.payPeriodLabel}</p><p style="margin:4px 0"><strong>Pay Date:</strong> ${data.payDate}</p><p style="margin:4px 0"><strong>Paid Days:</strong> ${data.paidDays}</p><p style="margin:4px 0"><strong>LOP Days:</strong> ${data.lopDays}</p></div><table><thead><tr><th class="th">Earnings</th><th class="th th-r">Amount (₹)</th></tr></thead><tbody><tr><td style="padding:6px 8px;border-bottom:1px solid #e2e8f0">Basic Salary</td><td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right">₹${data.basicSalary}</td></tr>${rows(data.allowanceRows)}</tbody></table><table><thead><tr><th class="th">Deductions</th><th class="th th-r">Amount (₹)</th></tr></thead><tbody>${rows(data.deductionRows)}</tbody></table><div class="net"><p style="display:flex;justify-content:space-between;margin:4px 0"><span>Gross Salary</span><span>₹${data.grossEarnings}</span></p><p style="display:flex;justify-content:space-between;margin:4px 0"><span>Total Deductions</span><span>₹${data.totalDeductions}</span></p><p style="display:flex;justify-content:space-between;margin-top:8px;font-size:18px"><span>Net Salary</span><span>₹${data.netSalary}</span></p></div><p style="text-align:center;font-size:12px;color:#64748b;margin-top:32px">Authorized Signature — ${data.companyName}</p></div></body></html>`;
+    : '';
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Salary Slip</title><style>body{font-family:system-ui,sans-serif;margin:0;padding:24px;background:#fff}.watermark{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:0.06;z-index:0}.watermark img{max-width:90%;max-height:90%;object-fit:contain}.main{position:relative;z-index:1}table{width:100%;border-collapse:collapse;margin:16px 0}.th{background:#f1f5f9;padding:8px;text-align:left;font-weight:600}.th-r{text-align:right}.net{border-top:2px solid #047857;margin-top:16px;padding-top:12px;font-size:18px;font-weight:700;color:#047857}</style></head><body><div class="watermark"><img src="${data.logoUrl}" alt="" /></div><div class="main"><div style="border-bottom:2px solid #e2e8f0;padding-bottom:16px;margin-bottom:16px"><img src="${data.logoUrl}" alt="" style="height:64px;margin-bottom:8px" /><p style="font-weight:700;font-size:18px;margin:0">${data.companyName}</p><p style="color:#475569;font-size:14px;margin:4px 0">${addr}</p>${data.phone ? `<p style="font-size:12px;color:#64748b">Ph: ${data.phone}</p>` : ''}<p style="font-weight:600;margin-top:12px">Salary Slip — ${data.payMonthName} ${data.payYear}</p></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;margin-bottom:16px;font-size:14px">${slipNoRow}<p style="margin:4px 0"><strong>Employee Name:</strong> ${data.selectedEmployee?.name ?? '—'}</p><p style="margin:4px 0"><strong>Employee ID:</strong> ${data.selectedEmployee?.employeeCode ?? '—'}</p><p style="margin:4px 0"><strong>Pay Period:</strong> ${data.payPeriodLabel}</p><p style="margin:4px 0"><strong>Pay Date:</strong> ${data.payDate}</p><p style="margin:4px 0"><strong>Paid Days:</strong> ${data.paidDays}</p><p style="margin:4px 0"><strong>LOP Days:</strong> ${data.lopDays}</p></div><table><thead><tr><th class="th">Earnings</th><th class="th th-r">Amount (₹)</th></tr></thead><tbody><tr><td style="padding:6px 8px;border-bottom:1px solid #e2e8f0">Basic Salary</td><td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right">₹${data.basicSalary}</td></tr>${rows(data.allowanceRows)}</tbody></table><table><thead><tr><th class="th">Deductions</th><th class="th th-r">Amount (₹)</th></tr></thead><tbody>${rows(data.deductionRows)}</tbody></table><div class="net"><p style="display:flex;justify-content:space-between;margin:4px 0"><span>Gross Salary</span><span>₹${data.grossEarnings}</span></p><p style="display:flex;justify-content:space-between;margin:4px 0"><span>Total Deductions</span><span>₹${data.totalDeductions}</span></p><p style="display:flex;justify-content:space-between;margin-top:8px;font-size:18px"><span>Net Salary</span><span>₹${data.netSalary}</span></p></div><p style="text-align:center;font-size:12px;color:#64748b;margin-top:32px">Authorized Signature — ${data.companyName}</p></div></body></html>`;
 }
 
 // Types
@@ -339,7 +333,7 @@ type Employee = {
   email: string;
   employeeCode: string;
   role?: string | null;
-  status: "ACTIVE" | "INACTIVE" | "LEFT";
+  status: 'ACTIVE' | 'INACTIVE' | 'LEFT';
   branchId: number;
   createdAt: string;
   profileImageUrl?: string;
@@ -362,7 +356,7 @@ type Order = {
   id: number;
   tableId: number;
   tableNumber?: string;
-  orderType?: "DINE_IN" | "TAKE_AWAY" | null;
+  orderType?: 'DINE_IN' | 'TAKE_AWAY' | null;
   employeeId?: number;
   employeeName?: string;
   employee?: {
@@ -414,7 +408,7 @@ type EmployeeFormState = {
   email: string;
   employeeCode: string;
   role: string;
-  status: "ACTIVE" | "INACTIVE" | "LEFT";
+  status: 'ACTIVE' | 'INACTIVE' | 'LEFT';
   phone: string;
   salary: string | number;
   address: string;
@@ -462,34 +456,31 @@ type DailyRemovalSummary = {
  * - Otherwise → HALF=Half, FULL=Full
  * Also strips "(5pc / 8pc)" and "(Half / Full)" from base name for display.
  */
-const formatItemDisplayName = (
-  name: string,
-  variant?: string | null,
-): string => {
-  const raw = name || "";
+const formatItemDisplayName = (name: string, variant?: string | null): string => {
+  const raw = name || '';
   const isPc = /\(\s*5pc\s*\/\s*8pc\s*\)/i.test(raw);
   const base =
     raw
-      .replace(/\s*\(5pc\s*\/\s*8pc\)\s*/gi, " ")
-      .replace(/\s*\(half\s*\/\s*full\)\s*/gi, " ")
-      .replace(/\s+/g, " ")
+      .replace(/\s*\(5pc\s*\/\s*8pc\)\s*/gi, ' ')
+      .replace(/\s*\(half\s*\/\s*full\)\s*/gi, ' ')
+      .replace(/\s+/g, ' ')
       .trim() || raw;
   if (!variant) return base;
-  if (variant === "HALF") return `${base} (${isPc ? "5pc" : "Half"})`;
-  if (variant === "FULL") return `${base} (${isPc ? "8pc" : "Full"})`;
+  if (variant === 'HALF') return `${base} (${isPc ? '5pc' : 'Half'})`;
+  if (variant === 'FULL') return `${base} (${isPc ? '8pc' : 'Full'})`;
   return `${base} (${variant})`;
 };
 
 const formatINR = (amount: number) => {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(amount);
 };
 
-type NewOrderSoundPreset = "beep" | "ring" | "siren" | "chime";
+type NewOrderSoundPreset = 'beep' | 'ring' | 'siren' | 'chime';
 type BranchFormState = {
   name: string;
   location: string;
@@ -515,12 +506,10 @@ const AdminOrderRow = memo(function AdminOrderRow({
   onSelect: (order: Order) => void;
   now: Date;
 }) {
-  const isComplete = order.status === "ORDER_COMPLETE";
+  const isComplete = order.status === 'ORDER_COMPLETE';
   const relativeAge = useMemo(() => {
-    const sec = Math.floor(
-      (now.getTime() - new Date(order.createdAt).getTime()) / 1000,
-    );
-    if (sec < 60) return "Just now";
+    const sec = Math.floor((now.getTime() - new Date(order.createdAt).getTime()) / 1000);
+    if (sec < 60) return 'Just now';
     const min = Math.floor(sec / 60);
     if (min < 60) return `${min} min ago`;
     return `${Math.floor(min / 60)} hr ago`;
@@ -528,38 +517,43 @@ const AdminOrderRow = memo(function AdminOrderRow({
 
   return (
     <div
-      className={`p-3 cursor-pointer transition-[background-color] duration-150 card-gpu border-l-4 ${
+      className={`card-gpu cursor-pointer border-l-4 p-3 transition-[background-color] duration-150 ${
         isComplete
-          ? "bg-green-50/70 border-l-green-600 hover:bg-green-50"
-          : "hover:bg-slate-50 border-l-transparent"
+          ? 'border-l-green-600 bg-green-50/70 hover:bg-green-50'
+          : 'border-l-transparent hover:bg-slate-50'
       }`}
       onClick={() => onSelect(order)}
     >
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <p className="font-medium text-sm">Order #{order.id}</p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <p className="text-sm font-medium">Order #{order.id}</p>
             {order.orderType && (
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${order.orderType === "TAKE_AWAY" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>
-                {order.orderType === "TAKE_AWAY" ? "Take Away" : "Dine In"}
+              <span
+                className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${order.orderType === 'TAKE_AWAY' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}
+              >
+                {order.orderType === 'TAKE_AWAY' ? 'Take Away' : 'Dine In'}
               </span>
             )}
           </div>
-          <p className="text-xs text-muted-foreground">
-            {new Date(order.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
-            {" · "}
+          <p className="text-muted-foreground text-xs">
+            {new Date(order.createdAt).toLocaleTimeString('en-IN', {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+            {' · '}
             {relativeAge}
           </p>
           {order.customerName && (
-            <p className="text-xs text-emerald-700 font-medium truncate">{order.customerName}</p>
+            <p className="truncate text-xs font-medium text-emerald-700">{order.customerName}</p>
           )}
         </div>
-        <div className="text-right shrink-0">
+        <div className="shrink-0 text-right">
           <Badge
-            variant={isComplete ? "default" : "secondary"}
-            className={`text-xs mb-1 ${isComplete ? "bg-green-600 hover:bg-green-700" : ""}`}
+            variant={isComplete ? 'default' : 'secondary'}
+            className={`mb-1 text-xs ${isComplete ? 'bg-green-600 hover:bg-green-700' : ''}`}
           >
-            {order.status === "ORDER_COMPLETE" ? "Completed" : order.status.replace("_", " ")}
+            {order.status === 'ORDER_COMPLETE' ? 'Completed' : order.status.replace('_', ' ')}
           </Badge>
           <p className="text-sm font-medium">{formatINR(order.totalAmount)}</p>
         </div>
@@ -577,53 +571,51 @@ type SidebarItem = {
 // Professional POS sidebar: Dashboard → Operations → Staff → Finance → System
 const adminSidebarSections = [
   {
-    title: "Dashboard",
+    title: 'Dashboard',
     items: [
-      { key: "overview", label: "Overview", icon: LayoutDashboard },
-      { key: "performance", label: "Performance", icon: Activity },
+      { key: 'overview', label: 'Overview', icon: LayoutDashboard },
+      { key: 'performance', label: 'Performance', icon: Activity },
     ] as SidebarItem[],
   },
   {
-    title: "Operations",
+    title: 'Operations',
     items: [
-      { key: "all-orders", label: "All Orders", icon: ShoppingCart },
-      { key: "menu", label: "Menu", icon: ChefHat },
+      { key: 'all-orders', label: 'All Orders', icon: ShoppingCart },
+      { key: 'menu', label: 'Menu', icon: ChefHat },
       {
-        key: "customer-leaderboard",
-        label: "Customer Leaderboard",
+        key: 'customer-leaderboard',
+        label: 'Customer Leaderboard',
         icon: Trophy,
       },
-      { key: "removed-items", label: "Removed Items", icon: Trash2 },
+      { key: 'removed-items', label: 'Removed Items', icon: Trash2 },
       {
-        key: "customer-queries",
-        label: "Raised Requests",
+        key: 'customer-queries',
+        label: 'Raised Requests',
         icon: MessageCircle,
       },
     ] as SidebarItem[],
   },
   {
-    title: "Staff",
+    title: 'Staff',
     items: [
-      { key: "employees", label: "Employees", icon: Users },
-      { key: "hours", label: "Work Hours", icon: Clock },
-      { key: "overtime", label: "Overtime", icon: AlertCircle },
-      { key: "late", label: "Late Entries", icon: Clock },
-      { key: "leaves", label: "Leave Requests", icon: FileText },
-      { key: "certificates", label: "Certificates", icon: Award },
+      { key: 'employees', label: 'Employees', icon: Users },
+      { key: 'hours', label: 'Work Hours', icon: Clock },
+      { key: 'overtime', label: 'Overtime', icon: AlertCircle },
+      { key: 'late', label: 'Late Entries', icon: Clock },
+      { key: 'leaves', label: 'Leave Requests', icon: FileText },
+      { key: 'certificates', label: 'Certificates', icon: Award },
     ] as SidebarItem[],
   },
   {
-    title: "Finance",
+    title: 'Finance',
     items: [
-      { key: "revenue", label: "Revenue", icon: BarChart3 },
-      { key: "salary-slips", label: "Salary Slips", icon: IndianRupee },
+      { key: 'revenue', label: 'Revenue', icon: BarChart3 },
+      { key: 'salary-slips', label: 'Salary Slips', icon: IndianRupee },
     ] as SidebarItem[],
   },
   {
-    title: "System",
-    items: [
-      { key: "settings", label: "Settings", icon: Settings },
-    ] as SidebarItem[],
+    title: 'System',
+    items: [{ key: 'settings', label: 'Settings', icon: Settings }] as SidebarItem[],
   },
 ];
 
@@ -640,7 +632,7 @@ type SettingsSectionContentProps = {
     directorsEmail: string;
     showTotalAmountToCustomers: boolean;
     enableNewOrderRinging?: boolean;
-    newOrderSoundPreset?: "beep" | "ring" | "siren" | "chime";
+    newOrderSoundPreset?: 'beep' | 'ring' | 'siren' | 'chime';
     newOrderSoundVolume?: number;
   };
   setBranchForm: React.Dispatch<
@@ -655,7 +647,7 @@ type SettingsSectionContentProps = {
       directorsEmail: string;
       showTotalAmountToCustomers: boolean;
       enableNewOrderRinging?: boolean;
-      newOrderSoundPreset?: "beep" | "ring" | "siren" | "chime";
+      newOrderSoundPreset?: 'beep' | 'ring' | 'siren' | 'chime';
       newOrderSoundVolume?: number;
     }>
   >;
@@ -675,7 +667,7 @@ type SettingsSectionContentProps = {
     directorsEmail: string;
     showTotalAmountToCustomers: boolean;
     enableNewOrderRinging?: boolean;
-    newOrderSoundPreset?: "beep" | "ring" | "siren" | "chime";
+    newOrderSoundPreset?: 'beep' | 'ring' | 'siren' | 'chime';
     newOrderSoundVolume?: number;
   };
   setCreateBranchForm: React.Dispatch<
@@ -690,7 +682,7 @@ type SettingsSectionContentProps = {
       directorsEmail: string;
       showTotalAmountToCustomers: boolean;
       enableNewOrderRinging?: boolean;
-      newOrderSoundPreset?: "beep" | "ring" | "siren" | "chime";
+      newOrderSoundPreset?: 'beep' | 'ring' | 'siren' | 'chime';
       newOrderSoundVolume?: number;
     }>
   >;
@@ -700,11 +692,7 @@ type SettingsSectionContentProps = {
   savingBranch: boolean;
   notifications: any[];
   errorLogs: { logs: any[]; unresolvedCount: number };
-  toast: (p: {
-    title: string;
-    description?: string;
-    variant?: "default" | "destructive";
-  }) => void;
+  toast: (p: { title: string; description?: string; variant?: 'default' | 'destructive' }) => void;
   token: string | null;
   directorsData: {
     verified: string[];
@@ -715,15 +703,15 @@ type SettingsSectionContentProps = {
   branchesListUnavailable: boolean;
 };
 function parseDirectorEmails(s: string): string[] {
-  const arr = (s || "")
-    .split(",")
-    .map((t) => t.trim())
+  const arr = (s || '')
+    .split(',')
+    .map(t => t.trim())
     .filter(Boolean);
-  return arr.length ? arr : [""];
+  return arr.length ? arr : [''];
 }
 
 const SettingsSectionContent = memo(function SettingsSectionContent(
-  props: SettingsSectionContentProps,
+  props: SettingsSectionContentProps
 ) {
   const {
     branchForm,
@@ -747,12 +735,12 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
     loadDirectors,
     branchesListUnavailable,
   } = props;
-  const [newDirectorEmail, setNewDirectorEmail] = useState("");
+  const [newDirectorEmail, setNewDirectorEmail] = useState('');
   const [sendingVerify, setSendingVerify] = useState(false);
   const [sendingRemove, setSendingRemove] = useState<string | null>(null);
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
   const [orderNotificationsEnabled, setOrderNotificationsEnabled] = useState(true);
   const [soundAlertsEnabled, setSoundAlertsEnabled] = useState(true);
@@ -762,23 +750,21 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
 
   useEffect(() => {
     try {
-      const on = window.localStorage.getItem("dm_admin_order_notifications");
-      const sound = window.localStorage.getItem("dm_admin_sound_alerts");
-      const auto = window.localStorage.getItem("dm_admin_auto_refresh");
-      if (on !== null) setOrderNotificationsEnabled(on === "true");
-      if (sound !== null) setSoundAlertsEnabled(sound === "true");
-      if (auto !== null) setAutoRefreshEnabled(auto === "true");
+      const on = window.localStorage.getItem('dm_admin_order_notifications');
+      const sound = window.localStorage.getItem('dm_admin_sound_alerts');
+      const auto = window.localStorage.getItem('dm_admin_auto_refresh');
+      if (on !== null) setOrderNotificationsEnabled(on === 'true');
+      if (sound !== null) setSoundAlertsEnabled(sound === 'true');
+      if (auto !== null) setAutoRefreshEnabled(auto === 'true');
     } catch {
       // ignore (storage blocked)
     }
   }, []);
 
   return (
-    <div className="space-y-6 min-w-0">
+    <div className="min-w-0 space-y-6">
       <div className="min-w-0">
-        <h2 className="text-xl sm:text-2xl font-bold tracking-tight truncate">
-          System Settings
-        </h2>
+        <h2 className="truncate text-xl font-bold tracking-tight sm:text-2xl">System Settings</h2>
         <p className="text-muted-foreground text-sm sm:text-base">
           Manage system configuration and preferences
         </p>
@@ -791,7 +777,7 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
               <CardTitle className="text-lg">Branches</CardTitle>
             </div>
             <Button size="sm" onClick={() => setCreateBranchOpen(true)}>
-              <Plus className="h-4 w-4 mr-1" />
+              <Plus className="mr-1 h-4 w-4" />
               Create Branch
             </Button>
           </div>
@@ -801,45 +787,44 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
         </CardHeader>
         <CardContent>
           {branches.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-muted-foreground text-sm">
               {branchesListUnavailable
-                ? "List could not be loaded from the server. Use “Retry loading” on the banner at the top, or try again in a minute."
-                : "No branches yet. Tap “Create Branch” above to add your first location."}
+                ? 'List could not be loaded from the server. Use “Retry loading” on the banner at the top, or try again in a minute.'
+                : 'No branches yet. Tap “Create Branch” above to add your first location.'}
             </p>
           ) : (
             <div className="space-y-2">
-              {branches.map((b) => (
+              {branches.map(b => (
                 <div
                   key={b.id}
-                  className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between p-3 rounded-lg border min-w-0"
+                  className="flex min-w-0 flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between"
                 >
-                  <p className="font-medium truncate min-w-0">{b.name}</p>
+                  <p className="min-w-0 truncate font-medium">{b.name}</p>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="shrink-0 w-full sm:w-auto"
+                    className="w-full shrink-0 sm:w-auto"
                     onClick={() => {
                       setBranchForm({
                         name: b.name,
-                        location: b.location || "",
-                        timezone: b.timezone || "Asia/Kolkata",
-                        logoUrl: b.logoUrl || "",
-                        phone: b.phone || "",
-                        googleReviewUrl: b.googleReviewUrl || "",
-                        pincode: b.pincode || "",
-                        directorsEmail: b.directorsEmail || "",
+                        location: b.location || '',
+                        timezone: b.timezone || 'Asia/Kolkata',
+                        logoUrl: b.logoUrl || '',
+                        phone: b.phone || '',
+                        googleReviewUrl: b.googleReviewUrl || '',
+                        pincode: b.pincode || '',
+                        directorsEmail: b.directorsEmail || '',
                         showTotalAmountToCustomers:
-                          typeof (b as any).showTotalAmountToCustomers === "boolean"
+                          typeof (b as any).showTotalAmountToCustomers === 'boolean'
                             ? (b as any).showTotalAmountToCustomers
                             : true,
                         enableNewOrderRinging:
-                          typeof (b as any).enableNewOrderRinging === "boolean"
+                          typeof (b as any).enableNewOrderRinging === 'boolean'
                             ? (b as any).enableNewOrderRinging
                             : true,
-                        newOrderSoundPreset:
-                          (b as any).newOrderSoundPreset || "ring",
+                        newOrderSoundPreset: (b as any).newOrderSoundPreset || 'ring',
                         newOrderSoundVolume:
-                          typeof (b as any).newOrderSoundVolume === "number"
+                          typeof (b as any).newOrderSoundVolume === 'number'
                             ? (b as any).newOrderSoundVolume
                             : 1,
                       });
@@ -863,21 +848,17 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
           <CardDescription>
             {branch
               ? `Editing: ${branch.name}`
-              : "Select a branch above to edit its settings, then save."}
+              : 'Select a branch above to edit its settings, then save.'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4">
             <div className="grid gap-2">
-              <Label>
-                Restaurant Name (shown on Salary Slip &amp; Certificates)
-              </Label>
+              <Label>Restaurant Name (shown on Salary Slip &amp; Certificates)</Label>
               <Input
                 placeholder="Enter restaurant / company name"
-                value={branchForm.name ?? ""}
-                onChange={(e) =>
-                  setBranchForm((prev) => ({ ...prev, name: e.target.value }))
-                }
+                value={branchForm.name ?? ''}
+                onChange={e => setBranchForm(prev => ({ ...prev, name: e.target.value }))}
               />
             </div>
             <div className="grid gap-2">
@@ -885,8 +866,8 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
               <Input
                 placeholder="Enter location"
                 value={branchForm.location}
-                onChange={(e) =>
-                  setBranchForm((prev) => ({
+                onChange={e =>
+                  setBranchForm(prev => ({
                     ...prev,
                     location: e.target.value,
                   }))
@@ -897,9 +878,7 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
               <Label>Timezone</Label>
               <Select
                 value={branchForm.timezone}
-                onValueChange={(value) =>
-                  setBranchForm((prev) => ({ ...prev, timezone: value }))
-                }
+                onValueChange={value => setBranchForm(prev => ({ ...prev, timezone: value }))}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select timezone" />
@@ -911,16 +890,14 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label>
-                Contact Phone (for Call / WhatsApp on customer menu)
-              </Label>
+              <Label>Contact Phone (for Call / WhatsApp on customer menu)</Label>
               <Input
                 placeholder="10-digit number"
                 value={branchForm.phone}
-                onChange={(e) =>
-                  setBranchForm((prev) => ({
+                onChange={e =>
+                  setBranchForm(prev => ({
                     ...prev,
-                    phone: e.target.value.replace(/\D/g, "").slice(0, 10),
+                    phone: e.target.value.replace(/\D/g, '').slice(0, 10),
                   }))
                 }
               />
@@ -930,8 +907,8 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
               <Input
                 placeholder="Enter logo URL"
                 value={branchForm.logoUrl}
-                onChange={(e) =>
-                  setBranchForm((prev) => ({
+                onChange={e =>
+                  setBranchForm(prev => ({
                     ...prev,
                     logoUrl: e.target.value,
                   }))
@@ -943,45 +920,40 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
               <Input
                 placeholder="e.g. 110049"
                 value={branchForm.pincode}
-                onChange={(e) =>
-                  setBranchForm((prev) => ({
+                onChange={e =>
+                  setBranchForm(prev => ({
                     ...prev,
-                    pincode: e.target.value.replace(/\D/g, "").slice(0, 6),
+                    pincode: e.target.value.replace(/\D/g, '').slice(0, 6),
                   }))
                 }
               />
             </div>
             <div className="grid gap-2">
               <Label>Directors Email (salary slip copies)</Label>
-              <p className="text-xs text-muted-foreground">
-                Each director must verify their email. To remove, a confirmation
-                email is sent—they are removed only when they click
-                &quot;Yes&quot; in that email.
+              <p className="text-muted-foreground text-xs">
+                Each director must verify their email. To remove, a confirmation email is sent—they
+                are removed only when they click &quot;Yes&quot; in that email.
               </p>
               {!branchId ? (
-                <p className="text-sm text-amber-700">
-                  Select a branch above to manage directors.
-                </p>
+                <p className="text-sm text-amber-700">Select a branch above to manage directors.</p>
               ) : (
                 <>
                   <div className="space-y-2">
-                    {directorsData?.verified?.map((email) => (
+                    {directorsData?.verified?.map(email => (
                       <div
                         key={email}
-                        className="flex flex-wrap items-center gap-2 p-2 rounded-lg border bg-white"
+                        className="flex flex-wrap items-center gap-2 rounded-lg border bg-white p-2"
                       >
-                        <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <span className="font-medium truncate flex-1 min-w-0">
-                          {email}
-                        </span>
-                        <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 shrink-0">
+                        <Mail className="text-muted-foreground h-4 w-4 shrink-0" />
+                        <span className="min-w-0 flex-1 truncate font-medium">{email}</span>
+                        <Badge className="shrink-0 border-emerald-200 bg-emerald-100 text-emerald-800">
                           Verified
                         </Badge>
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="h-8 text-red-600 hover:text-red-700 hover:bg-red-50 shrink-0"
+                          className="h-8 shrink-0 text-red-600 hover:bg-red-50 hover:text-red-700"
                           disabled={sendingRemove === email}
                           onClick={async () => {
                             setSendingRemove(email);
@@ -989,88 +961,84 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
                               const res = await fetch(
                                 `${apiBase}/branches/${branchId}/directors/request-remove`,
                                 {
-                                  method: "POST",
+                                  method: 'POST',
                                   headers: {
-                                    "Content-Type": "application/json",
+                                    'Content-Type': 'application/json',
                                     Authorization: `Bearer ${token}`,
                                   },
                                   body: JSON.stringify({ email }),
-                                },
+                                }
                               );
                               const data = await res.json().catch(() => ({}));
                               if (res.ok) {
                                 toast({
-                                  title: "Email sent",
+                                  title: 'Email sent',
                                   description:
-                                    "Director will receive a link to confirm removal. They are removed only after they click Yes.",
+                                    'Director will receive a link to confirm removal. They are removed only after they click Yes.',
                                 });
                                 await loadDirectors();
                               } else {
                                 toast({
-                                  title: "Error",
+                                  title: 'Error',
                                   description:
                                     (data as { message?: string }).message ||
-                                    "Failed to send removal email",
-                                  variant: "destructive",
+                                    'Failed to send removal email',
+                                  variant: 'destructive',
                                 });
                               }
                             } catch {
                               toast({
-                                title: "Error",
-                                description: "Failed to send removal email",
-                                variant: "destructive",
+                                title: 'Error',
+                                description: 'Failed to send removal email',
+                                variant: 'destructive',
                               });
                             } finally {
                               setSendingRemove(null);
                             }
                           }}
                         >
-                          {sendingRemove === email ? "Sending…" : "Remove"}
+                          {sendingRemove === email ? 'Sending…' : 'Remove'}
                         </Button>
                       </div>
                     ))}
-                    {directorsData?.pendingVerification?.map((p) => (
+                    {directorsData?.pendingVerification?.map(p => (
                       <div
                         key={p.email}
-                        className="flex flex-wrap items-center gap-2 p-2 rounded-lg border bg-amber-50/50"
+                        className="flex flex-wrap items-center gap-2 rounded-lg border bg-amber-50/50 p-2"
                       >
-                        <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <span className="font-medium truncate flex-1 min-w-0">
-                          {p.email}
-                        </span>
-                        <Badge className="bg-amber-100 text-amber-800 border-amber-200 shrink-0">
+                        <Mail className="text-muted-foreground h-4 w-4 shrink-0" />
+                        <span className="min-w-0 flex-1 truncate font-medium">{p.email}</span>
+                        <Badge className="shrink-0 border-amber-200 bg-amber-100 text-amber-800">
                           Pending verification
                         </Badge>
                       </div>
                     ))}
-                    {directorsData?.pendingRemoval?.map((p) => (
+                    {directorsData?.pendingRemoval?.map(p => (
                       <div
                         key={p.email}
-                        className="flex flex-wrap items-center gap-2 p-2 rounded-lg border bg-slate-50"
+                        className="flex flex-wrap items-center gap-2 rounded-lg border bg-slate-50 p-2"
                       >
-                        <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <span className="font-medium truncate flex-1 min-w-0">
-                          {p.email}
-                        </span>
+                        <Mail className="text-muted-foreground h-4 w-4 shrink-0" />
+                        <span className="min-w-0 flex-1 truncate font-medium">{p.email}</span>
                         <Badge variant="secondary" className="shrink-0">
                           Removal requested – waiting for director to confirm
                         </Badge>
                       </div>
                     ))}
                   </div>
-                  <div className="flex flex-col sm:flex-row gap-2 pt-2">
+                  <div className="flex flex-col gap-2 pt-2 sm:flex-row">
                     <Input
                       type="email"
                       placeholder="Type email(s) and tap + Add (comma/space separated)"
                       value={newDirectorEmail}
-                      onChange={(e) => setNewDirectorEmail(e.target.value)}
-                      className="flex-1 min-w-0"
+                      onChange={e => setNewDirectorEmail(e.target.value)}
+                      className="min-w-0 flex-1"
                     />
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-10 gap-1 text-emerald-600 border-emerald-200 hover:bg-emerald-50 shrink-0 min-w-[92px]"
+                      className="h-10 min-w-[92px] shrink-0 gap-1 border-emerald-200 text-emerald-600 hover:bg-emerald-50"
                       disabled={sendingVerify || !newDirectorEmail.trim() || !branchId}
                       onClick={async () => {
                         const raw = newDirectorEmail.trim();
@@ -1079,70 +1047,70 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
                           new Set(
                             raw
                               .split(/[,\s]+/g)
-                              .map((x) => x.trim())
-                              .filter(Boolean),
-                          ),
+                              .map(x => x.trim())
+                              .filter(Boolean)
+                          )
                         );
                         if (emails.length === 0) return;
                         setSendingVerify(true);
                         try {
                           const results = await Promise.all(
-                            emails.map(async (email) => {
+                            emails.map(async email => {
                               const res = await fetch(
                                 `${apiBase}/branches/${branchId}/directors/request-verify`,
                                 {
-                                  method: "POST",
+                                  method: 'POST',
                                   headers: {
-                                    "Content-Type": "application/json",
+                                    'Content-Type': 'application/json',
                                     Authorization: `Bearer ${token}`,
                                   },
                                   body: JSON.stringify({ email }),
-                                },
+                                }
                               );
                               const data = await res.json().catch(() => ({}));
                               return { email, ok: res.ok, message: (data as any)?.message };
-                            }),
+                            })
                           );
-                          const okCount = results.filter((r) => r.ok).length;
-                          const fail = results.filter((r) => !r.ok);
+                          const okCount = results.filter(r => r.ok).length;
+                          const fail = results.filter(r => !r.ok);
                           if (okCount > 0) {
                             toast({
                               title:
                                 okCount === 1
-                                  ? "Verification email sent"
-                                  : "Verification emails sent",
+                                  ? 'Verification email sent'
+                                  : 'Verification emails sent',
                               description:
                                 okCount === 1
-                                  ? "Director must click the link in the email to be added."
+                                  ? 'Director must click the link in the email to be added.'
                                   : `${okCount} director(s) will receive a verification email. They must click the link to be added.`,
                             });
                           }
                           if (fail.length > 0) {
                             toast({
-                              title: "Some emails failed",
+                              title: 'Some emails failed',
                               description:
                                 fail
                                   .slice(0, 3)
-                                  .map((f) => `${f.email}: ${f.message || "Failed"}`)
-                                  .join(" | ") +
-                                (fail.length > 3 ? ` | +${fail.length - 3} more` : ""),
-                              variant: "destructive",
+                                  .map(f => `${f.email}: ${f.message || 'Failed'}`)
+                                  .join(' | ') +
+                                (fail.length > 3 ? ` | +${fail.length - 3} more` : ''),
+                              variant: 'destructive',
                             });
                           }
-                          setNewDirectorEmail("");
+                          setNewDirectorEmail('');
                           await loadDirectors();
                         } catch {
                           toast({
-                            title: "Error",
-                            description: "Failed to send verification email",
-                            variant: "destructive",
+                            title: 'Error',
+                            description: 'Failed to send verification email',
+                            variant: 'destructive',
                           });
                         } finally {
                           setSendingVerify(false);
                         }
                       }}
                     >
-                      {sendingVerify ? "Adding…" : "+ Add"}
+                      {sendingVerify ? 'Adding…' : '+ Add'}
                     </Button>
                   </div>
                 </>
@@ -1153,42 +1121,42 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
               <Input
                 placeholder="https://..."
                 value={branchForm.googleReviewUrl}
-                onChange={(e) =>
-                  setBranchForm((prev) => ({
+                onChange={e =>
+                  setBranchForm(prev => ({
                     ...prev,
                     googleReviewUrl: e.target.value,
                   }))
                 }
               />
             </div>
-            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+            <div className="flex items-center justify-between rounded-lg bg-slate-50 p-3">
               <div className="space-y-0.5 pr-4">
                 <Label className="text-sm">Show total amount to customers</Label>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-muted-foreground text-xs">
                   Controls whether the customer menu/checkout displays the order total
                 </p>
               </div>
               <Switch
                 checked={!!branchForm.showTotalAmountToCustomers}
-                onCheckedChange={(checked) =>
-                  setBranchForm((prev) => ({
+                onCheckedChange={checked =>
+                  setBranchForm(prev => ({
                     ...prev,
                     showTotalAmountToCustomers: !!checked,
                   }))
                 }
               />
             </div>
-            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+            <div className="flex items-center justify-between rounded-lg bg-slate-50 p-3">
               <div className="space-y-0.5 pr-4">
                 <Label className="text-sm">New order ringing</Label>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-muted-foreground text-xs">
                   Controls whether employee devices play sound for new orders
                 </p>
               </div>
               <Switch
                 checked={branchForm.enableNewOrderRinging !== false}
-                onCheckedChange={(checked) =>
-                  setBranchForm((prev) => ({
+                onCheckedChange={checked =>
+                  setBranchForm(prev => ({
                     ...prev,
                     enableNewOrderRinging: !!checked,
                   }))
@@ -1197,16 +1165,16 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
             </div>
             <div className="grid gap-2">
               <Label className="text-sm">New order sound (global)</Label>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-muted-foreground text-xs">
                 This sound is applied to all employee devices (employees cannot change it).
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="grid gap-1">
                   <Label className="text-xs text-slate-700">Sound preset</Label>
                   <Select
-                    value={branchForm.newOrderSoundPreset || "ring"}
-                    onValueChange={(v) =>
-                      setBranchForm((prev) => ({
+                    value={branchForm.newOrderSoundPreset || 'ring'}
+                    onValueChange={v =>
+                      setBranchForm(prev => ({
                         ...prev,
                         newOrderSoundPreset: v as any,
                       }))
@@ -1234,8 +1202,8 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
                       max={1}
                       step={0.05}
                       value={branchForm.newOrderSoundVolume ?? 1}
-                      onChange={(e) =>
-                        setBranchForm((prev) => ({
+                      onChange={e =>
+                        setBranchForm(prev => ({
                           ...prev,
                           newOrderSoundVolume: Number(e.target.value),
                         }))
@@ -1247,25 +1215,21 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
               </div>
             </div>
             {branchForm.logoUrl && (
-              <div className="flex items-center gap-4 p-3 bg-slate-50 rounded-lg">
+              <div className="flex items-center gap-4 rounded-lg bg-slate-50 p-3">
                 <img
                   src={branchForm.logoUrl}
                   alt="Logo Preview"
-                  className="h-16 w-16 object-contain rounded bg-white"
-                  onError={(e) => {
-                    e.currentTarget.style.display = "none";
-                    e.currentTarget.nextElementSibling?.classList.remove(
-                      "hidden",
-                    );
+                  className="h-16 w-16 rounded bg-white object-contain"
+                  onError={e => {
+                    e.currentTarget.style.display = 'none';
+                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
                   }}
                 />
-                <span className="text-sm text-muted-foreground hidden">
-                  Failed to load logo
-                </span>
+                <span className="text-muted-foreground hidden text-sm">Failed to load logo</span>
                 <div>
                   <p className="text-sm font-medium">Logo Preview</p>
                   <p
-                    className="text-xs text-muted-foreground truncate max-w-[300px]"
+                    className="text-muted-foreground max-w-[300px] truncate text-xs"
                     title={branchForm.logoUrl}
                   >
                     {branchForm.logoUrl}
@@ -1277,20 +1241,18 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
           <Button
             onClick={async () => {
               await handleUpdateBranch();
-              if (branchForm.logoUrl)
-                localStorage.setItem("branch_logo_url", branchForm.logoUrl);
-              if (branchForm.name)
-                localStorage.setItem("branch_name", branchForm.name);
+              if (branchForm.logoUrl) localStorage.setItem('branch_logo_url', branchForm.logoUrl);
+              if (branchForm.name) localStorage.setItem('branch_name', branchForm.name);
             }}
             disabled={savingBranch || !branch?.id}
           >
             {savingBranch ? (
               <>
-                <span className="inline-block h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />{" "}
+                <span className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />{' '}
                 Saving...
               </>
             ) : (
-              "Save Branch Settings"
+              'Save Branch Settings'
             )}
           </Button>
         </CardContent>
@@ -1302,8 +1264,8 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
             <CardTitle className="text-lg">Dashboard password</CardTitle>
           </div>
           <CardDescription>
-            Change your admin dashboard login password. You will need to sign in
-            again after changing.
+            Change your admin dashboard login password. You will need to sign in again after
+            changing.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -1314,7 +1276,7 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
               type="password"
               placeholder="Enter current password"
               value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
+              onChange={e => setCurrentPassword(e.target.value)}
               autoComplete="current-password"
             />
           </div>
@@ -1325,7 +1287,7 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
               type="password"
               placeholder="Min 6 characters"
               value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
+              onChange={e => setNewPassword(e.target.value)}
               autoComplete="new-password"
             />
           </div>
@@ -1336,48 +1298,43 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
               type="password"
               placeholder="Re-enter new password"
               value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
+              onChange={e => setConfirmPassword(e.target.value)}
               autoComplete="new-password"
             />
           </div>
           <Button
-            disabled={
-              changingPassword ||
-              !currentPassword ||
-              !newPassword ||
-              !confirmPassword
-            }
+            disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword}
             onClick={async () => {
               if (newPassword.length < 6) {
                 toast({
-                  title: "Invalid password",
-                  description: "New password must be at least 6 characters",
-                  variant: "destructive",
+                  title: 'Invalid password',
+                  description: 'New password must be at least 6 characters',
+                  variant: 'destructive',
                 });
                 return;
               }
               if (newPassword !== confirmPassword) {
                 toast({
                   title: "Passwords don't match",
-                  description: "New password and confirm must match",
-                  variant: "destructive",
+                  description: 'New password and confirm must match',
+                  variant: 'destructive',
                 });
                 return;
               }
               if (!token) {
                 toast({
-                  title: "Error",
-                  description: "Not signed in",
-                  variant: "destructive",
+                  title: 'Error',
+                  description: 'Not signed in',
+                  variant: 'destructive',
                 });
                 return;
               }
               setChangingPassword(true);
               try {
                 const res = await fetch(`${apiBase}/auth/change-password`, {
-                  method: "POST",
+                  method: 'POST',
                   headers: {
-                    "Content-Type": "application/json",
+                    'Content-Type': 'application/json',
                     Authorization: `Bearer ${token}`,
                   },
                   body: JSON.stringify({ currentPassword, newPassword }),
@@ -1385,26 +1342,25 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
                 const data = await res.json().catch(() => ({}));
                 if (res.ok) {
                   toast({
-                    title: "Password updated",
-                    description: "Use your new password next time you sign in.",
+                    title: 'Password updated',
+                    description: 'Use your new password next time you sign in.',
                   });
-                  setCurrentPassword("");
-                  setNewPassword("");
-                  setConfirmPassword("");
+                  setCurrentPassword('');
+                  setNewPassword('');
+                  setConfirmPassword('');
                 } else {
                   toast({
-                    title: "Error",
+                    title: 'Error',
                     description:
-                      (data as { message?: string }).message ||
-                      "Failed to update password",
-                    variant: "destructive",
+                      (data as { message?: string }).message || 'Failed to update password',
+                    variant: 'destructive',
                   });
                 }
               } catch {
                 toast({
-                  title: "Error",
-                  description: "Failed to update password",
-                  variant: "destructive",
+                  title: 'Error',
+                  description: 'Failed to update password',
+                  variant: 'destructive',
                 });
               } finally {
                 setChangingPassword(false);
@@ -1414,13 +1370,13 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
             {changingPassword ? (
               <>
                 <span
-                  className="inline-block h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2"
+                  className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
                   aria-hidden
-                />{" "}
+                />{' '}
                 Updating…
               </>
             ) : (
-              "Update password"
+              'Update password'
             )}
           </Button>
         </CardContent>
@@ -1433,41 +1389,35 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className="flex items-center justify-between rounded-lg bg-slate-50 p-3">
               <div className="space-y-0.5">
                 <Label className="text-sm">Order Notifications</Label>
-                <p className="text-xs text-muted-foreground">
-                  Show alerts for new orders
-                </p>
+                <p className="text-muted-foreground text-xs">Show alerts for new orders</p>
               </div>
               <Switch
                 checked={orderNotificationsEnabled}
-                onCheckedChange={(v) => setOrderNotificationsEnabled(!!v)}
+                onCheckedChange={v => setOrderNotificationsEnabled(!!v)}
               />
             </div>
-            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+            <div className="flex items-center justify-between rounded-lg bg-slate-50 p-3">
               <div className="space-y-0.5">
                 <Label className="text-sm">Sound Alerts</Label>
-                <p className="text-xs text-muted-foreground">
-                  Play sound on new orders
-                </p>
+                <p className="text-muted-foreground text-xs">Play sound on new orders</p>
               </div>
               <Switch
                 checked={soundAlertsEnabled}
-                onCheckedChange={(v) => setSoundAlertsEnabled(!!v)}
+                onCheckedChange={v => setSoundAlertsEnabled(!!v)}
               />
             </div>
-            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+            <div className="flex items-center justify-between rounded-lg bg-slate-50 p-3">
               <div className="space-y-0.5">
                 <Label className="text-sm">Auto-refresh</Label>
-                <p className="text-xs text-muted-foreground">
-                  Auto refresh data every 10s
-                </p>
+                <p className="text-muted-foreground text-xs">Auto refresh data every 10s</p>
               </div>
               <Switch
                 checked={autoRefreshEnabled}
-                onCheckedChange={(v) => setAutoRefreshEnabled(!!v)}
+                onCheckedChange={v => setAutoRefreshEnabled(!!v)}
               />
             </div>
           </div>
@@ -1478,34 +1428,27 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
               setSavingSystemPrefs(true);
               try {
                 window.localStorage.setItem(
-                  "dm_admin_order_notifications",
-                  String(!!orderNotificationsEnabled),
+                  'dm_admin_order_notifications',
+                  String(!!orderNotificationsEnabled)
                 );
-                window.localStorage.setItem(
-                  "dm_admin_sound_alerts",
-                  String(!!soundAlertsEnabled),
-                );
-                window.localStorage.setItem(
-                  "dm_admin_auto_refresh",
-                  String(!!autoRefreshEnabled),
-                );
+                window.localStorage.setItem('dm_admin_sound_alerts', String(!!soundAlertsEnabled));
+                window.localStorage.setItem('dm_admin_auto_refresh', String(!!autoRefreshEnabled));
                 toast({
-                  title: "Saved",
-                  description: "System preferences updated for this browser.",
+                  title: 'Saved',
+                  description: 'System preferences updated for this browser.',
                 });
               } catch {
                 toast({
-                  title: "Could not save",
-                  description:
-                    "Your browser blocked storage. Try allowing site storage and retry.",
-                  variant: "destructive",
+                  title: 'Could not save',
+                  description: 'Your browser blocked storage. Try allowing site storage and retry.',
+                  variant: 'destructive',
                 });
               } finally {
                 setSavingSystemPrefs(false);
               }
             }}
           >
-            {savingSystemPrefs ? "Saving..." : "Save System Settings"}
+            {savingSystemPrefs ? 'Saving...' : 'Save System Settings'}
           </Button>
         </CardContent>
       </Card>
@@ -1515,51 +1458,36 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
             <AlertCircle className="h-5 w-5 text-amber-600" />
             <CardTitle className="text-lg">Error Logs</CardTitle>
             {errorLogs.unresolvedCount > 0 && (
-              <Badge variant="destructive">
-                {errorLogs.unresolvedCount} unresolved
-              </Badge>
+              <Badge variant="destructive">{errorLogs.unresolvedCount} unresolved</Badge>
             )}
           </div>
           <CardDescription>
-            API failures, database errors, and suggested fixes. Resolve in Error
-            Logs API.
+            API failures, database errors, and suggested fixes. Resolve in Error Logs API.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <ScrollArea className="h-[200px]">
             {errorLogs.logs.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No errors logged yet.
-              </p>
+              <p className="text-muted-foreground text-sm">No errors logged yet.</p>
             ) : (
               <div className="space-y-2">
-                {errorLogs.logs.slice(0, 8).map((log) => (
-                  <div key={log.id} className="p-3 rounded-lg border text-sm">
+                {errorLogs.logs.slice(0, 8).map(log => (
+                  <div key={log.id} className="rounded-lg border p-3 text-sm">
                     <div className="flex items-center justify-between gap-2">
-                      <Badge
-                        variant={
-                          log.status === "RESOLVED"
-                            ? "secondary"
-                            : "destructive"
-                        }
-                      >
+                      <Badge variant={log.status === 'RESOLVED' ? 'secondary' : 'destructive'}>
                         {log.status}
                       </Badge>
                     </div>
-                    <p className="text-muted-foreground truncate">
-                      {log.errorMessage}
-                    </p>
+                    <p className="text-muted-foreground truncate">{log.errorMessage}</p>
                     {log.apiEndpoint && (
-                      <p className="text-xs text-muted-foreground">
-                        {log.apiEndpoint}
-                      </p>
+                      <p className="text-muted-foreground text-xs">{log.apiEndpoint}</p>
                     )}
                     {(log.metadata as any)?.suggestedFix && (
-                      <p className="text-xs text-emerald-700 mt-1">
+                      <p className="mt-1 text-xs text-emerald-700">
                         Fix: {(log.metadata as any).suggestedFix}
                       </p>
                     )}
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-muted-foreground text-xs">
                       {new Date(log.createdAt).toLocaleString()}
                     </p>
                   </div>
@@ -1580,23 +1508,19 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
           <ScrollArea className="h-[300px]">
             <div className="space-y-3">
               {notifications.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">
-                  No notifications yet
-                </p>
+                <p className="text-muted-foreground py-8 text-center">No notifications yet</p>
               ) : (
                 notifications.map((notif, index) => (
                   <div
-                    key={
-                      (notif as any).id ?? `notif-${notif.createdAt}-${index}`
-                    }
-                    className="flex items-start gap-3 p-3 rounded-lg bg-slate-50"
+                    key={(notif as any).id ?? `notif-${notif.createdAt}-${index}`}
+                    className="flex items-start gap-3 rounded-lg bg-slate-50 p-3"
                   >
-                    <div className="p-1.5 bg-blue-100 rounded-full">
+                    <div className="rounded-full bg-blue-100 p-1.5">
                       <Bell className="h-3 w-3 text-blue-600" />
                     </div>
                     <div className="flex-1">
                       <p className="text-sm font-medium">{notif.message}</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-muted-foreground text-xs">
                         {new Date(notif.createdAt).toLocaleString()}
                       </p>
                     </div>
@@ -1629,19 +1553,19 @@ const AddEmployeeDialog = memo(function AddEmployeeDialog({
 }) {
   const { toast } = useToast();
   const [form, setForm] = useState<EmployeeFormState & { branchId: number }>({
-    name: "",
-    email: "",
-    employeeCode: "",
-    role: "Counter Staff",
-    status: "ACTIVE",
-    phone: "",
-    salary: "",
-    address: "",
-    pincode: "",
-    workingHoursPerDay: "8",
-    shiftStartTime: "10:00",
-    shiftEndTime: "18:00",
-    joiningDate: "",
+    name: '',
+    email: '',
+    employeeCode: '',
+    role: 'Counter Staff',
+    status: 'ACTIVE',
+    phone: '',
+    salary: '',
+    address: '',
+    pincode: '',
+    workingHoursPerDay: '8',
+    shiftStartTime: '10:00',
+    shiftEndTime: '18:00',
+    joiningDate: '',
     branchId: 0,
   });
   const [saving, setSaving] = useState(false);
@@ -1649,24 +1573,22 @@ const AddEmployeeDialog = memo(function AddEmployeeDialog({
   useEffect(() => {
     if (open && branches.length > 0) {
       const firstId = branches[0].id;
-      setForm((f) =>
-        f.branchId && branches.some((b) => b.id === f.branchId)
-          ? f
-          : { ...f, branchId: firstId },
+      setForm(f =>
+        f.branchId && branches.some(b => b.id === f.branchId) ? f : { ...f, branchId: firstId }
       );
     }
   }, [open, branches]);
   const branchId =
-    form.branchId && branches.some((b) => b.id === form.branchId)
+    form.branchId && branches.some(b => b.id === form.branchId)
       ? form.branchId
       : (branches[0]?.id ?? 0);
   const handleCreate = async () => {
     if (!token || !form.name.trim() || !form.email.trim()) return;
-    if (!branchId || !branches.some((b) => b.id === branchId)) {
+    if (!branchId || !branches.some(b => b.id === branchId)) {
       toast({
-        title: "Select branch",
-        description: "Create a branch in Settings first, then add an employee.",
-        variant: "destructive",
+        title: 'Select branch',
+        description: 'Create a branch in Settings first, then add an employee.',
+        variant: 'destructive',
       });
       if (onGoToSettings) onGoToSettings();
       return;
@@ -1674,9 +1596,9 @@ const AddEmployeeDialog = memo(function AddEmployeeDialog({
     const whpd = Number(form.workingHoursPerDay);
     if (!(whpd >= 1 && whpd <= 24)) {
       toast({
-        title: "Invalid working hours",
-        description: "Working Hours Per Day must be between 1 and 24.",
-        variant: "destructive",
+        title: 'Invalid working hours',
+        description: 'Working Hours Per Day must be between 1 and 24.',
+        variant: 'destructive',
       });
       return;
     }
@@ -1688,26 +1610,19 @@ const AddEmployeeDialog = memo(function AddEmployeeDialog({
         branchId,
       };
       if (form.role?.trim()) payload.role = form.role.trim();
-      if (form.phone?.toString().trim())
-        payload.phone = form.phone.toString().trim();
-      if (form.salary !== "" && Number(form.salary) > 0)
-        payload.salary = Number(form.salary);
-      if (form.address?.toString().trim())
-        payload.address = form.address.toString().trim();
-      if (form.pincode?.toString().trim())
-        payload.pincode = form.pincode.toString().trim();
+      if (form.phone?.toString().trim()) payload.phone = form.phone.toString().trim();
+      if (form.salary !== '' && Number(form.salary) > 0) payload.salary = Number(form.salary);
+      if (form.address?.toString().trim()) payload.address = form.address.toString().trim();
+      if (form.pincode?.toString().trim()) payload.pincode = form.pincode.toString().trim();
       const whpd = Number(form.workingHoursPerDay);
       if (whpd >= 1 && whpd <= 24) payload.workingHoursPerDay = whpd;
-      if (form.shiftStartTime?.trim())
-        payload.shiftStartTime = form.shiftStartTime.trim();
-      if (form.shiftEndTime?.trim())
-        payload.shiftEndTime = form.shiftEndTime.trim();
-      if (form.joiningDate?.trim())
-        payload.joiningDate = form.joiningDate.trim();
+      if (form.shiftStartTime?.trim()) payload.shiftStartTime = form.shiftStartTime.trim();
+      if (form.shiftEndTime?.trim()) payload.shiftEndTime = form.shiftEndTime.trim();
+      if (form.joiningDate?.trim()) payload.joiningDate = form.joiningDate.trim();
       const res = await fetch(`${apiBase}/employees`, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
@@ -1715,23 +1630,23 @@ const AddEmployeeDialog = memo(function AddEmployeeDialog({
       if (res.ok) {
         const data = await res.json();
         toast({
-          title: "Success",
-          description: "Employee created. Verification email sent.",
+          title: 'Success',
+          description: 'Employee created. Verification email sent.',
         });
         setForm({
-          name: "",
-          email: "",
-          employeeCode: "",
-          role: "Counter Staff",
-          status: "ACTIVE",
-          phone: "",
-          salary: "",
-          address: "",
-          pincode: "",
-          workingHoursPerDay: "8",
-          shiftStartTime: "10:00",
-          shiftEndTime: "18:00",
-          joiningDate: "",
+          name: '',
+          email: '',
+          employeeCode: '',
+          role: 'Counter Staff',
+          status: 'ACTIVE',
+          phone: '',
+          salary: '',
+          address: '',
+          pincode: '',
+          workingHoursPerDay: '8',
+          shiftStartTime: '10:00',
+          shiftEndTime: '18:00',
+          joiningDate: '',
           branchId: branches[0]?.id ?? 0,
         } as EmployeeFormState & { branchId: number });
         onOpenChange(false);
@@ -1739,24 +1654,21 @@ const AddEmployeeDialog = memo(function AddEmployeeDialog({
       } else {
         const err = await res.json().catch(() => ({}));
         toast({
-          title: "Error",
-          description:
-            (err as { message?: string }).message ||
-            "Failed to create employee",
-          variant: "destructive",
+          title: 'Error',
+          description: (err as { message?: string }).message || 'Failed to create employee',
+          variant: 'destructive',
         });
       }
     } catch (e) {
       const isNetworkError =
         e instanceof TypeError &&
-        (e.message === "Failed to fetch" ||
-          (e as Error).message?.includes("fetch"));
+        (e.message === 'Failed to fetch' || (e as Error).message?.includes('fetch'));
       toast({
-        title: "Error",
+        title: 'Error',
         description: isNetworkError
-          ? "Could not reach server. Check that the backend is running."
-          : "Failed to create employee",
-        variant: "destructive",
+          ? 'Could not reach server. Check that the backend is running.'
+          : 'Failed to create employee',
+        variant: 'destructive',
       });
     } finally {
       setSaving(false);
@@ -1777,23 +1689,17 @@ const AddEmployeeDialog = memo(function AddEmployeeDialog({
             {branches.length > 0 ? (
               <Select
                 value={
-                  branchId && branches.some((b) => b.id === branchId)
+                  branchId && branches.some(b => b.id === branchId)
                     ? String(branchId)
-                    : String(branches[0]?.id ?? "")
+                    : String(branches[0]?.id ?? '')
                 }
-                onValueChange={(v) =>
-                  setForm((f) => ({ ...f, branchId: Number(v) }))
-                }
+                onValueChange={v => setForm(f => ({ ...f, branchId: Number(v) }))}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select branch" />
                 </SelectTrigger>
-                <SelectContent
-                  position="popper"
-                  sideOffset={4}
-                  className="max-h-[280px]"
-                >
-                  {branches.map((b) => (
+                <SelectContent position="popper" sideOffset={4} className="max-h-[280px]">
+                  {branches.map(b => (
                     <SelectItem key={b.id} value={String(b.id)}>
                       {b.name}
                     </SelectItem>
@@ -1804,8 +1710,8 @@ const AddEmployeeDialog = memo(function AddEmployeeDialog({
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
                 <p className="font-medium">No branch yet</p>
                 <p className="mt-1 text-xs">
-                  Create a branch in Settings first, then you can add employees
-                  and select the branch here.
+                  Create a branch in Settings first, then you can add employees and select the
+                  branch here.
                 </p>
                 {onGoToSettings && (
                   <Button
@@ -1824,29 +1730,29 @@ const AddEmployeeDialog = memo(function AddEmployeeDialog({
           <Input
             placeholder="Full Name"
             value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
           />
           <Input
             type="email"
             placeholder="Email"
             value={form.email}
-            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+            onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
           />
           <Input
             placeholder="Role (e.g. Counter Staff, Kitchen)"
             value={form.role}
-            onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
+            onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
           />
           <Input
             placeholder="Mobile"
             value={form.phone}
-            onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+            onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
           />
           <Input
             placeholder="Salary (optional)"
             type="number"
             value={form.salary}
-            onChange={(e) => setForm((f) => ({ ...f, salary: e.target.value }))}
+            onChange={e => setForm(f => ({ ...f, salary: e.target.value }))}
           />
           <div className="grid gap-2">
             <Label>Working Hours Per Day *</Label>
@@ -1856,41 +1762,36 @@ const AddEmployeeDialog = memo(function AddEmployeeDialog({
               max={24}
               placeholder="Enter daily working hours (e.g., 8)"
               value={form.workingHoursPerDay}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, workingHoursPerDay: e.target.value }))
-              }
+              onChange={e => setForm(f => ({ ...f, workingHoursPerDay: e.target.value }))}
             />
-            <p className="text-xs text-muted-foreground">
-              Required for payroll and overtime (1–24 hours). Overtime starts
-              after this.
+            <p className="text-muted-foreground text-xs">
+              Required for payroll and overtime (1–24 hours). Overtime starts after this.
             </p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label>Shift Start Time</Label>
               <Input
                 type="time"
                 value={form.shiftStartTime}
-                onChange={(e) =>
-                  setForm((f) => ({
+                onChange={e =>
+                  setForm(f => ({
                     ...f,
-                    shiftStartTime: e.target.value || "10:00",
+                    shiftStartTime: e.target.value || '10:00',
                   }))
                 }
               />
-              <p className="text-xs text-muted-foreground">
-                Scheduled start (for late tracking)
-              </p>
+              <p className="text-muted-foreground text-xs">Scheduled start (for late tracking)</p>
             </div>
             <div className="space-y-1">
               <Label>Shift End Time</Label>
               <Input
                 type="time"
                 value={form.shiftEndTime}
-                onChange={(e) =>
-                  setForm((f) => ({
+                onChange={e =>
+                  setForm(f => ({
                     ...f,
-                    shiftEndTime: e.target.value || "18:00",
+                    shiftEndTime: e.target.value || '18:00',
                   }))
                 }
               />
@@ -1901,46 +1802,33 @@ const AddEmployeeDialog = memo(function AddEmployeeDialog({
             <Input
               type="date"
               value={form.joiningDate}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, joiningDate: e.target.value }))
-              }
-              className="w-full min-h-[44px] sm:min-h-0"
+              onChange={e => setForm(f => ({ ...f, joiningDate: e.target.value }))}
+              className="min-h-[44px] w-full sm:min-h-0"
             />
           </div>
           <Input
             placeholder="Address (optional)"
             value={form.address}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, address: e.target.value }))
-            }
+            onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
           />
           <Input
             placeholder="Pincode (optional)"
             value={form.pincode}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, pincode: e.target.value }))
-            }
+            onChange={e => setForm(f => ({ ...f, pincode: e.target.value }))}
           />
         </div>
         <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={saving}
-          >
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancel
           </Button>
-          <Button
-            onClick={handleCreate}
-            disabled={saving || branches.length === 0}
-          >
+          <Button onClick={handleCreate} disabled={saving || branches.length === 0}>
             {saving ? (
               <>
-                <span className="inline-block h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                <span className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
                 Creating...
               </>
             ) : (
-              "Create"
+              'Create'
             )}
           </Button>
         </DialogFooter>
@@ -1965,41 +1853,41 @@ const EditEmployeeDialog = memo(function EditEmployeeDialog({
 }) {
   const { toast } = useToast();
   const [form, setForm] = useState<EmployeeFormState>({
-    name: "",
-    email: "",
-    employeeCode: "",
-    role: "",
-    status: "ACTIVE",
-    phone: "",
-    salary: "",
-    address: "",
-    pincode: "",
-    workingHoursPerDay: "8",
-    shiftStartTime: "10:00",
-    shiftEndTime: "18:00",
-    joiningDate: "",
+    name: '',
+    email: '',
+    employeeCode: '',
+    role: '',
+    status: 'ACTIVE',
+    phone: '',
+    salary: '',
+    address: '',
+    pincode: '',
+    workingHoursPerDay: '8',
+    shiftStartTime: '10:00',
+    shiftEndTime: '18:00',
+    joiningDate: '',
   });
   const [saving, setSaving] = useState(false);
   useEffect(() => {
     if (open && employee) {
       const joinDate = employee.joiningDate
-        ? typeof employee.joiningDate === "string"
+        ? typeof employee.joiningDate === 'string'
           ? employee.joiningDate.slice(0, 10)
-          : ""
-        : "";
+          : ''
+        : '';
       setForm({
         name: employee.name,
         email: employee.email,
         employeeCode: employee.employeeCode,
-        role: employee.role ?? "",
+        role: employee.role ?? '',
         status: employee.status,
-        phone: employee.phone ?? "",
-        salary: employee.salary ?? "",
-        address: employee.address ?? "",
-        pincode: employee.pincode ?? "",
+        phone: employee.phone ?? '',
+        salary: employee.salary ?? '',
+        address: employee.address ?? '',
+        pincode: employee.pincode ?? '',
         workingHoursPerDay: employee.workingHoursPerDay ?? 8,
-        shiftStartTime: employee.shiftStartTime ?? "10:00",
-        shiftEndTime: employee.shiftEndTime ?? "18:00",
+        shiftStartTime: employee.shiftStartTime ?? '10:00',
+        shiftEndTime: employee.shiftEndTime ?? '18:00',
         joiningDate: joinDate,
       });
     }
@@ -2009,14 +1897,12 @@ const EditEmployeeDialog = memo(function EditEmployeeDialog({
     setSaving(true);
     try {
       const payload: Record<string, unknown> = {
-        name: form.name?.trim() ?? "",
-        email: form.email?.trim() ?? "",
+        name: form.name?.trim() ?? '',
+        email: form.email?.trim() ?? '',
         role: form.role?.trim() || null,
         phone: form.phone?.toString().trim() || null,
         salary:
-          form.salary !== "" && form.salary !== undefined
-            ? Number(form.salary) || null
-            : null,
+          form.salary !== '' && form.salary !== undefined ? Number(form.salary) || null : null,
         address: form.address?.toString().trim() || null,
         pincode: form.pincode?.toString().trim() || null,
         status: form.status,
@@ -2025,44 +1911,41 @@ const EditEmployeeDialog = memo(function EditEmployeeDialog({
       if (whpd >= 1 && whpd <= 24) payload.workingHoursPerDay = whpd;
       if (form.shiftStartTime !== undefined)
         payload.shiftStartTime = form.shiftStartTime?.trim() || null;
-      if (form.shiftEndTime !== undefined)
-        payload.shiftEndTime = form.shiftEndTime?.trim() || null;
-      if (form.joiningDate !== undefined)
-        payload.joiningDate = form.joiningDate?.trim() || null;
+      if (form.shiftEndTime !== undefined) payload.shiftEndTime = form.shiftEndTime?.trim() || null;
+      if (form.joiningDate !== undefined) payload.joiningDate = form.joiningDate?.trim() || null;
       const res = await fetch(`${apiBase}/employees/${employee.id}`, {
-        method: "PATCH",
+        method: 'PATCH',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
       });
       if (res.ok) {
         const updated = await res.json();
-        toast({ title: "Success", description: "Employee updated" });
+        toast({ title: 'Success', description: 'Employee updated' });
         onOpenChange(false);
         onSaved(updated);
       } else {
         const err = await res.json().catch(() => ({}));
         toast({
-          title: "Error",
-          description:
-            (err as { message?: string }).message || "Failed to update",
-          variant: "destructive",
+          title: 'Error',
+          description: (err as { message?: string }).message || 'Failed to update',
+          variant: 'destructive',
         });
       }
     } catch {
       toast({
-        title: "Error",
-        description: "Failed to update employee",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to update employee',
+        variant: 'destructive',
       });
     } finally {
       setSaving(false);
     }
   };
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onOpenChange(false)}>
+    <Dialog open={open} onOpenChange={o => !o && onOpenChange(false)}>
       <DialogContent aria-describedby="edit-employee-desc">
         <DialogHeader>
           <DialogTitle>Edit Employee</DialogTitle>
@@ -2074,29 +1957,29 @@ const EditEmployeeDialog = memo(function EditEmployeeDialog({
           <Input
             placeholder="Full Name"
             value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
           />
           <Input
             type="email"
             placeholder="Email"
             value={form.email}
-            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+            onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
           />
           <Input
             placeholder="Role (e.g. Counter Staff, Kitchen)"
             value={form.role}
-            onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
+            onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
           />
           <Input
             placeholder="Mobile"
             value={form.phone}
-            onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+            onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
           />
           <Input
             placeholder="Salary"
             type="number"
             value={form.salary}
-            onChange={(e) => setForm((f) => ({ ...f, salary: e.target.value }))}
+            onChange={e => setForm(f => ({ ...f, salary: e.target.value }))}
           />
           <div className="grid gap-2">
             <Label>Working Hours Per Day</Label>
@@ -2106,21 +1989,19 @@ const EditEmployeeDialog = memo(function EditEmployeeDialog({
               max={24}
               placeholder="Enter daily working hours (e.g., 8)"
               value={form.workingHoursPerDay}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, workingHoursPerDay: e.target.value }))
-              }
+              onChange={e => setForm(f => ({ ...f, workingHoursPerDay: e.target.value }))}
             />
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label>Shift Start Time</Label>
               <Input
                 type="time"
                 value={form.shiftStartTime}
-                onChange={(e) =>
-                  setForm((f) => ({
+                onChange={e =>
+                  setForm(f => ({
                     ...f,
-                    shiftStartTime: e.target.value || "10:00",
+                    shiftStartTime: e.target.value || '10:00',
                   }))
                 }
               />
@@ -2130,10 +2011,10 @@ const EditEmployeeDialog = memo(function EditEmployeeDialog({
               <Input
                 type="time"
                 value={form.shiftEndTime}
-                onChange={(e) =>
-                  setForm((f) => ({
+                onChange={e =>
+                  setForm(f => ({
                     ...f,
-                    shiftEndTime: e.target.value || "18:00",
+                    shiftEndTime: e.target.value || '18:00',
                   }))
                 }
               />
@@ -2144,61 +2025,47 @@ const EditEmployeeDialog = memo(function EditEmployeeDialog({
             <Input
               type="date"
               value={form.joiningDate}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, joiningDate: e.target.value }))
-              }
-              className="w-full min-h-[44px] sm:min-h-0"
+              onChange={e => setForm(f => ({ ...f, joiningDate: e.target.value }))}
+              className="min-h-[44px] w-full sm:min-h-0"
             />
           </div>
           <Input
             placeholder="Address"
             value={form.address}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, address: e.target.value }))
-            }
+            onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
           />
           <Input
             placeholder="Pincode"
             value={form.pincode}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, pincode: e.target.value }))
-            }
+            onChange={e => setForm(f => ({ ...f, pincode: e.target.value }))}
           />
           <div className="space-y-2">
             <Label className="text-sm font-medium">Status</Label>
             <div className="flex gap-2">
               <Button
                 type="button"
-                variant={form.status === "ACTIVE" ? "default" : "outline"}
+                variant={form.status === 'ACTIVE' ? 'default' : 'outline'}
                 size="sm"
-                className={
-                  form.status === "ACTIVE" ? STATUS_BUTTON_ACTIVE.ACTIVE : ""
-                }
-                onClick={() => setForm((f) => ({ ...f, status: "ACTIVE" }))}
+                className={form.status === 'ACTIVE' ? STATUS_BUTTON_ACTIVE.ACTIVE : ''}
+                onClick={() => setForm(f => ({ ...f, status: 'ACTIVE' }))}
               >
                 Active
               </Button>
               <Button
                 type="button"
-                variant={form.status === "INACTIVE" ? "default" : "outline"}
+                variant={form.status === 'INACTIVE' ? 'default' : 'outline'}
                 size="sm"
-                className={
-                  form.status === "INACTIVE"
-                    ? STATUS_BUTTON_ACTIVE.INACTIVE
-                    : ""
-                }
-                onClick={() => setForm((f) => ({ ...f, status: "INACTIVE" }))}
+                className={form.status === 'INACTIVE' ? STATUS_BUTTON_ACTIVE.INACTIVE : ''}
+                onClick={() => setForm(f => ({ ...f, status: 'INACTIVE' }))}
               >
                 Inactive
               </Button>
               <Button
                 type="button"
-                variant={form.status === "LEFT" ? "default" : "outline"}
+                variant={form.status === 'LEFT' ? 'default' : 'outline'}
                 size="sm"
-                className={
-                  form.status === "LEFT" ? STATUS_BUTTON_ACTIVE.LEFT : ""
-                }
-                onClick={() => setForm((f) => ({ ...f, status: "LEFT" }))}
+                className={form.status === 'LEFT' ? STATUS_BUTTON_ACTIVE.LEFT : ''}
+                onClick={() => setForm(f => ({ ...f, status: 'LEFT' }))}
               >
                 Left
               </Button>
@@ -2206,21 +2073,17 @@ const EditEmployeeDialog = memo(function EditEmployeeDialog({
           </div>
         </div>
         <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={saving}
-          >
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={saving}>
             {saving ? (
               <>
-                <span className="inline-block h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                <span className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
                 Saving...
               </>
             ) : (
-              "Save"
+              'Save'
             )}
           </Button>
         </DialogFooter>
@@ -2248,82 +2111,76 @@ const ChangePasswordDialog = memo(function ChangePasswordDialog({
   setLoading: (id: number | null) => void;
 }) {
   const { toast } = useToast();
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   useEffect(() => {
     if (!open) {
-      setNewPassword("");
-      setConfirmPassword("");
+      setNewPassword('');
+      setConfirmPassword('');
     }
   }, [open]);
   const handleSubmit = async () => {
     if (!employee || !token) return;
     if (newPassword.length < 6) {
       toast({
-        title: "Invalid password",
-        description: "Password must be at least 6 characters",
-        variant: "destructive",
+        title: 'Invalid password',
+        description: 'Password must be at least 6 characters',
+        variant: 'destructive',
       });
       return;
     }
     if (newPassword !== confirmPassword) {
       toast({
         title: "Passwords don't match",
-        description: "New password and confirm password must match",
-        variant: "destructive",
+        description: 'New password and confirm password must match',
+        variant: 'destructive',
       });
       return;
     }
     setLoading(employee.id);
     try {
-      const res = await fetch(
-        `${apiBase}/employees/${employee.id}/admin-set-password`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ newPassword }),
+      const res = await fetch(`${apiBase}/employees/${employee.id}/admin-set-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
         },
-      );
+        body: JSON.stringify({ newPassword }),
+      });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         toast({
-          title: "Password updated",
-          description:
-            "Director(s) will receive an email with the new password.",
+          title: 'Password updated',
+          description: 'Director(s) will receive an email with the new password.',
         });
         onOpenChange(false);
         onSuccess();
       } else {
         toast({
-          title: "Error",
-          description:
-            (data as { message?: string }).message ||
-            "Failed to update password",
-          variant: "destructive",
+          title: 'Error',
+          description: (data as { message?: string }).message || 'Failed to update password',
+          variant: 'destructive',
         });
       }
     } catch {
       toast({
-        title: "Error",
-        description: "Failed to update password",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to update password',
+        variant: 'destructive',
       });
     } finally {
       setLoading(null);
     }
   };
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onOpenChange(false)}>
+    <Dialog open={open} onOpenChange={o => !o && onOpenChange(false)}>
       <DialogContent className="max-w-md" aria-describedby="change-pw-desc">
         <DialogHeader>
           <DialogTitle>Change employee password</DialogTitle>
           <DialogDescription id="change-pw-desc">
             {employee
               ? `Set a new password for ${employee.name}. Director(s) for this branch will receive an email with the new password and employee email.`
-              : ""}
+              : ''}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
@@ -2334,7 +2191,7 @@ const ChangePasswordDialog = memo(function ChangePasswordDialog({
               type="password"
               placeholder="Min 6 characters"
               value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
+              onChange={e => setNewPassword(e.target.value)}
               autoComplete="new-password"
             />
           </div>
@@ -2345,33 +2202,26 @@ const ChangePasswordDialog = memo(function ChangePasswordDialog({
               type="password"
               placeholder="Re-enter new password"
               value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
+              onChange={e => setConfirmPassword(e.target.value)}
               autoComplete="new-password"
             />
           </div>
         </div>
         <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={loading}
-          >
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
             Cancel
           </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={loading || !newPassword || !confirmPassword}
-          >
+          <Button onClick={handleSubmit} disabled={loading || !newPassword || !confirmPassword}>
             {loading ? (
               <>
                 <span
-                  className="inline-block h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"
+                  className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
                   aria-hidden
                 />
                 Updating…
               </>
             ) : (
-              "Update password"
+              'Update password'
             )}
           </Button>
         </DialogFooter>
@@ -2403,9 +2253,7 @@ type SalarySlipDialogProps = {
   /** When set, dialog opens with this slip's data pre-filled (Generate Again). */
   prefillSlip?: any;
 };
-const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
-  props: SalarySlipDialogProps,
-) {
+const SalarySlipDialogModule = memo(function SalarySlipDialogModule(props: SalarySlipDialogProps) {
   const {
     open,
     onOpenChange,
@@ -2419,9 +2267,7 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
     prefillSlip,
   } = props;
   const { toast } = useToast();
-  const [localEmployees, setLocalEmployees] = useState<typeof propsEmployees>(
-    [],
-  );
+  const [localEmployees, setLocalEmployees] = useState<typeof propsEmployees>([]);
   const [employeesLoading, setEmployeesLoading] = useState(open);
   // Use fetched list when available; otherwise fall back to props (e.g. while loading or if fetch failed)
   const employees = localEmployees.length > 0 ? localEmployees : propsEmployees;
@@ -2433,8 +2279,8 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
     fetch(`${apiBase}/employees/active`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
         if (cancelled) return;
         const list = Array.isArray(data)
           ? data
@@ -2456,33 +2302,31 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
     };
   }, [open, token]);
   const now = new Date();
-  const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const [employeeId, setEmployeeId] = useState(0);
   const [payPeriodMonth, setPayPeriodMonth] = useState(defaultMonth);
   const [basicSalary, setBasicSalary] = useState<number>(0);
   const [paidDays, setPaidDays] = useState<number>(22);
   const [lopDays, setLopDays] = useState<number>(0);
-  const [payDate, setPayDate] = useState(
-    new Date().toISOString().split("T")[0],
-  );
+  const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0]);
   const [allowanceRows, setAllowanceRows] = useState<
     { id: string; name: string; amount: number }[]
   >([
-    { id: "a1", name: "House Rent Allowance", amount: 0 },
-    { id: "a2", name: "Other Allowance", amount: 0 },
+    { id: 'a1', name: 'House Rent Allowance', amount: 0 },
+    { id: 'a2', name: 'Other Allowance', amount: 0 },
   ]);
   const [deductionRows, setDeductionRows] = useState<
     { id: string; name: string; amount: number }[]
   >([
-    { id: "d1", name: "Income Tax", amount: 0 },
-    { id: "d2", name: "Provident Fund", amount: 0 },
+    { id: 'd1', name: 'Income Tax', amount: 0 },
+    { id: 'd2', name: 'Provident Fund', amount: 0 },
   ]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
   const [employeeDataLoading, setEmployeeDataLoading] = useState(false);
   const lastAutoFilledEmployeeId = useRef<number>(0);
-  const [overtimeStartDate, setOvertimeStartDate] = useState("");
-  const [overtimeEndDate, setOvertimeEndDate] = useState("");
+  const [overtimeStartDate, setOvertimeStartDate] = useState('');
+  const [overtimeEndDate, setOvertimeEndDate] = useState('');
   const [overtimeRecords, setOvertimeRecords] = useState<
     {
       id: number | string;
@@ -2492,8 +2336,8 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
     }[]
   >([]);
   const [overtimeLoading, setOvertimeLoading] = useState(false);
-  const [lateStartDate, setLateStartDate] = useState("");
-  const [lateEndDate, setLateEndDate] = useState("");
+  const [lateStartDate, setLateStartDate] = useState('');
+  const [lateEndDate, setLateEndDate] = useState('');
   const [lateTotalMinutes, setLateTotalMinutes] = useState<number | null>(null);
   const [lateLoading, setLateLoading] = useState(false);
 
@@ -2505,103 +2349,86 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
   useEffect(() => {
     if (!open || !prefillSlip) return;
     const emp = employees.find(
-      (e) =>
+      e =>
         (e.employeeCode && e.employeeCode === prefillSlip.employeeCode) ||
-        e.name === prefillSlip.employee?.name,
+        e.name === prefillSlip.employee?.name
     );
     if (emp) setEmployeeId(emp.id);
-    const monthIdx = SALARY_MONTH_NAMES.indexOf(prefillSlip.month ?? "");
+    const monthIdx = SALARY_MONTH_NAMES.indexOf(prefillSlip.month ?? '');
     const y = prefillSlip.year ?? now.getFullYear();
     const m = monthIdx >= 0 ? monthIdx + 1 : now.getMonth() + 1;
-    setPayPeriodMonth(`${y}-${String(m).padStart(2, "0")}`);
+    setPayPeriodMonth(`${y}-${String(m).padStart(2, '0')}`);
     setBasicSalary(Number(prefillSlip.basicSalary) || 0);
     setPaidDays(
-      prefillSlip.paidDays != null && prefillSlip.paidDays !== ""
+      prefillSlip.paidDays != null && prefillSlip.paidDays !== ''
         ? Number(prefillSlip.paidDays)
         : 22
     );
     setLopDays(
-      prefillSlip.lopDays != null && prefillSlip.lopDays !== ""
-        ? Number(prefillSlip.lopDays)
-        : 0
+      prefillSlip.lopDays != null && prefillSlip.lopDays !== '' ? Number(prefillSlip.lopDays) : 0
     );
     setPayDate(
       prefillSlip.createdAt
-        ? new Date(prefillSlip.createdAt).toISOString().split("T")[0]
-        : new Date().toISOString().split("T")[0],
+        ? new Date(prefillSlip.createdAt).toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0]
     );
     const allow = (prefillSlip.allowances ?? []).map((r: any, i: number) => ({
       id: `a${i}-${Date.now()}`,
-      name: r.name ?? "",
+      name: r.name ?? '',
       amount: Number(r.amount) || 0,
     }));
     setAllowanceRows(
       allow.length
         ? allow
         : [
-            { id: "a1", name: "House Rent Allowance", amount: 0 },
-            { id: "a2", name: "Other Allowance", amount: 0 },
-          ],
+            { id: 'a1', name: 'House Rent Allowance', amount: 0 },
+            { id: 'a2', name: 'Other Allowance', amount: 0 },
+          ]
     );
     const ded = (prefillSlip.deductions ?? []).map((r: any, i: number) => ({
       id: `d${i}-${Date.now()}`,
-      name: r.name ?? "",
+      name: r.name ?? '',
       amount: Number(r.amount) || 0,
     }));
     setDeductionRows(
       ded.length
         ? ded
         : [
-            { id: "d1", name: "Income Tax", amount: 0 },
-            { id: "d2", name: "Provident Fund", amount: 0 },
-          ],
+            { id: 'd1', name: 'Income Tax', amount: 0 },
+            { id: 'd2', name: 'Provident Fund', amount: 0 },
+          ]
     );
   }, [open, prefillSlip, employees]);
   // Roster-active = status ACTIVE (email verification is shown separately in the table)
   const activeEmployees = useMemo(
-    () =>
-      employees.filter(
-        (e) => String(e.status || "").toUpperCase() === "ACTIVE",
-      ),
-    [employees],
+    () => employees.filter(e => String(e.status || '').toUpperCase() === 'ACTIVE'),
+    [employees]
   );
-  const employeesToShow =
-    activeEmployees.length > 0 ? activeEmployees : employees;
-  const selectedEmployee = employeesToShow.find((e) => e.id === employeeId);
-  const [payYear, payMonthNum] = payPeriodMonth.split("-").map(Number);
+  const employeesToShow = activeEmployees.length > 0 ? activeEmployees : employees;
+  const selectedEmployee = employeesToShow.find(e => e.id === employeeId);
+  const [payYear, payMonthNum] = payPeriodMonth.split('-').map(Number);
   const payMonthName = SALARY_MONTH_NAMES[(payMonthNum || 1) - 1];
   const payPeriodLabel = payPeriodMonth
-    ? `${String(payMonthNum).padStart(2, "0")} - ${payMonthName} ${payYear}`
-    : "";
+    ? `${String(payMonthNum).padStart(2, '0')} - ${payMonthName} ${payYear}`
+    : '';
   const companyName =
     branchForm?.name ||
     branch?.name ||
-    (typeof window !== "undefined"
-      ? window.localStorage.getItem("branch_name")
-      : null) ||
-    "Cafe Chapter 1 Restro Private Limited";
-  const companyAddress =
-    branchForm?.location ?? branch?.location ?? "Gautam Nagar";
-  const totalAllowances = allowanceRows.reduce(
-    (s, r) => s + (r.amount || 0),
-    0,
-  );
-  const totalDeductions = deductionRows.reduce(
-    (s, r) => s + (r.amount || 0),
-    0,
-  );
+    (typeof window !== 'undefined' ? window.localStorage.getItem('branch_name') : null) ||
+    'Cafe Chapter 1 Restro Private Limited';
+  const companyAddress = branchForm?.location ?? branch?.location ?? 'Gautam Nagar';
+  const totalAllowances = allowanceRows.reduce((s, r) => s + (r.amount || 0), 0);
+  const totalDeductions = deductionRows.reduce((s, r) => s + (r.amount || 0), 0);
   const netSalary = (basicSalary || 0) + totalAllowances - totalDeductions;
   const grossEarnings = (basicSalary || 0) + totalAllowances;
   const logoUrl =
-    (typeof window !== "undefined" &&
-      window.localStorage.getItem("branch_logo_url")) ||
+    (typeof window !== 'undefined' && window.localStorage.getItem('branch_logo_url')) ||
     branchForm?.logoUrl ||
     cafeLogo;
-  const companyPincode = branchForm?.pincode || branch?.pincode || "";
+  const companyPincode = branchForm?.pincode || branch?.pincode || '';
 
   const fetchOvertime = useCallback(async () => {
-    if (!token || !selectedEmployee || !overtimeStartDate || !overtimeEndDate)
-      return;
+    if (!token || !selectedEmployee || !overtimeStartDate || !overtimeEndDate) return;
     setOvertimeLoading(true);
     try {
       const params = new URLSearchParams({
@@ -2620,7 +2447,7 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
             overtimeHours: r.overtimeHours ?? 0,
             shiftDate: r.shiftDate,
             status: r.status,
-          })),
+          }))
         );
       } else setOvertimeRecords([]);
     } catch {
@@ -2636,7 +2463,7 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
     const dailySalary = (basicSalary || 0) / daysInMonth;
     const hourlyRate = dailySalary / hoursPerDay;
     const amount = Math.round(overtimeHours * hourlyRate);
-    setAllowanceRows((prev) => [
+    setAllowanceRows(prev => [
       ...prev,
       {
         id: `ot-${Date.now()}`,
@@ -2645,17 +2472,17 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
       },
     ]);
     toast({
-      title: "Added",
+      title: 'Added',
       description: `Overtime ₹${amount} added to earnings.`,
     });
   };
 
   const formatLateMinutesHuman = (mins: number) => {
-    if (mins < 60) return `${mins} Minute${mins !== 1 ? "s" : ""}`;
+    if (mins < 60) return `${mins} Minute${mins !== 1 ? 's' : ''}`;
     const h = Math.floor(mins / 60);
     const m = mins % 60;
-    if (m === 0) return `${h} Hour${h !== 1 ? "s" : ""}`;
-    return `${h} Hour${h !== 1 ? "s" : ""} ${m} Min`;
+    if (m === 0) return `${h} Hour${h !== 1 ? 's' : ''}`;
+    return `${h} Hour${h !== 1 ? 's' : ''} ${m} Min`;
   };
 
   const fetchLate = useCallback(async () => {
@@ -2684,25 +2511,19 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
 
   const addLateDeductionToSlip = (amount: number) => {
     const mins = lateTotalMinutes ?? 0;
-    const label = mins > 0 ? `Late (${formatLateMinutesHuman(mins)})` : "Late";
-    setDeductionRows((prev) => [
-      ...prev,
-      { id: `late-${Date.now()}`, name: label, amount },
-    ]);
+    const label = mins > 0 ? `Late (${formatLateMinutesHuman(mins)})` : 'Late';
+    setDeductionRows(prev => [...prev, { id: `late-${Date.now()}`, name: label, amount }]);
     toast({
-      title: "Added",
+      title: 'Added',
       description:
         amount > 0
           ? `Late deduction ₹${amount} added.`
-          : "Late entry added to slip (edit amount if needed).",
+          : 'Late entry added to slip (edit amount if needed).',
     });
   };
 
   useEffect(() => {
-    if (
-      !selectedEmployee ||
-      selectedEmployee.id === lastAutoFilledEmployeeId.current
-    ) {
+    if (!selectedEmployee || selectedEmployee.id === lastAutoFilledEmployeeId.current) {
       if (!employeeId) setEmployeeDataLoading(false);
       return;
     }
@@ -2711,98 +2532,73 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
     setBasicSalary(base);
     setPaidDays(22);
     setLopDays(0);
-    setAllowanceRows((prev) =>
+    setAllowanceRows(prev =>
       prev.map((r, i) =>
         i === 0
           ? {
               ...r,
-              name: "House Rent Allowance",
+              name: 'House Rent Allowance',
               amount: Math.round(base * 0.2),
             }
           : i === 1
-            ? { ...r, name: "Other Allowance", amount: 0 }
-            : r,
-      ),
+            ? { ...r, name: 'Other Allowance', amount: 0 }
+            : r
+      )
     );
     setEmployeeDataLoading(false);
   }, [employeeId, selectedEmployee]);
 
   const addAllowance = () =>
-    setAllowanceRows((prev) => [
-      ...prev,
-      { id: `a${Date.now()}`, name: "", amount: 0 },
-    ]);
-  const removeAllowance = (id: string) =>
-    setAllowanceRows((prev) => prev.filter((r) => r.id !== id));
-  const updateAllowance = (
-    id: string,
-    field: "name" | "amount",
-    value: string | number,
-  ) =>
-    setAllowanceRows((prev) =>
-      prev.map((r) =>
-        r.id === id
-          ? { ...r, [field]: field === "amount" ? Number(value) || 0 : value }
-          : r,
-      ),
+    setAllowanceRows(prev => [...prev, { id: `a${Date.now()}`, name: '', amount: 0 }]);
+  const removeAllowance = (id: string) => setAllowanceRows(prev => prev.filter(r => r.id !== id));
+  const updateAllowance = (id: string, field: 'name' | 'amount', value: string | number) =>
+    setAllowanceRows(prev =>
+      prev.map(r =>
+        r.id === id ? { ...r, [field]: field === 'amount' ? Number(value) || 0 : value } : r
+      )
     );
   const addDeduction = () =>
-    setDeductionRows((prev) => [
-      ...prev,
-      { id: `d${Date.now()}`, name: "", amount: 0 },
-    ]);
-  const removeDeduction = (id: string) =>
-    setDeductionRows((prev) => prev.filter((r) => r.id !== id));
-  const updateDeduction = (
-    id: string,
-    field: "name" | "amount",
-    value: string | number,
-  ) =>
-    setDeductionRows((prev) =>
-      prev.map((r) =>
-        r.id === id
-          ? { ...r, [field]: field === "amount" ? Number(value) || 0 : value }
-          : r,
-      ),
+    setDeductionRows(prev => [...prev, { id: `d${Date.now()}`, name: '', amount: 0 }]);
+  const removeDeduction = (id: string) => setDeductionRows(prev => prev.filter(r => r.id !== id));
+  const updateDeduction = (id: string, field: 'name' | 'amount', value: string | number) =>
+    setDeductionRows(prev =>
+      prev.map(r =>
+        r.id === id ? { ...r, [field]: field === 'amount' ? Number(value) || 0 : value } : r
+      )
     );
 
   const handleSendEmail = async () => {
     if (!selectedEmployee) {
       toast({
-        title: "Select employee",
-        description: "Please select an employee first.",
-        variant: "destructive",
+        title: 'Select employee',
+        description: 'Please select an employee first.',
+        variant: 'destructive',
       });
       return;
     }
     if (!token) {
       toast({
-        title: "Error",
-        description: "Not authenticated.",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Not authenticated.',
+        variant: 'destructive',
       });
       return;
     }
-    const directorEmails = (branchForm?.directorsEmail || "")
+    const directorEmails = (branchForm?.directorsEmail || '')
       .split(/[\s,]+/)
       .map((e: string) => e.trim())
-      .filter(
-        (e: string) => e.length > 0 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e),
-      );
+      .filter((e: string) => e.length > 0 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
     const employeeEmail =
-      selectedEmployee.email &&
-      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(selectedEmployee.email)
+      selectedEmployee.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(selectedEmployee.email)
         ? selectedEmployee.email
         : null;
-    const to = [
-      ...new Set([employeeEmail, ...directorEmails].filter(Boolean)),
-    ] as string[];
+    const to = [...new Set([employeeEmail, ...directorEmails].filter(Boolean))] as string[];
     if (to.length === 0) {
       toast({
-        title: "No email addresses",
+        title: 'No email addresses',
         description:
           "Add employee email or directors' emails in Settings (Directors Email) to send the salary slip.",
-        variant: "destructive",
+        variant: 'destructive',
       });
       return;
     }
@@ -2811,16 +2607,12 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
       companyName,
       companyAddress,
       companyPincode,
-      phone: branchForm?.phone || "",
+      phone: branchForm?.phone || '',
       payMonthName,
       payYear,
       payPeriodLabel,
       payDate,
-      salaryNumber: getNextSalaryNumberModule(
-        salarySlips,
-        payYear,
-        payMonthName,
-      ),
+      salaryNumber: getNextSalaryNumberModule(salarySlips, payYear, payMonthName),
       selectedEmployee,
       paidDays,
       lopDays,
@@ -2835,9 +2627,9 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
     setSendingEmail(true);
     try {
       const res = await fetch(`${apiBase}/reports/send-email`, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ to, subject, html }),
@@ -2845,22 +2637,21 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         toast({
-          title: "Email sent",
+          title: 'Email sent',
           description: `Salary slip sent to ${to.length} recipient(s).`,
         });
       } else {
         toast({
-          title: "Send failed",
-          description:
-            (data as { message?: string }).message || "Failed to send email.",
-          variant: "destructive",
+          title: 'Send failed',
+          description: (data as { message?: string }).message || 'Failed to send email.',
+          variant: 'destructive',
         });
       }
     } catch {
       toast({
-        title: "Send failed",
-        description: "Network error. Check backend and try again.",
-        variant: "destructive",
+        title: 'Send failed',
+        description: 'Network error. Check backend and try again.',
+        variant: 'destructive',
       });
     } finally {
       setSendingEmail(false);
@@ -2870,23 +2661,19 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
   const handleGenerate = async () => {
     if (!selectedEmployee) {
       toast({
-        title: "Select employee",
-        description: "Please select an employee first.",
-        variant: "destructive",
+        title: 'Select employee',
+        description: 'Please select an employee first.',
+        variant: 'destructive',
       });
       return;
     }
     setIsGenerating(true);
     try {
-      const salaryNumber = getNextSalaryNumberModule(
-        salarySlips,
-        payYear,
-        payMonthName,
-      );
+      const salaryNumber = getNextSalaryNumberModule(salarySlips, payYear, payMonthName);
       const res = await fetch(`${apiBase}/reports/salary-slips`, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
@@ -2905,18 +2692,18 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
       const created = await res.json().catch(() => null);
       if (!res.ok) {
         const msg =
-          created && typeof created === "object" && "message" in created
+          created && typeof created === 'object' && 'message' in created
             ? String((created as any).message)
-            : "Failed to save salary slip";
+            : 'Failed to save salary slip';
         throw new Error(msg);
       }
 
       const normalized = {
         ...(created as any),
         month:
-          typeof (created as any)?.month === "number"
-            ? monthNumberToName((created as any).month) ?? payMonthName
-            : (created as any)?.month ?? payMonthName,
+          typeof (created as any)?.month === 'number'
+            ? (monthNumberToName((created as any).month) ?? payMonthName)
+            : ((created as any)?.month ?? payMonthName),
         employeeCode:
           (created as any)?.employee?.employeeCode ??
           (created as any)?.employeeCode ??
@@ -2929,21 +2716,18 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
           : deductionRows,
       };
 
-      setSalarySlips((prev) => [normalized, ...prev]);
+      setSalarySlips(prev => [normalized, ...prev]);
       onOpenChange(false);
       toast({
-        title: "Slip generated successfully",
+        title: 'Slip generated successfully',
         description: `Salary slip for ${selectedEmployee.name} has been saved and added to the list.`,
       });
     } catch (e: unknown) {
       const err = e as { message?: string; errors?: { message?: string }[] };
       toast({
-        title: "Error",
-        description:
-          err?.message ||
-          err?.errors?.[0]?.message ||
-          "Failed to generate slip",
-        variant: "destructive",
+        title: 'Error',
+        description: err?.message || err?.errors?.[0]?.message || 'Failed to generate slip',
+        variant: 'destructive',
       });
     } finally {
       setIsGenerating(false);
@@ -2954,95 +2738,83 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         hideCloseButton
-        className="max-w-4xl w-[calc(100vw-1rem)] sm:w-[calc(100vw-2rem)] max-h-[90vh] sm:max-h-[85vh] overflow-y-auto overflow-x-hidden p-0 gap-0 fixed left-[50%] top-[50%] z-[110] border-2 border-slate-200 bg-white shadow-2xl translate-x-[-50%] translate-y-[-50%] rounded-lg sm:rounded-xl opacity-100 min-w-0"
+        className="fixed top-[50%] left-[50%] z-[110] max-h-[90vh] w-[calc(100vw-1rem)] max-w-4xl min-w-0 translate-x-[-50%] translate-y-[-50%] gap-0 overflow-x-hidden overflow-y-auto rounded-lg border-2 border-slate-200 bg-white p-0 opacity-100 shadow-2xl sm:max-h-[85vh] sm:w-[calc(100vw-2rem)] sm:rounded-xl"
         aria-describedby="salary-slip-desc"
       >
         <DialogTitle className="sr-only">Generate Salary Slip</DialogTitle>
         <DialogDescription id="salary-slip-desc" className="sr-only">
-          Select employee, pay period, and salary components. Preview or
-          download the payslip before generating.
+          Select employee, pay period, and salary components. Preview or download the payslip before
+          generating.
         </DialogDescription>
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          className="absolute right-3 top-3 z-[120] rounded-full bg-white/20 hover:bg-white/30 text-white h-9 w-9 shrink-0"
+          className="absolute top-3 right-3 z-[120] h-9 w-9 shrink-0 rounded-full bg-white/20 text-white hover:bg-white/30"
           onClick={() => onOpenChange(false)}
           aria-label="Close"
         >
           <X className="h-5 w-5" />
         </Button>
-        <div className="rounded-t-lg px-3 sm:px-6 py-3 sm:py-4 pr-10 sm:pr-12 text-white flex flex-col sm:flex-row items-stretch sm:items-start justify-between gap-3 sm:gap-4 bg-gradient-to-r from-[#064E3B] to-[#047857] shrink-0 min-w-0">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+        <div className="flex min-w-0 shrink-0 flex-col items-stretch justify-between gap-3 rounded-t-lg bg-gradient-to-r from-[#064E3B] to-[#047857] px-3 py-3 pr-10 text-white sm:flex-row sm:items-start sm:gap-4 sm:px-6 sm:py-4 sm:pr-12">
+          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
             <img
               src={logoUrl}
               alt=""
-              className="h-10 w-10 sm:h-16 sm:w-16 object-contain rounded bg-white p-1 sm:p-1.5 shrink-0"
+              className="h-10 w-10 shrink-0 rounded bg-white object-contain p-1 sm:h-16 sm:w-16 sm:p-1.5"
               aria-hidden
             />
             <div className="min-w-0 flex-1">
-              <p className="text-white/80 text-[10px] uppercase tracking-wide">
+              <p className="text-[10px] tracking-wide text-white/80 uppercase">
                 Restaurant / Company
               </p>
-              <p className="font-bold text-base sm:text-xl truncate">
-                {companyName}
-              </p>
-              <p className="text-white/90 text-xs sm:text-sm truncate">
-                {companyAddress || "—"}
-                {companyPincode ? `, ${companyPincode}` : ""}
-                {companyAddress || companyPincode ? ", India" : ""}
+              <p className="truncate text-base font-bold sm:text-xl">{companyName}</p>
+              <p className="truncate text-xs text-white/90 sm:text-sm">
+                {companyAddress || '—'}
+                {companyPincode ? `, ${companyPincode}` : ''}
+                {companyAddress || companyPincode ? ', India' : ''}
               </p>
               {branchForm?.phone && (
-                <p className="text-white/80 text-xs mt-0.5">
-                  Ph: {branchForm.phone}
-                </p>
+                <p className="mt-0.5 text-xs text-white/80">Ph: {branchForm.phone}</p>
               )}
             </div>
           </div>
-          <div className="w-full sm:w-auto flex flex-col sm:items-end gap-2">
-            <Label className="text-white/90 text-sm">
-              Payslip For The Month
-            </Label>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
+            <Label className="text-sm text-white/90">Payslip For The Month</Label>
             <input
               type="month"
               value={payPeriodMonth}
-              onChange={(e) => setPayPeriodMonth(e.target.value)}
-              className="rounded-lg border border-white/30 bg-white/10 px-3 py-2 text-white font-semibold text-base min-h-11 w-full sm:min-w-[180px] [color-scheme:dark]"
+              onChange={e => setPayPeriodMonth(e.target.value)}
+              className="min-h-11 w-full rounded-lg border border-white/30 bg-white/10 px-3 py-2 text-base font-semibold text-white [color-scheme:dark] sm:min-w-[180px]"
               title="Select month"
             />
             {payPeriodLabel && (
-              <p className="text-white/90 text-xs sm:text-right">
-                {payPeriodLabel}
-              </p>
+              <p className="text-xs text-white/90 sm:text-right">{payPeriodLabel}</p>
             )}
           </div>
         </div>
-        <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 overflow-y-auto overflow-x-hidden min-w-0">
+        <div className="min-w-0 space-y-4 overflow-x-hidden overflow-y-auto p-3 sm:space-y-6 sm:p-6">
           <div className="grid gap-2">
             <Label className="text-sm font-medium">Employee *</Label>
             <Select
               value={
-                employeeId && employeesToShow.some((e) => e.id === employeeId)
+                employeeId && employeesToShow.some(e => e.id === employeeId)
                   ? String(employeeId)
-                  : "0"
+                  : '0'
               }
-              onValueChange={(v) => {
-                const id = v === "0" ? 0 : Number(v);
+              onValueChange={v => {
+                const id = v === '0' ? 0 : Number(v);
                 if (id) setEmployeeDataLoading(true);
                 setEmployeeId(id);
               }}
             >
               <SelectTrigger
-                className={SALARY_INPUT_CLASS + " w-full"}
+                className={SALARY_INPUT_CLASS + ' w-full'}
                 id="salary-slip-employee-select"
               >
                 <SelectValue placeholder="Select employee" />
               </SelectTrigger>
-              <SelectContent
-                position="popper"
-                className="max-h-[320px]"
-                sideOffset={4}
-              >
+              <SelectContent position="popper" className="max-h-[320px]" sideOffset={4}>
                 <SelectItem value="0" disabled>
                   Select employee
                 </SelectItem>
@@ -3055,81 +2827,63 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
                     No employee
                   </SelectItem>
                 ) : (
-                  employeesToShow.map(
-                    (emp: SalarySlipDialogProps["employees"][number]) => (
-                      <SelectItem key={emp.id} value={String(emp.id)}>
-                        <span className="truncate block">
-                          {emp.name ?? "—"}
-                          {emp.employeeCode ? ` · ${emp.employeeCode}` : ""}
-                          {"email" in emp && emp.email ? ` · ${emp.email}` : ""}
-                          {"branch" in emp && emp.branch?.name
-                            ? ` · ${emp.branch.name}`
-                            : ""}
-                        </span>
-                      </SelectItem>
-                    ),
-                  )
+                  employeesToShow.map((emp: SalarySlipDialogProps['employees'][number]) => (
+                    <SelectItem key={emp.id} value={String(emp.id)}>
+                      <span className="block truncate">
+                        {emp.name ?? '—'}
+                        {emp.employeeCode ? ` · ${emp.employeeCode}` : ''}
+                        {'email' in emp && emp.email ? ` · ${emp.email}` : ''}
+                        {'branch' in emp && emp.branch?.name ? ` · ${emp.branch.name}` : ''}
+                      </span>
+                    </SelectItem>
+                  ))
                 )}
               </SelectContent>
             </Select>
           </div>
-          <div className={SALARY_CARD_CLASS + " relative"}>
+          <div className={SALARY_CARD_CLASS + ' relative'}>
             {employeeDataLoading && (
-              <div className="absolute inset-0 bg-slate-50/80 rounded-lg flex items-center justify-center z-10">
+              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-slate-50/80">
                 <div className="flex flex-col items-center gap-2">
-                  <div className="w-8 h-8 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
-                  <span className="text-sm text-slate-600">
-                    Loading employee data...
-                  </span>
+                  <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
+                  <span className="text-sm text-slate-600">Loading employee data...</span>
                 </div>
               </div>
             )}
-            <h3 className="text-sm font-semibold text-slate-700 mb-4">
-              Employee Details
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <h3 className="mb-4 text-sm font-semibold text-slate-700">Employee Details</h3>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2 sm:col-span-2">
-                <Label className="text-xs text-muted-foreground">
+                <Label className="text-muted-foreground text-xs">
                   Salary Slip No. (auto-generated, not editable)
                 </Label>
                 <Input
-                  value={getNextSalaryNumberModule(
-                    salarySlips,
-                    payYear,
-                    payMonthName,
-                  )}
+                  value={getNextSalaryNumberModule(salarySlips, payYear, payMonthName)}
                   readOnly
-                  className={SALARY_INPUT_CLASS + " bg-slate-100 font-mono"}
+                  className={SALARY_INPUT_CLASS + ' bg-slate-100 font-mono'}
                 />
               </div>
               <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">
-                  Employee Name
-                </Label>
+                <Label className="text-muted-foreground text-xs">Employee Name</Label>
                 <Input
-                  value={selectedEmployee?.name ?? ""}
+                  value={selectedEmployee?.name ?? ''}
                   readOnly
-                  className={SALARY_INPUT_CLASS + " bg-slate-50"}
+                  className={SALARY_INPUT_CLASS + ' bg-slate-50'}
                 />
               </div>
               <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">
-                  Employee ID
-                </Label>
+                <Label className="text-muted-foreground text-xs">Employee ID</Label>
                 <Input
-                  value={selectedEmployee?.employeeCode ?? ""}
+                  value={selectedEmployee?.employeeCode ?? ''}
                   readOnly
-                  className={SALARY_INPUT_CLASS + " bg-slate-50"}
+                  className={SALARY_INPUT_CLASS + ' bg-slate-50'}
                 />
               </div>
               <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">
-                  Pay Period
-                </Label>
+                <Label className="text-muted-foreground text-xs">Pay Period</Label>
                 <Input
                   type="date"
-                  value={payPeriodMonth ? `${payPeriodMonth}-01` : ""}
-                  onChange={(e) => {
+                  value={payPeriodMonth ? `${payPeriodMonth}-01` : ''}
+                  onChange={e => {
                     const v = e.target.value;
                     if (v) setPayPeriodMonth(v.slice(0, 7));
                   }}
@@ -3138,34 +2892,29 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
                 />
               </div>
               <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">
-                  Pay Date
-                </Label>
+                <Label className="text-muted-foreground text-xs">Pay Date</Label>
                 <Input
                   type="date"
                   value={payDate}
-                  onChange={(e) => setPayDate(e.target.value)}
+                  onChange={e => setPayDate(e.target.value)}
                   className={SALARY_INPUT_CLASS}
                 />
               </div>
             </div>
           </div>
           <div className={SALARY_CARD_CLASS}>
-            <h3 className="text-sm font-semibold text-slate-700 mb-4">
-              Overtime (optional)
-            </h3>
-            <p className="text-xs text-muted-foreground mb-3">
-              Load overtime for the selected employee in a date range, then add
-              total hours to the slip. Amount is calculated from basic salary
-              and working hours per day.
+            <h3 className="mb-4 text-sm font-semibold text-slate-700">Overtime (optional)</h3>
+            <p className="text-muted-foreground mb-3 text-xs">
+              Load overtime for the selected employee in a date range, then add total hours to the
+              slip. Amount is calculated from basic salary and working hours per day.
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+            <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <Label className="text-xs">Start date</Label>
                 <Input
                   type="date"
                   value={overtimeStartDate}
-                  onChange={(e) => setOvertimeStartDate(e.target.value)}
+                  onChange={e => setOvertimeStartDate(e.target.value)}
                   className={SALARY_INPUT_CLASS}
                 />
               </div>
@@ -3174,25 +2923,22 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
                 <Input
                   type="date"
                   value={overtimeEndDate}
-                  onChange={(e) => setOvertimeEndDate(e.target.value)}
+                  onChange={e => setOvertimeEndDate(e.target.value)}
                   className={SALARY_INPUT_CLASS}
                 />
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2 mb-3">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={fetchOvertime}
                 disabled={
-                  !selectedEmployee ||
-                  !overtimeStartDate ||
-                  !overtimeEndDate ||
-                  overtimeLoading
+                  !selectedEmployee || !overtimeStartDate || !overtimeEndDate || overtimeLoading
                 }
               >
-                {overtimeLoading ? "Loading..." : "Load overtime"}
+                {overtimeLoading ? 'Loading...' : 'Load overtime'}
               </Button>
               {overtimeRecords.length > 0 && (
                 <Button
@@ -3200,32 +2946,21 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
                   size="sm"
                   className="bg-emerald-600 hover:bg-emerald-700"
                   onClick={() =>
-                    addOvertimeToSlip(
-                      overtimeRecords.reduce((s, r) => s + r.overtimeHours, 0),
-                    )
+                    addOvertimeToSlip(overtimeRecords.reduce((s, r) => s + r.overtimeHours, 0))
                   }
                 >
-                  Add{" "}
-                  {formatHours(
-                    overtimeRecords.reduce((s, r) => s + r.overtimeHours, 0),
-                  )}{" "}
-                  to slip
+                  Add {formatHours(overtimeRecords.reduce((s, r) => s + r.overtimeHours, 0))} to
+                  slip
                 </Button>
               )}
             </div>
             {overtimeRecords.length > 0 && (
-              <div className="rounded border border-slate-200 p-2 max-h-32 overflow-y-auto">
-                <p className="text-xs font-medium text-slate-600 mb-1">
-                  Overtime entries
-                </p>
-                <ul className="text-xs space-y-0.5">
-                  {overtimeRecords.map((r) => (
+              <div className="max-h-32 overflow-y-auto rounded border border-slate-200 p-2">
+                <p className="mb-1 text-xs font-medium text-slate-600">Overtime entries</p>
+                <ul className="space-y-0.5 text-xs">
+                  {overtimeRecords.map(r => (
                     <li key={String(r.id)} className="flex justify-between">
-                      <span>
-                        {r.shiftDate
-                          ? new Date(r.shiftDate).toLocaleDateString()
-                          : "—"}
-                      </span>
+                      <span>{r.shiftDate ? new Date(r.shiftDate).toLocaleDateString() : '—'}</span>
                       <span>{formatHours(r.overtimeHours)}</span>
                     </li>
                   ))}
@@ -3234,20 +2969,18 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
             )}
           </div>
           <div className={SALARY_CARD_CLASS}>
-            <h3 className="text-sm font-semibold text-slate-700 mb-4">
-              Late (optional)
-            </h3>
-            <p className="text-xs text-muted-foreground mb-3">
-              Load late entries for the selected employee in a date range. You
-              can add a late deduction to the slip if needed.
+            <h3 className="mb-4 text-sm font-semibold text-slate-700">Late (optional)</h3>
+            <p className="text-muted-foreground mb-3 text-xs">
+              Load late entries for the selected employee in a date range. You can add a late
+              deduction to the slip if needed.
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+            <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <Label className="text-xs">Start date</Label>
                 <Input
                   type="date"
                   value={lateStartDate}
-                  onChange={(e) => setLateStartDate(e.target.value)}
+                  onChange={e => setLateStartDate(e.target.value)}
                   className={SALARY_INPUT_CLASS}
                 />
               </div>
@@ -3256,7 +2989,7 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
                 <Input
                   type="date"
                   value={lateEndDate}
-                  onChange={(e) => setLateEndDate(e.target.value)}
+                  onChange={e => setLateEndDate(e.target.value)}
                   className={SALARY_INPUT_CLASS}
                 />
               </div>
@@ -3267,14 +3000,9 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
                 variant="outline"
                 size="sm"
                 onClick={fetchLate}
-                disabled={
-                  !selectedEmployee ||
-                  !lateStartDate ||
-                  !lateEndDate ||
-                  lateLoading
-                }
+                disabled={!selectedEmployee || !lateStartDate || !lateEndDate || lateLoading}
               >
-                {lateLoading ? "Loading..." : "Load late"}
+                {lateLoading ? 'Loading...' : 'Load late'}
               </Button>
               {lateTotalMinutes !== null && (
                 <>
@@ -3295,51 +3023,43 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
             </div>
           </div>
           <div className={SALARY_CARD_CLASS}>
-            <h3 className="text-sm font-semibold text-slate-700 mb-4">
-              Salary Earnings
-            </h3>
+            <h3 className="mb-4 text-sm font-semibold text-slate-700">Salary Earnings</h3>
             <div className="space-y-3">
-              <div className="flex items-center justify-between gap-4 py-2 border-b border-slate-100">
+              <div className="flex items-center justify-between gap-4 border-b border-slate-100 py-2">
                 <span className="text-sm text-slate-700">Basic Salary</span>
                 <div className="flex items-center gap-2">
                   <span className="text-slate-500">₹</span>
                   <Input
                     type="number"
                     min={0}
-                    className={SALARY_INPUT_CLASS + " w-28 text-right"}
-                    value={basicSalary || ""}
-                    onChange={(e) =>
-                      setBasicSalary(Number(e.target.value) || 0)
-                    }
+                    className={SALARY_INPUT_CLASS + ' w-28 text-right'}
+                    value={basicSalary || ''}
+                    onChange={e => setBasicSalary(Number(e.target.value) || 0)}
                   />
                 </div>
               </div>
-              {allowanceRows.map((r) => (
+              {allowanceRows.map(r => (
                 <div
                   key={r.id}
-                  className="flex items-center justify-between gap-4 py-2 border-b border-slate-100"
+                  className="flex items-center justify-between gap-4 border-b border-slate-100 py-2"
                 >
                   <Input
                     placeholder="e.g. HRA"
                     className={
                       SALARY_INPUT_CLASS +
-                      " flex-1 max-w-[200px] border-0 border-b border-transparent bg-transparent shadow-none focus-visible:ring-0 py-0 h-9"
+                      ' h-9 max-w-[200px] flex-1 border-0 border-b border-transparent bg-transparent py-0 shadow-none focus-visible:ring-0'
                     }
                     value={r.name}
-                    onChange={(e) =>
-                      updateAllowance(r.id, "name", e.target.value)
-                    }
+                    onChange={e => updateAllowance(r.id, 'name', e.target.value)}
                   />
                   <div className="flex items-center gap-2">
                     <span className="text-slate-500">₹</span>
                     <Input
                       type="number"
                       min={0}
-                      className={SALARY_INPUT_CLASS + " w-24 text-right"}
-                      value={r.amount || ""}
-                      onChange={(e) =>
-                        updateAllowance(r.id, "amount", e.target.value)
-                      }
+                      className={SALARY_INPUT_CLASS + ' w-24 text-right'}
+                      value={r.amount || ''}
+                      onChange={e => updateAllowance(r.id, 'amount', e.target.value)}
                     />
                     <Button
                       type="button"
@@ -3353,13 +3073,13 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
                   </div>
                 </div>
               ))}
-              <div className="pt-2 flex justify-end">
+              <div className="flex justify-end pt-2">
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
                   onClick={addAllowance}
-                  className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 text-xs"
+                  className="text-xs text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
                 >
                   + Add Earnings
                 </Button>
@@ -3367,36 +3087,32 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
             </div>
           </div>
           <div className={SALARY_CARD_CLASS}>
-            <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+            <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-700">
               <MinusCircle className="h-4 w-4 text-red-500" /> Deductions
             </h3>
             <div className="space-y-3">
-              {deductionRows.map((r) => (
+              {deductionRows.map(r => (
                 <div
                   key={r.id}
-                  className="flex items-center justify-between gap-4 py-2 border-b border-slate-100"
+                  className="flex items-center justify-between gap-4 border-b border-slate-100 py-2"
                 >
                   <Input
                     placeholder="e.g. Income Tax"
                     className={
                       SALARY_INPUT_CLASS +
-                      " flex-1 max-w-[200px] border-0 border-b border-transparent bg-transparent shadow-none focus-visible:ring-0 py-0 h-9"
+                      ' h-9 max-w-[200px] flex-1 border-0 border-b border-transparent bg-transparent py-0 shadow-none focus-visible:ring-0'
                     }
                     value={r.name}
-                    onChange={(e) =>
-                      updateDeduction(r.id, "name", e.target.value)
-                    }
+                    onChange={e => updateDeduction(r.id, 'name', e.target.value)}
                   />
                   <div className="flex items-center gap-2">
                     <span className="text-slate-500">₹</span>
                     <Input
                       type="number"
                       min={0}
-                      className={SALARY_INPUT_CLASS + " w-24 text-right"}
-                      value={r.amount || ""}
-                      onChange={(e) =>
-                        updateDeduction(r.id, "amount", e.target.value)
-                      }
+                      className={SALARY_INPUT_CLASS + ' w-24 text-right'}
+                      value={r.amount || ''}
+                      onChange={e => updateDeduction(r.id, 'amount', e.target.value)}
                     />
                     <Button
                       type="button"
@@ -3410,13 +3126,13 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
                   </div>
                 </div>
               ))}
-              <div className="pt-2 flex justify-end">
+              <div className="flex justify-end pt-2">
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
                   onClick={addDeduction}
-                  className="text-red-600 hover:text-red-700 hover:bg-red-50 text-xs"
+                  className="text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
                 >
                   + Add Deductions
                 </Button>
@@ -3425,79 +3141,64 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
           </div>
           <div
             className={
-              SALARY_CARD_CLASS +
-              " bg-gradient-to-br from-emerald-50 to-white border-emerald-100"
+              SALARY_CARD_CLASS + ' border-emerald-100 bg-gradient-to-br from-emerald-50 to-white'
             }
           >
-            <h3 className="text-sm font-semibold text-slate-700 mb-4">
-              Salary Summary
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            <h3 className="mb-4 text-sm font-semibold text-slate-700">Salary Summary</h3>
+            <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">
-                  Paid Days
-                </Label>
+                <Label className="text-muted-foreground text-xs">Paid Days</Label>
                 <Input
                   type="number"
                   min={0}
                   className={SALARY_INPUT_CLASS}
                   value={paidDays}
-                  onChange={(e) => setPaidDays(Number(e.target.value) || 0)}
+                  onChange={e => setPaidDays(Number(e.target.value) || 0)}
                 />
               </div>
               <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">
-                  LOP Days
-                </Label>
+                <Label className="text-muted-foreground text-xs">LOP Days</Label>
                 <Input
                   type="number"
                   min={0}
                   className={SALARY_INPUT_CLASS}
                   value={lopDays}
-                  onChange={(e) => setLopDays(Number(e.target.value) || 0)}
+                  onChange={e => setLopDays(Number(e.target.value) || 0)}
                 />
               </div>
             </div>
-            <div className="space-y-2 text-sm border-t border-slate-200 pt-4">
+            <div className="space-y-2 border-t border-slate-200 pt-4 text-sm">
               <div className="flex justify-between">
                 <span className="text-slate-600">Gross Salary</span>
                 <span className="font-medium">{formatINR(grossEarnings)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-600">Total Deduction</span>
-                <span className="font-medium text-red-600">
-                  {formatINR(totalDeductions)}
-                </span>
+                <span className="font-medium text-red-600">{formatINR(totalDeductions)}</span>
               </div>
-              <div className="flex justify-between items-center pt-3 mt-3 border-t-2 border-emerald-200">
+              <div className="mt-3 flex items-center justify-between border-t-2 border-emerald-200 pt-3">
                 <span className="font-semibold text-slate-800">Net Salary</span>
-                <span className="text-xl font-bold text-emerald-700">
-                  {formatINR(netSalary)}
-                </span>
+                <span className="text-xl font-bold text-emerald-700">{formatINR(netSalary)}</span>
               </div>
             </div>
           </div>
-          <DialogFooter className="flex flex-wrap gap-2 pt-4 border-t border-slate-200 sm:flex-row">
+          <DialogFooter className="flex flex-wrap gap-2 border-t border-slate-200 pt-4 sm:flex-row">
             <Button
               variant="outline"
               size="sm"
-              className="rounded-lg h-10"
+              className="h-10 rounded-lg"
               onClick={() => {
                 const html = buildPayslipPrintHtmlModule({
                   logoUrl: String(logoUrl),
                   companyName,
                   companyAddress,
                   companyPincode,
-                  phone: branchForm?.phone || "",
+                  phone: branchForm?.phone || '',
                   payMonthName,
                   payYear,
                   payPeriodLabel,
                   payDate,
-                  salaryNumber: getNextSalaryNumberModule(
-                    salarySlips,
-                    payYear,
-                    payMonthName,
-                  ),
+                  salaryNumber: getNextSalaryNumberModule(salarySlips, payYear, payMonthName),
                   selectedEmployee,
                   paidDays,
                   lopDays,
@@ -3508,7 +3209,7 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
                   totalDeductions,
                   netSalary,
                 });
-                const w = window.open("", "_blank");
+                const w = window.open('', '_blank');
                 if (w) {
                   w.document.write(html);
                   w.document.close();
@@ -3516,28 +3217,24 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
                 }
               }}
             >
-              <Eye className="h-4 w-4 mr-2" /> Preview
+              <Eye className="mr-2 h-4 w-4" /> Preview
             </Button>
             <Button
               variant="outline"
               size="sm"
-              className="rounded-lg h-10"
+              className="h-10 rounded-lg"
               onClick={() => {
                 const html = buildPayslipPrintHtmlModule({
                   logoUrl: String(logoUrl),
                   companyName,
                   companyAddress,
                   companyPincode,
-                  phone: branchForm?.phone || "",
+                  phone: branchForm?.phone || '',
                   payMonthName,
                   payYear,
                   payPeriodLabel,
                   payDate,
-                  salaryNumber: getNextSalaryNumberModule(
-                    salarySlips,
-                    payYear,
-                    payMonthName,
-                  ),
+                  salaryNumber: getNextSalaryNumberModule(salarySlips, payYear, payMonthName),
                   selectedEmployee,
                   paidDays,
                   lopDays,
@@ -3548,7 +3245,7 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
                   totalDeductions,
                   netSalary,
                 });
-                const w = window.open("", "_blank");
+                const w = window.open('', '_blank');
                 if (w) {
                   w.document.write(html);
                   w.document.close();
@@ -3560,37 +3257,36 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
                 }
               }}
             >
-              <Download className="h-4 w-4 mr-2" /> Download
+              <Download className="mr-2 h-4 w-4" /> Download
             </Button>
             <LoaderButton
               variant="outline"
               size="sm"
-              className="rounded-lg h-10"
+              className="h-10 rounded-lg"
               onClick={handleSendEmail}
               disabled={!selectedEmployee}
               loading={sendingEmail}
               loadingLabel="Sending…"
             >
-              <Mail className="h-4 w-4 mr-2" /> Send Email
+              <Mail className="mr-2 h-4 w-4" /> Send Email
             </LoaderButton>
             <Button
               variant="outline"
               size="sm"
-              className="rounded-lg h-10"
+              className="h-10 rounded-lg"
               onClick={() =>
                 toast({
-                  title: "Send WhatsApp",
-                  description:
-                    "Salary slip will be sent to employee via WhatsApp",
+                  title: 'Send WhatsApp',
+                  description: 'Salary slip will be sent to employee via WhatsApp',
                 })
               }
             >
-              <MessageCircle className="h-4 w-4 mr-2" /> WhatsApp
+              <MessageCircle className="mr-2 h-4 w-4" /> WhatsApp
             </Button>
             <Button
               variant="outline"
               onClick={() => onOpenChange(false)}
-              className="rounded-lg h-11"
+              className="h-11 rounded-lg"
             >
               Cancel
             </Button>
@@ -3599,9 +3295,9 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
               disabled={!selectedEmployee}
               loading={isGenerating}
               loadingLabel="Generating..."
-              className="rounded-lg h-12 bg-gradient-to-r from-[#064E3B] to-[#047857] hover:opacity-90 text-white font-semibold"
+              className="h-12 rounded-lg bg-gradient-to-r from-[#064E3B] to-[#047857] font-semibold text-white hover:opacity-90"
             >
-              <IndianRupee className="h-5 w-5 mr-2" /> Generate Salary Slip
+              <IndianRupee className="mr-2 h-5 w-5" /> Generate Salary Slip
             </LoaderButton>
           </DialogFooter>
         </div>
@@ -3613,29 +3309,29 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(
 const AdminDashboard = () => {
   const { toast } = useToast();
   const validSectionKeys = [
-    "overview",
-    "performance",
-    "menu",
-    "employees",
-    "all-orders",
-    "customer-leaderboard",
-    "customer-queries",
-    "removed-items",
-    "hours",
-    "overtime",
-    "late",
-    "leaves",
-    "revenue",
-    "salary-slips",
-    "certificates",
-    "settings",
+    'overview',
+    'performance',
+    'menu',
+    'employees',
+    'all-orders',
+    'customer-leaderboard',
+    'customer-queries',
+    'removed-items',
+    'hours',
+    'overtime',
+    'late',
+    'leaves',
+    'revenue',
+    'salary-slips',
+    'certificates',
+    'settings',
   ];
   const [activeSection, setActiveSection] = useState<string>(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("admin_active_section") || "overview";
-      return validSectionKeys.includes(saved) ? saved : "overview";
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('admin_active_section') || 'overview';
+      return validSectionKeys.includes(saved) ? saved : 'overview';
     }
-    return "overview";
+    return 'overview';
   });
   const [loading, setLoading] = useState(true);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -3655,8 +3351,8 @@ const AdminDashboard = () => {
 
   // Persist active section to localStorage
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("admin_active_section", activeSection);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('admin_active_section', activeSection);
     }
   }, [activeSection]);
   const [categories, setCategories] = useState<MenuCategory[]>([]);
@@ -3669,57 +3365,40 @@ const AdminDashboard = () => {
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
   const [isItemDialogOpen, setIsItemDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
-  const [editingCategory, setEditingCategory] = useState<MenuCategory | null>(
-    null,
-  );
+  const [editingCategory, setEditingCategory] = useState<MenuCategory | null>(null);
   const [itemForm, setItemForm] = useState({
-    name: "",
-    description: "",
+    name: '',
+    description: '',
     basePrice: 0,
     hasHalf: false,
     halfPrice: 0,
     isActive: true,
     categoryId: 0,
-    imageUrl: "",
+    imageUrl: '',
     notifyCustomers: false,
   });
 
   const [isEmployeeDialogOpen, setIsEmployeeDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
-  const [sendingVerification, setSendingVerification] = useState<number | null>(
-    null,
-  );
-  const [employeeToVerify, setEmployeeToVerify] = useState<Employee | null>(
-    null,
-  );
-  const [verifyingEmployeeId, setVerifyingEmployeeId] = useState<number | null>(
-    null,
-  );
-  const [employeeToChangePassword, setEmployeeToChangePassword] =
-    useState<Employee | null>(null);
-  const [changingPasswordEmployeeId, setChangingPasswordEmployeeId] = useState<
-    number | null
-  >(null);
+  const [sendingVerification, setSendingVerification] = useState<number | null>(null);
+  const [employeeToVerify, setEmployeeToVerify] = useState<Employee | null>(null);
+  const [verifyingEmployeeId, setVerifyingEmployeeId] = useState<number | null>(null);
+  const [employeeToChangePassword, setEmployeeToChangePassword] = useState<Employee | null>(null);
+  const [changingPasswordEmployeeId, setChangingPasswordEmployeeId] = useState<number | null>(null);
 
   // Additional state for new features
   const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [ordersByTable, setOrdersByTable] = useState<any[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   /** Frozen snapshot for order details dialog – prevents popup/cards flashing when parent re-renders or orders refresh */
-  const [popupDisplayOrder, setPopupDisplayOrder] = useState<Order | null>(
-    null,
-  );
+  const [popupDisplayOrder, setPopupDisplayOrder] = useState<Order | null>(null);
   const [isOrderDialogOpen, setIsOrderDialogOpen] = useState(false);
   const isOrderDialogOpenRef = useRef(false);
-  const [completingOrderId, setCompletingOrderId] = useState<number | null>(
-    null,
-  );
-  const [orderDateFilter, setOrderDateFilter] = useState<string>(() =>
-    getBusinessDateString(),
-  );
-  const [orderStartDate, setOrderStartDate] = useState<string>("");
-  const [orderEndDate, setOrderEndDate] = useState<string>("");
-  const [orderTableFilter, setOrderTableFilter] = useState<string>("all");
+  const [completingOrderId, setCompletingOrderId] = useState<number | null>(null);
+  const [orderDateFilter, setOrderDateFilter] = useState<string>(() => getBusinessDateString());
+  const [orderStartDate, setOrderStartDate] = useState<string>('');
+  const [orderEndDate, setOrderEndDate] = useState<string>('');
+  const [orderTableFilter, setOrderTableFilter] = useState<string>('all');
   const [ordersLoading, setOrdersLoading] = useState(false);
 
   // Customer leaderboard state (aggregated from orders)
@@ -3733,9 +3412,7 @@ const AdminDashboard = () => {
     }[]
   >([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
-  const [leaderboardSortBy, setLeaderboardSortBy] = useState<
-    "orders" | "amount"
-  >("amount");
+  const [leaderboardSortBy, setLeaderboardSortBy] = useState<'orders' | 'amount'>('amount');
   const [leaderboardLimit, setLeaderboardLimit] = useState(10);
 
   // Customer queries state
@@ -3754,19 +3431,17 @@ const AdminDashboard = () => {
     }[]
   >([]);
   const [pendingQueriesCount, setPendingQueriesCount] = useState(0);
-  const [queryStatusFilter, setQueryStatusFilter] = useState<string>("all");
-  const [selectedQuery, setSelectedQuery] = useState<
-    (typeof customerQueries)[0] | null
-  >(null);
+  const [queryStatusFilter, setQueryStatusFilter] = useState<string>('all');
+  const [selectedQuery, setSelectedQuery] = useState<(typeof customerQueries)[0] | null>(null);
   const [queryDialogOpen, setQueryDialogOpen] = useState(false);
   const [resolvingQueryId, setResolvingQueryId] = useState<number | null>(null);
 
   // Work hours state
   const [shifts, setShifts] = useState<any[]>([]);
   const [activeShiftsNow, setActiveShiftsNow] = useState<any[]>([]); // live: employees currently on shift
-  const [hoursEmployeeFilter, setHoursEmployeeFilter] = useState<string>("all");
-  const [hoursStartDate, setHoursStartDate] = useState<string>("");
-  const [hoursEndDate, setHoursEndDate] = useState<string>("");
+  const [hoursEmployeeFilter, setHoursEmployeeFilter] = useState<string>('all');
+  const [hoursStartDate, setHoursStartDate] = useState<string>('');
+  const [hoursEndDate, setHoursEndDate] = useState<string>('');
   const [shiftHistoryLoading, setShiftHistoryLoading] = useState(false);
   const [hoursSummary, setHoursSummary] = useState({
     totalShifts: 0,
@@ -3789,10 +3464,9 @@ const AdminDashboard = () => {
       workingHours: number;
     }[];
   }>({ pendingOvertimeCount: 0, overtimeRunningCount: 0, overtimeRunning: [] });
-  const [overtimeDateFrom, setOvertimeDateFrom] = useState<string>("");
-  const [overtimeDateTo, setOvertimeDateTo] = useState<string>("");
-  const [overtimeEmployeeFilter, setOvertimeEmployeeFilter] =
-    useState<string>("all");
+  const [overtimeDateFrom, setOvertimeDateFrom] = useState<string>('');
+  const [overtimeDateTo, setOvertimeDateTo] = useState<string>('');
+  const [overtimeEmployeeFilter, setOvertimeEmployeeFilter] = useState<string>('all');
   const [overtimeLoading, setOvertimeLoading] = useState(false);
 
   // Late entries state
@@ -3807,16 +3481,16 @@ const AdminDashboard = () => {
       employee: { id: number; name: string; employeeCode: string };
     }[]
   >([]);
-  const [lateDateFrom, setLateDateFrom] = useState<string>("");
-  const [lateDateTo, setLateDateTo] = useState<string>("");
-  const [lateEmployeeFilter, setLateEmployeeFilter] = useState<string>("all");
+  const [lateDateFrom, setLateDateFrom] = useState<string>('');
+  const [lateDateTo, setLateDateTo] = useState<string>('');
+  const [lateEmployeeFilter, setLateEmployeeFilter] = useState<string>('all');
   const [lateLoading, setLateLoading] = useState(false);
   const [leaveRequests, setLeaveRequests] = useState<any[]>([]);
   const [leaveLoading, setLeaveLoading] = useState(false);
-  const [leaveStatusFilter, setLeaveStatusFilter] = useState<string>("PENDING");
-  const [leaveEmployeeFilter, setLeaveEmployeeFilter] = useState<string>("all");
-  const [leaveDateFrom, setLeaveDateFrom] = useState<string>("");
-  const [leaveDateTo, setLeaveDateTo] = useState<string>("");
+  const [leaveStatusFilter, setLeaveStatusFilter] = useState<string>('PENDING');
+  const [leaveEmployeeFilter, setLeaveEmployeeFilter] = useState<string>('all');
+  const [leaveDateFrom, setLeaveDateFrom] = useState<string>('');
+  const [leaveDateTo, setLeaveDateTo] = useState<string>('');
   const [leaveRemarksById, setLeaveRemarksById] = useState<Record<number, string>>({});
   const [leaveActionLoadingId, setLeaveActionLoadingId] = useState<number | null>(null);
 
@@ -3831,40 +3505,38 @@ const AdminDashboard = () => {
     }[]
   >([]);
   /** True when GET /branches failed (e.g. 503) — show guidance, not a generic error toast. */
-  const [branchesListUnavailable, setBranchesListUnavailable] =
-    useState(false);
+  const [branchesListUnavailable, setBranchesListUnavailable] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [branchForm, setBranchForm] = useState<BranchFormState>({
-    name: "",
-    location: "",
-    timezone: "Asia/Kolkata",
-    logoUrl: "",
-    phone: "",
-    googleReviewUrl: "",
-    pincode: "",
-    directorsEmail: "",
+    name: '',
+    location: '',
+    timezone: 'Asia/Kolkata',
+    logoUrl: '',
+    phone: '',
+    googleReviewUrl: '',
+    pincode: '',
+    directorsEmail: '',
     showTotalAmountToCustomers: true,
     enableNewOrderRinging: true,
-    newOrderSoundPreset: "ring",
+    newOrderSoundPreset: 'ring',
     newOrderSoundVolume: 1,
   });
   const [createBranchOpen, setCreateBranchOpen] = useState(false);
   const [createBranchForm, setCreateBranchForm] = useState<BranchFormState>({
-    name: "",
-    location: "",
-    timezone: "Asia/Kolkata",
-    logoUrl: "",
-    phone: "",
-    googleReviewUrl: "",
-    pincode: "",
-    directorsEmail: "",
+    name: '',
+    location: '',
+    timezone: 'Asia/Kolkata',
+    logoUrl: '',
+    phone: '',
+    googleReviewUrl: '',
+    pincode: '',
+    directorsEmail: '',
     showTotalAmountToCustomers: true,
     enableNewOrderRinging: true,
-    newOrderSoundPreset: "ring",
+    newOrderSoundPreset: 'ring',
     newOrderSoundVolume: 1,
   });
-  const [createBranchDirectorInput, setCreateBranchDirectorInput] =
-    useState("");
+  const [createBranchDirectorInput, setCreateBranchDirectorInput] = useState('');
   const [savingBranch, setSavingBranch] = useState(false);
   const [directorsData, setDirectorsData] = useState<{
     verified: string[];
@@ -3916,43 +3588,41 @@ const AdminDashboard = () => {
 
   // Load logo from localStorage on mount
   useEffect(() => {
-    const savedLogoUrl = localStorage.getItem("branch_logo_url");
-    const savedBranchName = localStorage.getItem("branch_name");
+    const savedLogoUrl = localStorage.getItem('branch_logo_url');
+    const savedBranchName = localStorage.getItem('branch_name');
     if (savedLogoUrl || savedBranchName) {
-      setBranchForm((prev) => ({
+      setBranchForm(prev => ({
         ...prev,
-        logoUrl: savedLogoUrl || "",
-        name: savedBranchName || "",
+        logoUrl: savedLogoUrl || '',
+        name: savedBranchName || '',
       }));
     }
   }, []);
 
   // Removed items state
   const [removedItems, setRemovedItems] = useState<RemovedItem[]>([]);
-  const [dailyRemovalSummaries, setDailyRemovalSummaries] = useState<
-    DailyRemovalSummary[]
-  >([]);
-  const [removedItemsDateFilter, setRemovedItemsDateFilter] = useState<string>(
-    () => getBusinessDateString(),
+  const [dailyRemovalSummaries, setDailyRemovalSummaries] = useState<DailyRemovalSummary[]>([]);
+  const [removedItemsDateFilter, setRemovedItemsDateFilter] = useState<string>(() =>
+    getBusinessDateString()
   );
   const [removedItemsLoading, setRemovedItemsLoading] = useState(false);
   const [totalLoss, setTotalLoss] = useState<number>(0);
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("ACTIVE"); // default: show Active employees (permanent roster)
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('ACTIVE'); // default: show Active employees (permanent roster)
 
   // Menu management state
-  const [menuSearchQuery, setMenuSearchQuery] = useState("");
+  const [menuSearchQuery, setMenuSearchQuery] = useState('');
   const [viewingCategory, setViewingCategory] = useState<number | null>(null);
-  const [menuSortBy, setMenuSortBy] = useState<string>("name");
-  const [menuFilterBy, setMenuFilterBy] = useState<string>("all");
+  const [menuSortBy, setMenuSortBy] = useState<string>('name');
+  const [menuFilterBy, setMenuFilterBy] = useState<string>('all');
 
   // Salary slips state
   const [salarySlips, setSalarySlips] = useState<any[]>([]);
   const [isSalarySlipDialogOpen, setIsSalarySlipDialogOpen] = useState(false);
   const [salarySlipPrefill, setSalarySlipPrefill] = useState<any>(null);
-  const [salaryTableSearch, setSalaryTableSearch] = useState("");
-  const [salaryTableMonthFilter, setSalaryTableMonthFilter] = useState("");
+  const [salaryTableSearch, setSalaryTableSearch] = useState('');
+  const [salaryTableMonthFilter, setSalaryTableMonthFilter] = useState('');
   const [salaryTablePage, setSalaryTablePage] = useState(0);
   const SALARY_TABLE_PAGE_SIZE = 10;
 
@@ -3976,9 +3646,7 @@ const AdminDashboard = () => {
       isLive?: boolean;
     }[]
   >([]);
-  const [revenueExpandedYearMonth, setRevenueExpandedYearMonth] = useState<
-    string | null
-  >(null);
+  const [revenueExpandedYearMonth, setRevenueExpandedYearMonth] = useState<string | null>(null);
   const [monthlyTargetInfo, setMonthlyTargetInfo] = useState<{
     yearMonth: string;
     monthLabel: string;
@@ -3988,10 +3656,10 @@ const AdminDashboard = () => {
     achievedPct?: number;
     expectedPct?: number;
     daysLeft?: number;
-    status?: "ON_TRACK" | "NEED_TO_PUSH" | "CRITICAL";
+    status?: 'ON_TRACK' | 'NEED_TO_PUSH' | 'CRITICAL';
     updatedAt?: string;
   } | null>(null);
-  const [monthlyTargetInput, setMonthlyTargetInput] = useState("");
+  const [monthlyTargetInput, setMonthlyTargetInput] = useState('');
   const [savingMonthlyTarget, setSavingMonthlyTarget] = useState(false);
 
   // Certificates state
@@ -4007,8 +3675,7 @@ const AdminDashboard = () => {
   // Status calculation helper (must be defined before filteredCategories useMemo)
   const getCategoryStatus = (category: MenuCategory) => {
     const totalItems = category.items?.length || 0;
-    const liveItems =
-      category.items?.filter((item: any) => item.isActive).length || 0;
+    const liveItems = category.items?.filter((item: any) => item.isActive).length || 0;
     const pendingItems = totalItems - liveItems;
     return { totalItems, liveItems, pendingItems };
   };
@@ -4019,17 +3686,17 @@ const AdminDashboard = () => {
 
     // Apply search filter
     if (menuSearchQuery) {
-      filtered = filtered.filter((cat) =>
-        cat.name.toLowerCase().includes(menuSearchQuery.toLowerCase()),
+      filtered = filtered.filter(cat =>
+        cat.name.toLowerCase().includes(menuSearchQuery.toLowerCase())
       );
     }
 
     // Apply status filter
-    if (menuFilterBy !== "all") {
-      filtered = filtered.filter((cat) => {
+    if (menuFilterBy !== 'all') {
+      filtered = filtered.filter(cat => {
         const status = getCategoryStatus(cat);
-        if (menuFilterBy === "live") return status.liveItems > 0;
-        if (menuFilterBy === "pending") return status.pendingItems > 0;
+        if (menuFilterBy === 'live') return status.liveItems > 0;
+        if (menuFilterBy === 'pending') return status.pendingItems > 0;
         return true;
       });
     }
@@ -4040,13 +3707,13 @@ const AdminDashboard = () => {
       const statusB = getCategoryStatus(b);
 
       switch (menuSortBy) {
-        case "name":
+        case 'name':
           return a.name.localeCompare(b.name);
-        case "items-asc":
+        case 'items-asc':
           return statusA.totalItems - statusB.totalItems;
-        case "items-desc":
+        case 'items-desc':
           return statusB.totalItems - statusA.totalItems;
-        case "live-desc":
+        case 'live-desc':
           return statusB.liveItems - statusA.liveItems;
         default:
           return 0;
@@ -4059,14 +3726,12 @@ const AdminDashboard = () => {
   // Viewing category data
   const viewingCategoryData = useMemo(() => {
     if (!viewingCategory) return null;
-    return categories.find((c) => c.id === viewingCategory);
+    return categories.find(c => c.id === viewingCategory);
   }, [categories, viewingCategory]);
 
   // Roster-active employees (status ACTIVE) — same as employee list "Active" filter
   const activeEmployees = useMemo(() => {
-    return employees.filter(
-      (e) => String(e.status || "").toUpperCase() === "ACTIVE",
-    );
+    return employees.filter(e => String(e.status || '').toUpperCase() === 'ACTIVE');
   }, [employees]);
 
   useEffect(() => {
@@ -4087,17 +3752,16 @@ const AdminDashboard = () => {
         if (res.ok) {
           const data = await res.json();
           if (isOrderDialogOpenRef.current) return;
-          setOrders((prev) => {
-            if (!Array.isArray(prev) || prev.length !== data.length)
-              return data;
+          setOrders(prev => {
+            if (!Array.isArray(prev) || prev.length !== data.length) return data;
             const prevIds = prev
               .map((o: Order) => o.id)
               .sort()
-              .join(",");
+              .join(',');
             const nextIds = data
               .map((o: Order) => o.id)
               .sort()
-              .join(",");
+              .join(',');
             return prevIds === nextIds ? prev : data;
           });
         }
@@ -4112,28 +3776,22 @@ const AdminDashboard = () => {
   // Calculate today's stats
   const todayStats: TodayStats = useMemo(() => {
     const todayOrders = orders;
-    const paidOrders = todayOrders.filter((o) => o.paymentStatus === "PAID");
-    const pendingOrders = todayOrders.filter((o) => o.paymentStatus !== "PAID");
+    const paidOrders = todayOrders.filter(o => o.paymentStatus === 'PAID');
+    const pendingOrders = todayOrders.filter(o => o.paymentStatus !== 'PAID');
 
     const totalRevenue = paidOrders.reduce((sum, o) => sum + o.totalAmount, 0);
     const totalOrders = todayOrders.length;
     const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
     const activeEmps = employees.filter(
-      (e) => String(e.status || "").toUpperCase() === "ACTIVE",
+      e => String(e.status || '').toUpperCase() === 'ACTIVE'
     ).length;
 
-    const totalItemsSold = itemSales.reduce(
-      (sum, item) => sum + item.quantity,
-      0,
-    );
+    const totalItemsSold = itemSales.reduce((sum, item) => sum + item.quantity, 0);
 
     const topItem =
       itemSales.length > 0
-        ? itemSales.reduce(
-            (max, item) => (item.quantity > max.quantity ? item : max),
-            itemSales[0],
-          )
+        ? itemSales.reduce((max, item) => (item.quantity > max.quantity ? item : max), itemSales[0])
         : null;
 
     return {
@@ -4144,9 +3802,7 @@ const AdminDashboard = () => {
       activeEmployees: activeEmps,
       avgOrderValue,
       totalItemsSold,
-      topSellingItem: topItem
-        ? { name: topItem.itemName, quantity: topItem.quantity }
-        : null,
+      topSellingItem: topItem ? { name: topItem.itemName, quantity: topItem.quantity } : null,
     };
   }, [orders, employees, itemSales]);
 
@@ -4162,22 +3818,22 @@ const AdminDashboard = () => {
       };
       const businessDate = getBusinessDateString();
       const requests = [
-        { key: "menu", url: `${apiBase}/menu/admin` },
-        { key: "employees", url: `${apiBase}/employees` },
+        { key: 'menu', url: `${apiBase}/menu/admin` },
+        { key: 'employees', url: `${apiBase}/employees` },
         // Dashboard "Today" uses business day (04:00 → 03:59), not live/unpaid orders.
-        { key: "orders", url: `${apiBase}/orders/all?date=${encodeURIComponent(businessDate)}` },
-        { key: "traffic", url: `${apiBase}/config/public-traffic` },
-        { key: "dashboardSummary", url: `${apiBase}/reports/dashboard-summary` },
-        { key: "activeShifts", url: `${apiBase}/shift/active` },
-        { key: "overtimeSummary", url: `${apiBase}/overtime/summary` },
-        { key: "branches", url: `${apiBase}/branches` },
-        { key: "salarySlips", url: `${apiBase}/reports/salary-slips` },
+        { key: 'orders', url: `${apiBase}/orders/all?date=${encodeURIComponent(businessDate)}` },
+        { key: 'traffic', url: `${apiBase}/config/public-traffic` },
+        { key: 'dashboardSummary', url: `${apiBase}/reports/dashboard-summary` },
+        { key: 'activeShifts', url: `${apiBase}/shift/active` },
+        { key: 'overtimeSummary', url: `${apiBase}/overtime/summary` },
+        { key: 'branches', url: `${apiBase}/branches` },
+        { key: 'salarySlips', url: `${apiBase}/reports/salary-slips` },
         {
-          key: "monthlyRevenueSnapshots",
+          key: 'monthlyRevenueSnapshots',
           url: `${apiBase}/reports/monthly-revenue-snapshots`,
         },
         {
-          key: "monthlyTargetCurrent",
+          key: 'monthlyTargetCurrent',
           url: `${apiBase}/monthly-targets/branch/${Number((branch as any)?.id || 0)}`,
         },
       ] as const;
@@ -4189,45 +3845,38 @@ const AdminDashboard = () => {
       for (let i = 0; i < requests.length; i += PARALLEL_BATCH) {
         const batch = requests.slice(i, i + PARALLEL_BATCH);
         const batchResults = await Promise.allSettled(
-          batch.map((r) => fetchWithTimeoutRetry(r.url, opts)),
+          batch.map(r => fetchWithTimeoutRetry(r.url, opts))
         );
         results.push(...batchResults);
       }
 
       const failed: string[] = [];
-      const byKey = new Map<
-        (typeof requests)[number]["key"],
-        Response | null
-      >();
+      const byKey = new Map<(typeof requests)[number]['key'], Response | null>();
       results.forEach((res, idx) => {
         const key = requests[idx]!.key;
-        if (res.status === "fulfilled") {
+        if (res.status === 'fulfilled') {
           byKey.set(key, res.value);
         } else {
           byKey.set(key, null);
           // Branch list is optional for many screens; handle without scary toast (see below).
-          if (key !== "branches") {
+          if (key !== 'branches') {
             failed.push(requests[idx]!.key);
           }
-          console.error(
-            "[AdminDashboard] Fetch failed:",
-            requests[idx]!.url,
-            res.reason,
-          );
+          console.error('[AdminDashboard] Fetch failed:', requests[idx]!.url, res.reason);
         }
       });
 
-      const menuRes = byKey.get("menu");
-      const employeesRes = byKey.get("employees");
-      const ordersRes = byKey.get("orders");
-      const trafficRes = byKey.get("traffic");
-      const dashboardSummaryRes = byKey.get("dashboardSummary");
-      const activeShiftsRes = byKey.get("activeShifts");
-      const overtimeSummaryRes = byKey.get("overtimeSummary");
-      const branchesRes = byKey.get("branches");
-      const salarySlipsRes = byKey.get("salarySlips");
-      const monthlyRevenueRes = byKey.get("monthlyRevenueSnapshots");
-      const monthlyTargetRes = byKey.get("monthlyTargetCurrent");
+      const menuRes = byKey.get('menu');
+      const employeesRes = byKey.get('employees');
+      const ordersRes = byKey.get('orders');
+      const trafficRes = byKey.get('traffic');
+      const dashboardSummaryRes = byKey.get('dashboardSummary');
+      const activeShiftsRes = byKey.get('activeShifts');
+      const overtimeSummaryRes = byKey.get('overtimeSummary');
+      const branchesRes = byKey.get('branches');
+      const salarySlipsRes = byKey.get('salarySlips');
+      const monthlyRevenueRes = byKey.get('monthlyRevenueSnapshots');
+      const monthlyTargetRes = byKey.get('monthlyTargetCurrent');
 
       // Read each response body only once (avoid "body stream already read")
       const menuData = menuRes?.ok ? await menuRes.json() : null;
@@ -4238,15 +3887,9 @@ const AdminDashboard = () => {
         : Array.isArray((ordersDataRaw as any)?.orders)
           ? ((ordersDataRaw as any).orders as Order[])
           : [];
-      const salarySlipData = salarySlipsRes?.ok
-        ? await salarySlipsRes.json()
-        : null;
-      const monthlyRevenueData = monthlyRevenueRes?.ok
-        ? await monthlyRevenueRes.json()
-        : null;
-      const monthlyTargetData = monthlyTargetRes?.ok
-        ? await monthlyTargetRes.json()
-        : null;
+      const salarySlipData = salarySlipsRes?.ok ? await salarySlipsRes.json() : null;
+      const monthlyRevenueData = monthlyRevenueRes?.ok ? await monthlyRevenueRes.json() : null;
+      const monthlyTargetData = monthlyTargetRes?.ok ? await monthlyTargetRes.json() : null;
       if (trafficRes?.ok) {
         const trafficData = await trafficRes.json();
         setPublicNetworkTraffic(trafficData.publicNetworkTraffic ?? 0);
@@ -4309,8 +3952,8 @@ const AdminDashboard = () => {
         const normalized = slipsRaw.map((s: any) => ({
           ...s,
           month:
-            typeof s?.month === "number"
-              ? monthNumberToName(s.month) ?? String(s.month)
+            typeof s?.month === 'number'
+              ? (monthNumberToName(s.month) ?? String(s.month))
               : s?.month,
           employeeCode: s?.employee?.employeeCode ?? s?.employeeCode,
           allowances: Array.isArray(s?.allowances) ? s.allowances : [],
@@ -4337,19 +3980,14 @@ const AdminDashboard = () => {
                 ? totalSales / paid
                 : 0;
           return {
-            id:
-              typeof r.id === "number" && Number.isFinite(r.id)
-                ? r.id
-                : 0,
+            id: typeof r.id === 'number' && Number.isFinite(r.id) ? r.id : 0,
             year: Number(r.year),
             month: Number(r.month),
-            yearMonth: String(r.yearMonth ?? ""),
+            yearMonth: String(r.yearMonth ?? ''),
             totalOrders: Number(r.totalOrders ?? 0),
             totalSales,
             uniqueCustomers: Number(r.uniqueCustomers ?? 0),
-            newCustomersCount: Number(
-              r.newCustomersCount ?? r.uniqueCustomers ?? 0,
-            ),
+            newCustomersCount: Number(r.newCustomersCount ?? r.uniqueCustomers ?? 0),
             avgOrdersPerDay: Number(r.avgOrdersPerDay ?? 0),
             paidOrdersCount: paid,
             avgOrderValue,
@@ -4363,21 +4001,21 @@ const AdminDashboard = () => {
         let combined = raw.map((r: any) => normalizeRow(r));
         if (
           live &&
-          typeof live.yearMonth === "string" &&
-          !combined.some((x) => x.yearMonth === live.yearMonth)
+          typeof live.yearMonth === 'string' &&
+          !combined.some(x => x.yearMonth === live.yearMonth)
         ) {
           combined = [normalizeRow(live, true), ...combined];
         }
         combined.sort((a, b) => b.year - a.year || b.month - a.month);
         setMonthlyRevenueSnapshots(combined);
       }
-      if (monthlyTargetData && typeof monthlyTargetData === "object") {
+      if (monthlyTargetData && typeof monthlyTargetData === 'object') {
         const y = Number((monthlyTargetData as any).year);
         const m = Number((monthlyTargetData as any).month);
         const ym =
           Number.isFinite(y) && Number.isFinite(m)
-            ? `${y}-${String(m).padStart(2, "0")}`
-            : String((monthlyTargetData as any).yearMonth || "");
+            ? `${y}-${String(m).padStart(2, '0')}`
+            : String((monthlyTargetData as any).yearMonth || '');
         setMonthlyTargetInfo({
           yearMonth: ym,
           monthLabel: String((monthlyTargetData as any).monthLabel || ym),
@@ -4387,16 +4025,13 @@ const AdminDashboard = () => {
           achievedPct: Number((monthlyTargetData as any).achievedPct ?? 0),
           expectedPct: Number((monthlyTargetData as any).expectedPct ?? 0),
           daysLeft: Number((monthlyTargetData as any).daysLeft ?? 0),
-          status: (["ON_TRACK", "NEED_TO_PUSH", "CRITICAL"] as const).includes(
-            (monthlyTargetData as any).status,
+          status: (['ON_TRACK', 'NEED_TO_PUSH', 'CRITICAL'] as const).includes(
+            (monthlyTargetData as any).status
           )
-            ? ((monthlyTargetData as any).status as
-                | "ON_TRACK"
-                | "NEED_TO_PUSH"
-                | "CRITICAL")
+            ? ((monthlyTargetData as any).status as 'ON_TRACK' | 'NEED_TO_PUSH' | 'CRITICAL')
             : undefined,
           updatedAt:
-            typeof (monthlyTargetData as any).updatedAt === "string"
+            typeof (monthlyTargetData as any).updatedAt === 'string'
               ? (monthlyTargetData as any).updatedAt
               : undefined,
         });
@@ -4409,13 +4044,10 @@ const AdminDashboard = () => {
         const itemMap = new Map<string, ItemSales>();
         if (ordersData) {
           ordersData.forEach((order: Order) => {
-            if (order.paymentStatus !== "PAID") return;
+            if (order.paymentStatus !== 'PAID') return;
             order.items.forEach((item: OrderItem) => {
-              const key = `${item.name}\0${item.variant ?? ""}`;
-              const displayName = formatItemDisplayName(
-                item.name,
-                item.variant,
-              );
+              const key = `${item.name}\0${item.variant ?? ''}`;
+              const displayName = formatItemDisplayName(item.name, item.variant);
               const existing = itemMap.get(key);
               if (existing) {
                 existing.quantity += item.quantity;
@@ -4430,9 +4062,7 @@ const AdminDashboard = () => {
             });
           });
         }
-        setItemSales(
-          Array.from(itemMap.values()).sort((a, b) => b.quantity - a.quantity),
-        );
+        setItemSales(Array.from(itemMap.values()).sort((a, b) => b.quantity - a.quantity));
       }
 
       if (empData) {
@@ -4459,16 +4089,12 @@ const AdminDashboard = () => {
             if (order.employeeId && empSalesMap.has(order.employeeId)) {
               const empSale = empSalesMap.get(order.employeeId)!;
               empSale.orders += 1;
-              if (order.paymentStatus === "PAID") {
+              if (order.paymentStatus === 'PAID') {
                 empSale.revenue += order.totalAmount;
               }
             }
           });
-          setEmployeeSales(
-            Array.from(empSalesMap.values()).sort(
-              (a, b) => b.revenue - a.revenue,
-            ),
-          );
+          setEmployeeSales(Array.from(empSalesMap.values()).sort((a, b) => b.revenue - a.revenue));
         }
       }
 
@@ -4476,23 +4102,22 @@ const AdminDashboard = () => {
         setOrders(ordersData);
       }
 
-      const failedForToast = failed.filter((k) => k !== "branches");
+      const failedForToast = failed.filter(k => k !== 'branches');
       if (failedForToast.length > 0) {
         toast({
-          title: "Dashboard partially loaded",
-          description: `Some data could not be loaded (${failedForToast.join(", ")}). Please refresh.`,
-          variant: "destructive",
+          title: 'Dashboard partially loaded',
+          description: `Some data could not be loaded (${failedForToast.join(', ')}). Please refresh.`,
+          variant: 'destructive',
         });
       }
     } catch (error) {
-      const isTimeout =
-        error instanceof Error && error.name === "AbortError";
+      const isTimeout = error instanceof Error && error.name === 'AbortError';
       toast({
-        title: "Error",
+        title: 'Error',
         description: isTimeout
-          ? "Request timed out. The server may be slow—try again."
-          : "Failed to load dashboard data",
-        variant: "destructive",
+          ? 'Request timed out. The server may be slow—try again.'
+          : 'Failed to load dashboard data',
+        variant: 'destructive',
       });
     } finally {
       setLoading(false);
@@ -4509,8 +4134,8 @@ const AdminDashboard = () => {
     fetch(`${apiBase}/employees`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
         if (cancelled) return;
         const list = Array.isArray(data)
           ? data
@@ -4531,19 +4156,19 @@ const AdminDashboard = () => {
     if (!token) return;
     try {
       const res = await fetch(`${apiBase}/menu/categories/${id}`, {
-        method: "DELETE",
+        method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
-        toast({ title: "Success", description: "Category deleted" });
-        setCategories((prev) => prev.filter((c) => c.id !== id));
+        toast({ title: 'Success', description: 'Category deleted' });
+        setCategories(prev => prev.filter(c => c.id !== id));
         if (viewingCategory === id) setViewingCategory(null);
       }
     } catch (error) {
       toast({
-        title: "Error",
-        description: "Failed to delete category",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to delete category',
+        variant: 'destructive',
       });
     }
   };
@@ -4565,21 +4190,21 @@ const AdminDashboard = () => {
     token: string | null;
   }) {
     const { toast } = useToast();
-    const [name, setName] = useState("");
-    const [imageUrl, setImageUrl] = useState("");
-    const [imagePreview, setImagePreview] = useState("");
+    const [name, setName] = useState('');
+    const [imageUrl, setImageUrl] = useState('');
+    const [imagePreview, setImagePreview] = useState('');
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
       if (open) {
         if (editingCategory) {
           setName(editingCategory.name);
-          setImageUrl(editingCategory.imageUrl || "");
-          setImagePreview(editingCategory.imageUrl || "");
+          setImageUrl(editingCategory.imageUrl || '');
+          setImagePreview(editingCategory.imageUrl || '');
         } else {
-          setName("");
-          setImageUrl("");
-          setImagePreview("");
+          setName('');
+          setImageUrl('');
+          setImagePreview('');
         }
       }
     }, [open, editingCategory]);
@@ -4589,34 +4214,10 @@ const AdminDashboard = () => {
       setSaving(true);
       try {
         if (editingCategory) {
-          const res = await fetch(
-            `${apiBase}/menu/categories/${editingCategory.id}`,
-            {
-              method: "PUT",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`,
-              },
-              body: JSON.stringify({
-                name: name.trim(),
-                imageUrl: imageUrl.trim() || undefined,
-              }),
-            },
-          );
-          const data = await res.json();
-          if (!res.ok)
-            throw new Error(
-              (data as { message?: string }).message ||
-                "Failed to update category",
-            );
-          toast({ title: "Success", description: "Category updated" });
-          onOpenChange(false);
-          onUpdated(data);
-        } else {
-          const res = await fetch(`${apiBase}/menu/categories`, {
-            method: "POST",
+          const res = await fetch(`${apiBase}/menu/categories/${editingCategory.id}`, {
+            method: 'PUT',
             headers: {
-              "Content-Type": "application/json",
+              'Content-Type': 'application/json',
               Authorization: `Bearer ${token}`,
             },
             body: JSON.stringify({
@@ -4626,20 +4227,34 @@ const AdminDashboard = () => {
           });
           const data = await res.json();
           if (!res.ok)
-            throw new Error(
-              (data as { message?: string }).message ||
-                "Failed to create category",
-            );
-          toast({ title: "Success", description: "Category created" });
+            throw new Error((data as { message?: string }).message || 'Failed to update category');
+          toast({ title: 'Success', description: 'Category updated' });
+          onOpenChange(false);
+          onUpdated(data);
+        } else {
+          const res = await fetch(`${apiBase}/menu/categories`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              name: name.trim(),
+              imageUrl: imageUrl.trim() || undefined,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok)
+            throw new Error((data as { message?: string }).message || 'Failed to create category');
+          toast({ title: 'Success', description: 'Category created' });
           onOpenChange(false);
           onCreated(data);
         }
       } catch (e) {
         toast({
-          title: "Error",
-          description:
-            e instanceof Error ? e.message : "Failed to save category",
-          variant: "destructive",
+          title: 'Error',
+          description: e instanceof Error ? e.message : 'Failed to save category',
+          variant: 'destructive',
         });
       } finally {
         setSaving(false);
@@ -4650,9 +4265,7 @@ const AdminDashboard = () => {
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent aria-describedby="category-dialog-desc">
           <DialogHeader>
-            <DialogTitle>
-              {editingCategory ? "Edit Category" : "New Category"}
-            </DialogTitle>
+            <DialogTitle>{editingCategory ? 'Edit Category' : 'New Category'}</DialogTitle>
             <DialogDescription id="category-dialog-desc" className="sr-only">
               Enter category name and optional description.
             </DialogDescription>
@@ -4663,7 +4276,7 @@ const AdminDashboard = () => {
               <Input
                 placeholder="e.g., Cold Coffee, Momos"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={e => setName(e.target.value)}
               />
             </div>
             <div className="grid gap-2">
@@ -4671,7 +4284,7 @@ const AdminDashboard = () => {
               <Input
                 placeholder="https://example.com/image.jpg"
                 value={imageUrl}
-                onChange={(e) => {
+                onChange={e => {
                   setImageUrl(e.target.value);
                   setImagePreview(e.target.value);
                 }}
@@ -4680,19 +4293,19 @@ const AdminDashboard = () => {
             {(imagePreview || editingCategory?.imageUrl) && (
               <div className="grid gap-2">
                 <Label>Image Preview</Label>
-                <div className="border rounded-lg p-2">
+                <div className="rounded-lg border p-2">
                   <img
                     src={imagePreview || editingCategory?.imageUrl}
                     alt="Category preview"
-                    className="w-full h-32 object-cover rounded-md"
-                    onError={(e) => {
-                      e.currentTarget.style.display = "none";
-                      (
-                        e.currentTarget.nextElementSibling as HTMLElement
-                      )?.classList.remove("hidden");
+                    className="h-32 w-full rounded-md object-cover"
+                    onError={e => {
+                      e.currentTarget.style.display = 'none';
+                      (e.currentTarget.nextElementSibling as HTMLElement)?.classList.remove(
+                        'hidden'
+                      );
                     }}
                   />
-                  <div className="hidden text-center text-muted-foreground text-sm py-8">
+                  <div className="text-muted-foreground hidden py-8 text-center text-sm">
                     Failed to load image
                   </div>
                 </div>
@@ -4700,23 +4313,19 @@ const AdminDashboard = () => {
             )}
           </div>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={saving}
-            >
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
               Cancel
             </Button>
             <Button onClick={handleSubmit} disabled={saving}>
               {saving ? (
                 <>
-                  <span className="inline-block h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                  {editingCategory ? "Updating..." : "Creating..."}
+                  <span className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  {editingCategory ? 'Updating...' : 'Creating...'}
                 </>
               ) : editingCategory ? (
-                "Update"
+                'Update'
               ) : (
-                "Create"
+                'Create'
               )}
             </Button>
           </DialogFooter>
@@ -4730,9 +4339,9 @@ const AdminDashboard = () => {
     try {
       const { notifyCustomers, ...payload } = itemForm;
       const res = await fetch(`${apiBase}/menu/items`, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
@@ -4744,39 +4353,38 @@ const AdminDashboard = () => {
         const data = await res.json();
         const item = data.item ?? data;
         setItemForm({
-          name: "",
-          description: "",
+          name: '',
+          description: '',
           basePrice: 0,
           hasHalf: false,
           halfPrice: 0,
           isActive: true,
           categoryId: 0,
-          imageUrl: "",
+          imageUrl: '',
           notifyCustomers: false,
         });
         setIsItemDialogOpen(false);
         loadDashboardData();
-        toast({ title: "Success", description: "Menu item created" });
+        toast({ title: 'Success', description: 'Menu item created' });
         if (data.broadcast?.mobileCount > 0) {
           toast({
-            title: "Notify customers",
+            title: 'Notify customers',
             description: `Broadcast prepared for ${data.broadcast.mobileCount} customers. Use WhatsApp to send the new launch message.`,
           });
         }
       } else {
         const err = await res.json().catch(() => ({}));
         toast({
-          title: "Error",
-          description:
-            (err as { message?: string }).message || "Failed to create item",
-          variant: "destructive",
+          title: 'Error',
+          description: (err as { message?: string }).message || 'Failed to create item',
+          variant: 'destructive',
         });
       }
     } catch (error) {
       toast({
-        title: "Error",
-        description: "Failed to create item",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to create item',
+        variant: 'destructive',
       });
     }
   };
@@ -4785,24 +4393,24 @@ const AdminDashboard = () => {
     if (!token || !editingItem) return;
     try {
       const res = await fetch(`${apiBase}/menu/items/${editingItem.id}`, {
-        method: "PATCH",
+        method: 'PATCH',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(itemForm),
       });
       if (res.ok) {
-        toast({ title: "Success", description: "Menu item updated" });
+        toast({ title: 'Success', description: 'Menu item updated' });
         setEditingItem(null);
         setIsItemDialogOpen(false);
         loadDashboardData();
       }
     } catch (error) {
       toast({
-        title: "Error",
-        description: "Failed to update item",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to update item',
+        variant: 'destructive',
       });
     }
   };
@@ -4811,18 +4419,18 @@ const AdminDashboard = () => {
     if (!token) return;
     try {
       const res = await fetch(`${apiBase}/menu/items/${id}`, {
-        method: "DELETE",
+        method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
-        toast({ title: "Success", description: "Menu item deleted" });
+        toast({ title: 'Success', description: 'Menu item deleted' });
         loadDashboardData();
       }
     } catch (error) {
       toast({
-        title: "Error",
-        description: "Failed to delete item",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to delete item',
+        variant: 'destructive',
       });
     }
   };
@@ -4831,31 +4439,28 @@ const AdminDashboard = () => {
     if (!token) return;
     setSendingVerification(empId);
     try {
-      const res = await fetch(
-        `${apiBase}/employees/${empId}/resend-verification`,
-        {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
+      const res = await fetch(`${apiBase}/employees/${empId}/resend-verification`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (res.ok) {
-        toast({ title: "Success", description: "Verification email sent." });
+        toast({ title: 'Success', description: 'Verification email sent.' });
         loadDashboardData();
       } else {
         const data = await res.json().catch(() => ({}));
         toast({
-          title: "Error",
+          title: 'Error',
           description:
             (data as { message?: string }).message ||
-            "Failed to send email. Check SMTP settings in .env.",
-          variant: "destructive",
+            'Failed to send email. Check SMTP settings in .env.',
+          variant: 'destructive',
         });
       }
     } catch {
       toast({
-        title: "Error",
-        description: "Network error. Check backend and SMTP settings.",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Network error. Check backend and SMTP settings.',
+        variant: 'destructive',
       });
     } finally {
       setSendingVerification(null);
@@ -4867,36 +4472,31 @@ const AdminDashboard = () => {
     if (!token || !emp) return;
     setVerifyingEmployeeId(emp.id);
     try {
-      const res = await fetchWithTimeout(
-        `${apiBase}/employees/${emp.id}/verify-and-send-invite`,
-        {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-          // Allow extra time in production where SMTP can be slow,
-          // so the request does not fail with a client-side timeout
-          // while the server is still sending the email.
-          timeout: 60000,
-        },
-      );
-      const contentType = res.headers.get("content-type");
-      const isJson = contentType?.includes("application/json");
+      const res = await fetchWithTimeout(`${apiBase}/employees/${emp.id}/verify-and-send-invite`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        // Allow extra time in production where SMTP can be slow,
+        // so the request does not fail with a client-side timeout
+        // while the server is still sending the email.
+        timeout: 60000,
+      });
+      const contentType = res.headers.get('content-type');
+      const isJson = contentType?.includes('application/json');
       const data = isJson
         ? await res.json().catch(() => ({}))
-        : { message: await res.text().catch(() => "Server error") };
+        : { message: await res.text().catch(() => 'Server error') };
       if (res.ok) {
         const { _message, ...updated } = data as {
           _message?: string;
           [k: string]: unknown;
         };
-        setEmployees((prev) =>
-          prev.map((e) => (e.id === emp.id ? { ...e, ...updated } : e)),
-        );
+        setEmployees(prev => prev.map(e => (e.id === emp.id ? { ...e, ...updated } : e)));
         setEmployeeToVerify(null);
         if (_message) {
-          toast({ title: "Already verified", description: _message });
+          toast({ title: 'Already verified', description: _message });
         } else {
           toast({
-            title: "Invite sent",
+            title: 'Invite sent',
             description: `${emp.name} will receive login credentials via email.`,
           });
         }
@@ -4905,25 +4505,25 @@ const AdminDashboard = () => {
         const desc =
           payload.message ||
           (res.status === 503
-            ? "Email is not configured on the server. Add EMAIL_SMTP_* and EMAIL_FROM_ADDRESS in the backend environment (e.g. Render dashboard)."
+            ? 'Email is not configured on the server. Add EMAIL_SMTP_* and EMAIL_FROM_ADDRESS in the backend environment (e.g. Render dashboard).'
             : res.status === 500
-              ? "Server could not send email. Check backend SMTP settings and logs."
-              : "Failed to send invite.");
-        const extra = payload.detail ? ` ${payload.detail}` : "";
+              ? 'Server could not send email. Check backend SMTP settings and logs.'
+              : 'Failed to send invite.');
+        const extra = payload.detail ? ` ${payload.detail}` : '';
         toast({
-          title: "Error",
+          title: 'Error',
           description: desc + extra,
-          variant: "destructive",
+          variant: 'destructive',
         });
       }
     } catch (e) {
-      const isAbort = e instanceof Error && e.name === "AbortError";
+      const isAbort = e instanceof Error && e.name === 'AbortError';
       toast({
-        title: "Error",
+        title: 'Error',
         description: isAbort
-          ? "Request timed out. Check your connection and try again."
-          : "Failed to send invite. Check network and backend.",
-        variant: "destructive",
+          ? 'Request timed out. Check your connection and try again.'
+          : 'Failed to send invite. Check network and backend.',
+        variant: 'destructive',
       });
     } finally {
       setVerifyingEmployeeId(null);
@@ -4935,52 +4535,44 @@ const AdminDashboard = () => {
     setCompletingOrderId(orderId);
     try {
       const res = await fetch(`${apiBase}/orders/${orderId}/status`, {
-        method: "PATCH",
+        method: 'PATCH',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ status }),
       });
       if (res.ok) {
         toast({
-          title: "Success",
-          description: `Order marked ${status.replace("_", " ").toLowerCase()}`,
+          title: 'Success',
+          description: `Order marked ${status.replace('_', ' ').toLowerCase()}`,
         });
-        setOrders((prev) =>
-          prev.map((o) => (o.id === orderId ? { ...o, status } : o)),
-        );
-        setAllOrders((prev) =>
-          prev.map((o) => (o.id === orderId ? { ...o, status } : o)),
-        );
-        setOrdersByTable((prev) =>
-          prev.map((t) => ({
+        setOrders(prev => prev.map(o => (o.id === orderId ? { ...o, status } : o)));
+        setAllOrders(prev => prev.map(o => (o.id === orderId ? { ...o, status } : o)));
+        setOrdersByTable(prev =>
+          prev.map(t => ({
             ...t,
-            orders: (t.orders || []).map((o: Order) =>
-              o.id === orderId ? { ...o, status } : o,
-            ),
-          })),
+            orders: (t.orders || []).map((o: Order) => (o.id === orderId ? { ...o, status } : o)),
+          }))
         );
         if (selectedOrder?.id === orderId) {
-          setSelectedOrder((prev) => (prev ? { ...prev, status } : null));
-          setPopupDisplayOrder((prev) =>
-            prev && prev.id === orderId ? { ...prev, status } : null,
-          );
+          setSelectedOrder(prev => (prev ? { ...prev, status } : null));
+          setPopupDisplayOrder(prev => (prev && prev.id === orderId ? { ...prev, status } : null));
         }
         setIsOrderDialogOpen(false);
       } else {
         const data = await res.json().catch(() => ({}));
         toast({
-          title: "Error",
-          description: data.message || "Failed to update order",
-          variant: "destructive",
+          title: 'Error',
+          description: data.message || 'Failed to update order',
+          variant: 'destructive',
         });
       }
     } catch {
       toast({
-        title: "Error",
-        description: "Failed to update order",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to update order',
+        variant: 'destructive',
       });
     } finally {
       setCompletingOrderId(null);
@@ -4994,10 +4586,10 @@ const AdminDashboard = () => {
     try {
       const params = new URLSearchParams();
       // If a custom range is provided, use start/end; otherwise fall back to single business date
-      if (orderStartDate) params.append("startDate", orderStartDate);
-      if (orderEndDate) params.append("endDate", orderEndDate);
+      if (orderStartDate) params.append('startDate', orderStartDate);
+      if (orderEndDate) params.append('endDate', orderEndDate);
       if (!orderStartDate && !orderEndDate && orderDateFilter) {
-        params.append("date", orderDateFilter);
+        params.append('date', orderDateFilter);
       }
 
       const res = await fetch(`${apiBase}/orders/all?${params.toString()}`, {
@@ -5018,9 +4610,9 @@ const AdminDashboard = () => {
   const handleOpenOrderDialog = useCallback((order: Order) => {
     setSelectedOrder(order);
     setPopupDisplayOrder(
-      typeof structuredClone === "function"
+      typeof structuredClone === 'function'
         ? structuredClone(order)
-        : JSON.parse(JSON.stringify(order)),
+        : JSON.parse(JSON.stringify(order))
     );
     setIsOrderDialogOpen(true);
   }, []);
@@ -5031,10 +4623,9 @@ const AdminDashboard = () => {
     setShiftHistoryLoading(true);
     try {
       const params = new URLSearchParams();
-      if (hoursEmployeeFilter !== "all")
-        params.append("employeeId", hoursEmployeeFilter);
-      if (hoursStartDate) params.append("startDate", hoursStartDate);
-      if (hoursEndDate) params.append("endDate", hoursEndDate);
+      if (hoursEmployeeFilter !== 'all') params.append('employeeId', hoursEmployeeFilter);
+      if (hoursStartDate) params.append('startDate', hoursStartDate);
+      if (hoursEndDate) params.append('endDate', hoursEndDate);
 
       const res = await fetch(`${apiBase}/shift/history?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -5057,10 +4648,9 @@ const AdminDashboard = () => {
     setOvertimeLoading(true);
     try {
       const params = new URLSearchParams();
-      if (overtimeDateFrom) params.append("dateFrom", overtimeDateFrom);
-      if (overtimeDateTo) params.append("dateTo", overtimeDateTo);
-      if (overtimeEmployeeFilter !== "all")
-        params.append("employeeId", overtimeEmployeeFilter);
+      if (overtimeDateFrom) params.append('dateFrom', overtimeDateFrom);
+      if (overtimeDateTo) params.append('dateTo', overtimeDateTo);
+      if (overtimeEmployeeFilter !== 'all') params.append('employeeId', overtimeEmployeeFilter);
       const res = await fetch(`${apiBase}/overtime?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -5073,23 +4663,16 @@ const AdminDashboard = () => {
     } finally {
       setOvertimeLoading(false);
     }
-  }, [
-    token,
-    apiBase,
-    overtimeDateFrom,
-    overtimeDateTo,
-    overtimeEmployeeFilter,
-  ]);
+  }, [token, apiBase, overtimeDateFrom, overtimeDateTo, overtimeEmployeeFilter]);
 
   const loadLate = useCallback(async () => {
     if (!token) return;
     setLateLoading(true);
     try {
       const params = new URLSearchParams();
-      if (lateDateFrom) params.append("dateFrom", lateDateFrom);
-      if (lateDateTo) params.append("dateTo", lateDateTo);
-      if (lateEmployeeFilter !== "all")
-        params.append("employeeId", lateEmployeeFilter);
+      if (lateDateFrom) params.append('dateFrom', lateDateFrom);
+      if (lateDateTo) params.append('dateTo', lateDateTo);
+      if (lateEmployeeFilter !== 'all') params.append('employeeId', lateEmployeeFilter);
       const res = await fetch(`${apiBase}/late?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -5109,20 +4692,17 @@ const AdminDashboard = () => {
     setLeaveLoading(true);
     try {
       const params = new URLSearchParams();
-      if (leaveDateFrom) params.append("startDate", leaveDateFrom);
-      if (leaveDateTo) params.append("endDate", leaveDateTo);
-      if (leaveEmployeeFilter !== "all") params.append("employeeId", leaveEmployeeFilter);
-      if (leaveStatusFilter && leaveStatusFilter !== "all") params.append("status", leaveStatusFilter);
+      if (leaveDateFrom) params.append('startDate', leaveDateFrom);
+      if (leaveDateTo) params.append('endDate', leaveDateTo);
+      if (leaveEmployeeFilter !== 'all') params.append('employeeId', leaveEmployeeFilter);
+      if (leaveStatusFilter && leaveStatusFilter !== 'all')
+        params.append('status', leaveStatusFilter);
       const res = await fetch(`${apiBase}/leaves?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
         const data = await res.json();
-        const list = Array.isArray(data?.leaves)
-          ? data.leaves
-          : Array.isArray(data)
-            ? data
-            : [];
+        const list = Array.isArray(data?.leaves) ? data.leaves : Array.isArray(data) ? data : [];
         setLeaveRequests(list);
       }
     } catch {
@@ -5133,14 +4713,14 @@ const AdminDashboard = () => {
   }, [token, apiBase, leaveDateFrom, leaveDateTo, leaveEmployeeFilter, leaveStatusFilter]);
 
   const updateLeaveStatus = useCallback(
-    async (id: number, status: "APPROVED" | "REJECTED") => {
+    async (id: number, status: 'APPROVED' | 'REJECTED') => {
       if (!token) return;
       setLeaveActionLoadingId(id);
       try {
         const res = await fetch(`${apiBase}/leaves/${id}/status`, {
-          method: "PATCH",
+          method: 'PATCH',
           headers: {
-            "Content-Type": "application/json",
+            'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
@@ -5151,42 +4731,40 @@ const AdminDashboard = () => {
         const data = await res.json().catch(() => null);
         if (!res.ok) {
           throw new Error(
-            (data && typeof data === "object" && "message" in data
-              ? String((data as any).message || "")
-              : "") || `Failed to ${status.toLowerCase()} leave`,
+            (data && typeof data === 'object' && 'message' in data
+              ? String((data as any).message || '')
+              : '') || `Failed to ${status.toLowerCase()} leave`
           );
         }
         toast({
-          title: status === "APPROVED" ? "Leave approved" : "Leave rejected",
-          description: "Employee has been notified by email.",
+          title: status === 'APPROVED' ? 'Leave approved' : 'Leave rejected',
+          description: 'Employee has been notified by email.',
         });
         await loadLeaves();
       } catch (e) {
         toast({
-          title: "Action failed",
-          description: e instanceof Error ? e.message : "Could not update leave status",
-          variant: "destructive",
+          title: 'Action failed',
+          description: e instanceof Error ? e.message : 'Could not update leave status',
+          variant: 'destructive',
         });
       } finally {
         setLeaveActionLoadingId(null);
       }
     },
-    [token, apiBase, leaveRemarksById, loadLeaves, toast],
+    [token, apiBase, leaveRemarksById, loadLeaves, toast]
   );
 
   // Debounce late filters so Apply feels reliable and avoids spam fetches
   const lateDebounceTimerRef = useRef<number | null>(null);
   useEffect(() => {
     if (!token) return;
-    if (activeSection !== "late") return;
-    if (lateDebounceTimerRef.current)
-      window.clearTimeout(lateDebounceTimerRef.current);
+    if (activeSection !== 'late') return;
+    if (lateDebounceTimerRef.current) window.clearTimeout(lateDebounceTimerRef.current);
     lateDebounceTimerRef.current = window.setTimeout(() => {
       loadLate();
     }, 350);
     return () => {
-      if (lateDebounceTimerRef.current)
-        window.clearTimeout(lateDebounceTimerRef.current);
+      if (lateDebounceTimerRef.current) window.clearTimeout(lateDebounceTimerRef.current);
     };
   }, [token, activeSection, lateDateFrom, lateDateTo, lateEmployeeFilter, loadLate]);
 
@@ -5224,26 +4802,25 @@ const AdminDashboard = () => {
         branchDataForFallback = branchData;
         setBranch(branchData);
         setBranchForm({
-          name: branchData?.name || "",
-          location: branchData?.location || "",
-          timezone: branchData?.timezone || "Asia/Kolkata",
-          logoUrl: branchData?.logoUrl || "",
-          phone: branchData?.phone || "",
-          googleReviewUrl: branchData?.googleReviewUrl || "",
-          pincode: branchData?.pincode || "",
-          directorsEmail: branchData?.directorsEmail || "",
+          name: branchData?.name || '',
+          location: branchData?.location || '',
+          timezone: branchData?.timezone || 'Asia/Kolkata',
+          logoUrl: branchData?.logoUrl || '',
+          phone: branchData?.phone || '',
+          googleReviewUrl: branchData?.googleReviewUrl || '',
+          pincode: branchData?.pincode || '',
+          directorsEmail: branchData?.directorsEmail || '',
           showTotalAmountToCustomers:
-            typeof branchData?.showTotalAmountToCustomers === "boolean"
+            typeof branchData?.showTotalAmountToCustomers === 'boolean'
               ? branchData.showTotalAmountToCustomers
               : true,
           enableNewOrderRinging:
-            typeof branchData?.enableNewOrderRinging === "boolean"
+            typeof branchData?.enableNewOrderRinging === 'boolean'
               ? branchData.enableNewOrderRinging
               : true,
-          newOrderSoundPreset:
-            branchData?.newOrderSoundPreset || "ring",
+          newOrderSoundPreset: branchData?.newOrderSoundPreset || 'ring',
           newOrderSoundVolume:
-            typeof branchData?.newOrderSoundVolume === "number"
+            typeof branchData?.newOrderSoundVolume === 'number'
               ? branchData.newOrderSoundVolume
               : 1,
         });
@@ -5269,7 +4846,7 @@ const AdminDashboard = () => {
             setBranchesListUnavailable(false);
           } else if (
             branchDataForFallback &&
-            typeof (branchDataForFallback as { id?: unknown }).id === "number"
+            typeof (branchDataForFallback as { id?: unknown }).id === 'number'
           ) {
             setBranches([branchDataForFallback as (typeof branches)[number]]);
             setBranchesListUnavailable(false);
@@ -5277,7 +4854,7 @@ const AdminDashboard = () => {
         } catch {
           if (
             branchDataForFallback &&
-            typeof (branchDataForFallback as { id?: unknown }).id === "number"
+            typeof (branchDataForFallback as { id?: unknown }).id === 'number'
           ) {
             setBranches([branchDataForFallback as (typeof branches)[number]]);
             setBranchesListUnavailable(false);
@@ -5288,12 +4865,9 @@ const AdminDashboard = () => {
         const notifData = await notifRes.json();
         const list = Array.isArray(notifData) ? notifData : [];
         try {
-          const clearedAt = localStorage.getItem("dm_notifications_cleared_at");
+          const clearedAt = localStorage.getItem('dm_notifications_cleared_at');
           const filtered = clearedAt
-            ? list.filter(
-                (n: any) =>
-                  new Date(n.createdAt || 0).getTime() > Number(clearedAt),
-              )
+            ? list.filter((n: any) => new Date(n.createdAt || 0).getTime() > Number(clearedAt))
             : list;
           setNotifications(filtered);
         } catch {
@@ -5323,9 +4897,9 @@ const AdminDashboard = () => {
       const res = await fetchWithTimeoutRetry(
         `${apiBase}/branches`,
         {
-          method: "POST",
+          method: 'POST',
           headers: {
-            "Content-Type": "application/json",
+            'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
           timeout: Math.max(API_TIMEOUT_MS, 90_000),
@@ -5341,38 +4915,38 @@ const AdminDashboard = () => {
             showTotalAmountToCustomers: !!createBranchForm.showTotalAmountToCustomers,
           }),
         },
-        5,
+        5
       );
       if (res.ok) {
         const newBranch = await res.json();
-        setBranches((prev) => [...prev, newBranch]);
+        setBranches(prev => [...prev, newBranch]);
         setBranchesListUnavailable(false);
         setCreateBranchOpen(false);
         setCreateBranchForm({
-          name: "",
-          location: "",
-          timezone: "Asia/Kolkata",
-          logoUrl: "",
-          phone: "",
-          googleReviewUrl: "",
-          pincode: "",
-          directorsEmail: "",
+          name: '',
+          location: '',
+          timezone: 'Asia/Kolkata',
+          logoUrl: '',
+          phone: '',
+          googleReviewUrl: '',
+          pincode: '',
+          directorsEmail: '',
           showTotalAmountToCustomers: true,
         });
-        toast({ title: "Success", description: "Branch created" });
+        toast({ title: 'Success', description: 'Branch created' });
       } else {
         const description = await readApiErrorMessage(res);
         toast({
-          title: "Could not create branch",
+          title: 'Could not create branch',
           description,
-          variant: "destructive",
+          variant: 'destructive',
         });
       }
     } catch (error) {
       toast({
-        title: "Could not create branch",
+        title: 'Could not create branch',
         description: describeFetchFailure(error),
-        variant: "destructive",
+        variant: 'destructive',
       });
     } finally {
       setSavingBranch(false);
@@ -5384,9 +4958,9 @@ const AdminDashboard = () => {
     const branchToUpdate = branch;
     if (!token || !branchToUpdate?.id) {
       toast({
-        title: "Cannot save",
-        description: "Select a branch above (Edit in Branch Settings), then save.",
-        variant: "destructive",
+        title: 'Cannot save',
+        description: 'Select a branch above (Edit in Branch Settings), then save.',
+        variant: 'destructive',
       });
       return;
     }
@@ -5394,65 +4968,59 @@ const AdminDashboard = () => {
     try {
       const { directorsEmail: _de, ...branchPayload } = branchForm;
       const res = await fetch(`${apiBase}/config/branch/${branchToUpdate.id}`, {
-        method: "PATCH",
+        method: 'PATCH',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(branchPayload),
       });
       if (res.ok) {
         toast({
-          title: "Saved successfully",
-          description: "Branch settings updated.",
+          title: 'Saved successfully',
+          description: 'Branch settings updated.',
         });
         const updated = await res.json();
         setBranch(updated);
         setBranchForm({
-          name: updated?.name || "",
-          location: updated?.location || "",
-          timezone: updated?.timezone || "Asia/Kolkata",
-          logoUrl: updated?.logoUrl || "",
-          phone: updated?.phone || "",
-          googleReviewUrl: updated?.googleReviewUrl || "",
-          pincode: updated?.pincode || "",
-          directorsEmail: updated?.directorsEmail || "",
+          name: updated?.name || '',
+          location: updated?.location || '',
+          timezone: updated?.timezone || 'Asia/Kolkata',
+          logoUrl: updated?.logoUrl || '',
+          phone: updated?.phone || '',
+          googleReviewUrl: updated?.googleReviewUrl || '',
+          pincode: updated?.pincode || '',
+          directorsEmail: updated?.directorsEmail || '',
           showTotalAmountToCustomers:
-            typeof updated?.showTotalAmountToCustomers === "boolean"
+            typeof updated?.showTotalAmountToCustomers === 'boolean'
               ? updated.showTotalAmountToCustomers
               : true,
           enableNewOrderRinging:
-            typeof updated?.enableNewOrderRinging === "boolean"
+            typeof updated?.enableNewOrderRinging === 'boolean'
               ? updated.enableNewOrderRinging
               : true,
-          newOrderSoundPreset:
-            updated?.newOrderSoundPreset || "ring",
+          newOrderSoundPreset: updated?.newOrderSoundPreset || 'ring',
           newOrderSoundVolume:
-            typeof updated?.newOrderSoundVolume === "number"
-              ? updated.newOrderSoundVolume
-              : 1,
+            typeof updated?.newOrderSoundVolume === 'number' ? updated.newOrderSoundVolume : 1,
         });
-        if (typeof window !== "undefined") {
-          if (updated?.name)
-            window.localStorage.setItem("branch_name", updated.name);
-          if (updated?.logoUrl)
-            window.localStorage.setItem("branch_logo_url", updated.logoUrl);
+        if (typeof window !== 'undefined') {
+          if (updated?.name) window.localStorage.setItem('branch_name', updated.name);
+          if (updated?.logoUrl) window.localStorage.setItem('branch_logo_url', updated.logoUrl);
         }
         await loadSettings();
       } else {
         const description = await readApiErrorMessage(res);
         toast({
-          title: "Could not save branch",
+          title: 'Could not save branch',
           description,
-          variant: "destructive",
+          variant: 'destructive',
         });
       }
     } catch {
       toast({
-        title: "Error",
-        description:
-          "Network error or server unreachable. Try again in a moment.",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Network error or server unreachable. Try again in a moment.',
+        variant: 'destructive',
       });
     } finally {
       setSavingBranch(false);
@@ -5466,15 +5034,12 @@ const AdminDashboard = () => {
     try {
       const params = new URLSearchParams();
       if (removedItemsDateFilter) {
-        params.append("date", removedItemsDateFilter);
+        params.append('date', removedItemsDateFilter);
       }
 
-      const res = await fetch(
-        `${apiBase}/orders/reports/removed-items?${params}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
+      const res = await fetch(`${apiBase}/orders/reports/removed-items?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (res.ok) {
         const data = await res.json();
         // Backend returns removedItems (with unitPrice, employee, order.table), dailyStats, summary.totalLoss
@@ -5484,8 +5049,8 @@ const AdminDashboard = () => {
           itemName: item.itemName,
           itemPrice: item.unitPrice ?? 0,
           quantity: item.quantity,
-          reason: item.reason || "",
-          removedBy: item.employee?.name ?? "—",
+          reason: item.reason || '',
+          removedBy: item.employee?.name ?? '—',
           removedAt: item.createdAt ?? item.date,
           tableNumber: item.order?.table?.tableNumber,
         }));
@@ -5504,8 +5069,8 @@ const AdminDashboard = () => {
     if (!token) return;
     try {
       const params = new URLSearchParams();
-      if (queryStatusFilter && queryStatusFilter !== "all")
-        params.append("status", queryStatusFilter);
+      if (queryStatusFilter && queryStatusFilter !== 'all')
+        params.append('status', queryStatusFilter);
       const res = await fetch(`${apiBase}/customer-queries?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -5527,9 +5092,7 @@ const AdminDashboard = () => {
       if (res.ok) {
         const data = await res.json();
         const list = Array.isArray(data) ? data : [];
-        const count = list.filter(
-          (q: { status: string }) => q.status !== "RESOLVED",
-        ).length;
+        const count = list.filter((q: { status: string }) => q.status !== 'RESOLVED').length;
         setPendingQueriesCount(count);
       }
     } catch (_) {}
@@ -5539,24 +5102,24 @@ const AdminDashboard = () => {
   useEffect(() => {
     // Backward compatibility: older builds stored "orders" in localStorage.
     // We removed "orders" from sidebar; treat it as "all-orders".
-    if (activeSection === "orders") {
-      setActiveSection("all-orders");
+    if (activeSection === 'orders') {
+      setActiveSection('all-orders');
       return;
     }
-    if (token && activeSection === "all-orders") {
+    if (token && activeSection === 'all-orders') {
       loadAllOrders();
     }
   }, [token, activeSection, orderDateFilter, orderTableFilter]);
 
   useEffect(() => {
-    if (token && activeSection === "removed-items") {
+    if (token && activeSection === 'removed-items') {
       loadRemovedItems();
     }
   }, [token, activeSection, removedItemsDateFilter]);
 
   // Default date range for Work Hours when section is first opened (default: current day only)
   useEffect(() => {
-    if (activeSection === "hours" && !hoursStartDate && !hoursEndDate) {
+    if (activeSection === 'hours' && !hoursStartDate && !hoursEndDate) {
       const now = new Date();
       setHoursStartDate(now.toISOString().slice(0, 10));
       setHoursEndDate(now.toISOString().slice(0, 10));
@@ -5564,13 +5127,13 @@ const AdminDashboard = () => {
   }, [activeSection]);
 
   useEffect(() => {
-    if (token && activeSection === "hours") {
+    if (token && activeSection === 'hours') {
       loadShiftHistory();
     }
   }, [token, activeSection, hoursEmployeeFilter, hoursStartDate, hoursEndDate]);
 
   useEffect(() => {
-    if (activeSection === "overtime" && !overtimeDateFrom && !overtimeDateTo) {
+    if (activeSection === 'overtime' && !overtimeDateFrom && !overtimeDateTo) {
       const now = new Date();
       const start = new Date(now.getFullYear(), now.getMonth(), 1);
       setOvertimeDateFrom(start.toISOString().slice(0, 10));
@@ -5579,13 +5142,13 @@ const AdminDashboard = () => {
   }, [activeSection]);
 
   useEffect(() => {
-    if (token && activeSection === "overtime") {
+    if (token && activeSection === 'overtime') {
       loadOvertime();
     }
   }, [token, activeSection, loadOvertime]);
 
   useEffect(() => {
-    if (activeSection === "late" && !lateDateFrom && !lateDateTo) {
+    if (activeSection === 'late' && !lateDateFrom && !lateDateTo) {
       const now = new Date();
       const start = new Date(now.getFullYear(), now.getMonth(), 1);
       setLateDateFrom(start.toISOString().slice(0, 10));
@@ -5594,19 +5157,19 @@ const AdminDashboard = () => {
   }, [activeSection]);
 
   useEffect(() => {
-    if (token && activeSection === "late") {
+    if (token && activeSection === 'late') {
       loadLate();
     }
   }, [token, activeSection, loadLate]);
 
   useEffect(() => {
-    if (token && activeSection === "leaves") {
+    if (token && activeSection === 'leaves') {
       loadLeaves();
     }
   }, [token, activeSection, loadLeaves]);
 
   useEffect(() => {
-    if (token && activeSection === "settings") {
+    if (token && activeSection === 'settings') {
       loadSettings();
     }
   }, [token, activeSection]);
@@ -5618,8 +5181,8 @@ const AdminDashboard = () => {
     fetch(`${apiBase}/branches`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
         if (cancelled) return;
         // Only update when we got a response; do not overwrite with [] on 401/500
         if (data == null) return;
@@ -5639,7 +5202,7 @@ const AdminDashboard = () => {
   }, [token, isEmployeeDialogOpen]);
 
   useEffect(() => {
-    if (token && activeSection === "customer-queries") {
+    if (token && activeSection === 'customer-queries') {
       loadCustomerQueries();
     }
   }, [token, activeSection, loadCustomerQueries]);
@@ -5652,10 +5215,9 @@ const AdminDashboard = () => {
         limit: String(leaderboardLimit),
         sortBy: leaderboardSortBy,
       });
-      const res = await fetch(
-        `${apiBase}/orders/customer-leaderboard?${params}`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
+      const res = await fetch(`${apiBase}/orders/customer-leaderboard?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (res.ok) {
         const data = await res.json();
         setLeaderboard(data.leaderboard ?? []);
@@ -5670,7 +5232,7 @@ const AdminDashboard = () => {
   }, [token, leaderboardLimit, leaderboardSortBy]);
 
   useEffect(() => {
-    if (token && activeSection === "customer-leaderboard") {
+    if (token && activeSection === 'customer-leaderboard') {
       loadLeaderboard();
     }
   }, [token, activeSection, loadLeaderboard]);
@@ -5697,14 +5259,9 @@ const AdminDashboard = () => {
           const data = await res.json();
           const list = Array.isArray(data) ? data : [];
           try {
-            const clearedAt = localStorage.getItem(
-              "dm_notifications_cleared_at",
-            );
+            const clearedAt = localStorage.getItem('dm_notifications_cleared_at');
             const filtered = clearedAt
-              ? list.filter(
-                  (n: any) =>
-                    new Date(n.createdAt || 0).getTime() > Number(clearedAt),
-                )
+              ? list.filter((n: any) => new Date(n.createdAt || 0).getTime() > Number(clearedAt))
               : list;
             setNotifications(filtered);
           } catch {
@@ -5720,7 +5277,7 @@ const AdminDashboard = () => {
 
   // Auto refresh orders every 10 seconds when on orders page – skip while order dialog is open to keep popup stable
   useEffect(() => {
-    if (activeSection !== "orders") return;
+    if (activeSection !== 'orders') return;
     const interval = setInterval(() => {
       if (isOrderDialogOpenRef.current) return;
       loadAllOrders();
@@ -5732,66 +5289,66 @@ const AdminDashboard = () => {
 
   // 1. COMPACT KPI CARDS - All INR (responsive: 2 col mobile, 4 col md+)
   const KPICards = () => (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 w-full min-w-0">
+    <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:gap-3 md:grid-cols-4">
       {/* Row 1 */}
-      <Card className="bg-gradient-to-br from-emerald-50 to-white border-emerald-100 min-w-0 overflow-hidden">
+      <Card className="min-w-0 overflow-hidden border-emerald-100 bg-gradient-to-br from-emerald-50 to-white">
         <CardContent className="p-2 sm:p-3">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <p className="text-xs text-muted-foreground">Total Revenue</p>
-              <p className="text-base sm:text-lg font-bold text-emerald-700 truncate">
+              <p className="text-muted-foreground text-xs">Total Revenue</p>
+              <p className="truncate text-base font-bold text-emerald-700 sm:text-lg">
                 {formatINR(todayStats.totalRevenue)}
               </p>
             </div>
-            <div className="p-1.5 bg-emerald-100 rounded-md shrink-0">
+            <div className="shrink-0 rounded-md bg-emerald-100 p-1.5">
               <IndianRupee className="h-4 w-4 text-emerald-600" />
             </div>
           </div>
         </CardContent>
       </Card>
 
-      <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100 min-w-0 overflow-hidden">
+      <Card className="min-w-0 overflow-hidden border-blue-100 bg-gradient-to-br from-blue-50 to-white">
         <CardContent className="p-2 sm:p-3">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <p className="text-xs text-muted-foreground">Total Orders</p>
-              <p className="text-base sm:text-lg font-bold text-blue-700 truncate">
+              <p className="text-muted-foreground text-xs">Total Orders</p>
+              <p className="truncate text-base font-bold text-blue-700 sm:text-lg">
                 {todayStats.totalOrders}
               </p>
             </div>
-            <div className="p-1.5 bg-blue-100 rounded-md shrink-0">
+            <div className="shrink-0 rounded-md bg-blue-100 p-1.5">
               <ShoppingCart className="h-4 w-4 text-blue-600" />
             </div>
           </div>
         </CardContent>
       </Card>
 
-      <Card className="bg-gradient-to-br from-amber-50 to-white border-amber-100 min-w-0 overflow-hidden">
+      <Card className="min-w-0 overflow-hidden border-amber-100 bg-gradient-to-br from-amber-50 to-white">
         <CardContent className="p-2 sm:p-3">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <p className="text-xs text-muted-foreground">Pending</p>
-              <p className="text-base sm:text-lg font-bold text-amber-700 truncate">
+              <p className="text-muted-foreground text-xs">Pending</p>
+              <p className="truncate text-base font-bold text-amber-700 sm:text-lg">
                 {todayStats.pendingPayments}
               </p>
             </div>
-            <div className="p-1.5 bg-amber-100 rounded-md shrink-0">
+            <div className="shrink-0 rounded-md bg-amber-100 p-1.5">
               <AlertCircle className="h-4 w-4 text-amber-600" />
             </div>
           </div>
         </CardContent>
       </Card>
 
-      <Card className="bg-gradient-to-br from-green-50 to-white border-green-100 min-w-0 overflow-hidden">
+      <Card className="min-w-0 overflow-hidden border-green-100 bg-gradient-to-br from-green-50 to-white">
         <CardContent className="p-2 sm:p-3">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <p className="text-xs text-muted-foreground">Paid Orders</p>
-              <p className="text-base sm:text-lg font-bold text-green-700 truncate">
+              <p className="text-muted-foreground text-xs">Paid Orders</p>
+              <p className="truncate text-base font-bold text-green-700 sm:text-lg">
                 {todayStats.paidOrders}
               </p>
             </div>
-            <div className="p-1.5 bg-green-100 rounded-md shrink-0">
+            <div className="shrink-0 rounded-md bg-green-100 p-1.5">
               <CheckCircle2 className="h-4 w-4 text-green-600" />
             </div>
           </div>
@@ -5799,100 +5356,96 @@ const AdminDashboard = () => {
       </Card>
 
       {/* Row 2 */}
-      <Card className="bg-gradient-to-br from-purple-50 to-white border-purple-100 min-w-0 overflow-hidden">
+      <Card className="min-w-0 overflow-hidden border-purple-100 bg-gradient-to-br from-purple-50 to-white">
         <CardContent className="p-2 sm:p-3">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <p className="text-xs text-muted-foreground">Employees Summary</p>
-              <p className="text-xs sm:text-sm font-bold text-purple-700 line-clamp-2 break-words">
-                Total: {employees.length} · Active: {todayStats.activeEmployees}{" "}
-                · On Shift: {activeShiftsNow.length}
+              <p className="text-muted-foreground text-xs">Employees Summary</p>
+              <p className="line-clamp-2 text-xs font-bold break-words text-purple-700 sm:text-sm">
+                Total: {employees.length} · Active: {todayStats.activeEmployees} · On Shift:{' '}
+                {activeShiftsNow.length}
                 {overtimeSummary.overtimeRunningCount > 0 && (
                   <span className="text-amber-600">
-                    {" "}
+                    {' '}
                     · OT: {overtimeSummary.overtimeRunningCount}
                   </span>
                 )}
               </p>
             </div>
-            <div className="p-1.5 bg-purple-100 rounded-md shrink-0">
+            <div className="shrink-0 rounded-md bg-purple-100 p-1.5">
               <Users className="h-4 w-4 text-purple-600" />
             </div>
           </div>
         </CardContent>
       </Card>
 
-      <Card className="bg-gradient-to-br from-cyan-50 to-white border-cyan-100 min-w-0 overflow-hidden">
+      <Card className="min-w-0 overflow-hidden border-cyan-100 bg-gradient-to-br from-cyan-50 to-white">
         <CardContent className="p-2 sm:p-3">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <p className="text-xs text-muted-foreground">Avg Order</p>
-              <p className="text-base sm:text-lg font-bold text-cyan-700 truncate">
+              <p className="text-muted-foreground text-xs">Avg Order</p>
+              <p className="truncate text-base font-bold text-cyan-700 sm:text-lg">
                 {formatINR(todayStats.avgOrderValue)}
               </p>
             </div>
-            <div className="p-1.5 bg-cyan-100 rounded-md shrink-0">
+            <div className="shrink-0 rounded-md bg-cyan-100 p-1.5">
               <TrendingUp className="h-4 w-4 text-cyan-600" />
             </div>
           </div>
         </CardContent>
       </Card>
 
-      <Card className="bg-gradient-to-br from-pink-50 to-white border-pink-100 min-w-0 overflow-hidden">
+      <Card className="min-w-0 overflow-hidden border-pink-100 bg-gradient-to-br from-pink-50 to-white">
         <CardContent className="p-2 sm:p-3">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <p className="text-xs text-muted-foreground">Items Sold</p>
-              <p className="text-base sm:text-lg font-bold text-pink-700 truncate">
+              <p className="text-muted-foreground text-xs">Items Sold</p>
+              <p className="truncate text-base font-bold text-pink-700 sm:text-lg">
                 {todayStats.totalItemsSold}
               </p>
             </div>
-            <div className="p-1.5 bg-pink-100 rounded-md shrink-0">
+            <div className="shrink-0 rounded-md bg-pink-100 p-1.5">
               <Package className="h-4 w-4 text-pink-600" />
             </div>
           </div>
         </CardContent>
       </Card>
 
-      <Card className="bg-gradient-to-br from-orange-50 to-white border-orange-100 min-w-0 overflow-hidden">
+      <Card className="min-w-0 overflow-hidden border-orange-100 bg-gradient-to-br from-orange-50 to-white">
         <CardContent className="p-2 sm:p-3">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <p className="text-xs text-muted-foreground">Top selling today</p>
+              <p className="text-muted-foreground text-xs">Top selling today</p>
               <p
-                className="text-sm font-bold text-orange-700 truncate"
+                className="truncate text-sm font-bold text-orange-700"
                 title={todayStats.topSellingItem?.name}
               >
-                {todayStats.topSellingItem?.name || "—"}
+                {todayStats.topSellingItem?.name || '—'}
               </p>
               <p className="text-xs text-orange-600">
                 {todayStats.topSellingItem?.quantity != null
                   ? `${todayStats.topSellingItem.quantity} sold`
-                  : ""}
+                  : ''}
               </p>
             </div>
-            <div className="p-1.5 bg-orange-100 rounded-md shrink-0">
+            <div className="shrink-0 rounded-md bg-orange-100 p-1.5">
               <Star className="h-4 w-4 text-orange-600" />
             </div>
           </div>
         </CardContent>
       </Card>
 
-      <Card className="bg-gradient-to-br from-slate-50 to-white border-slate-200 min-w-0 overflow-hidden">
+      <Card className="min-w-0 overflow-hidden border-slate-200 bg-gradient-to-br from-slate-50 to-white">
         <CardContent className="p-2 sm:p-3">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <p className="text-xs text-muted-foreground">
-                Public Network Traffic
-              </p>
-              <p className="text-base sm:text-lg font-bold text-slate-700 truncate">
+              <p className="text-muted-foreground text-xs">Public Network Traffic</p>
+              <p className="truncate text-base font-bold text-slate-700 sm:text-lg">
                 {publicNetworkTraffic.toLocaleString()}
               </p>
-              <p className="text-xs text-slate-500">
-                Menu views (this session)
-              </p>
+              <p className="text-xs text-slate-500">Menu views (this session)</p>
             </div>
-            <div className="p-1.5 bg-slate-100 rounded-md shrink-0">
+            <div className="shrink-0 rounded-md bg-slate-100 p-1.5">
               <Activity className="h-4 w-4 text-slate-600" />
             </div>
           </div>
@@ -5903,18 +5456,16 @@ const AdminDashboard = () => {
 
   // 2. TODAY'S ITEM SALES (orders from today only, timezone Asia/Kolkata)
   const ItemSalesSection = () => (
-    <Card className="min-h-0 flex flex-col">
-      <CardHeader className="pb-3 flex-shrink-0">
+    <Card className="flex min-h-0 flex-col">
+      <CardHeader className="flex-shrink-0 pb-3">
         <div className="flex flex-col gap-2 md:gap-3">
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex min-w-0 items-center gap-2">
             <Utensils className="h-5 w-5 shrink-0 text-emerald-600" />
             <div className="min-w-0 flex-1">
-              <CardTitle className="text-base sm:text-lg truncate">
+              <CardTitle className="truncate text-base sm:text-lg">
                 Today&apos;s Item Sales
               </CardTitle>
-              <p className="text-xs text-muted-foreground">
-                Today&apos;s orders, paid only
-              </p>
+              <p className="text-muted-foreground text-xs">Today&apos;s orders, paid only</p>
             </div>
           </div>
           <Badge variant="outline" className="w-fit self-start">
@@ -5922,45 +5473,37 @@ const AdminDashboard = () => {
           </Badge>
         </div>
       </CardHeader>
-      <CardContent className="flex-1 min-h-0 p-3 sm:p-6 pt-0 sm:pt-0">
-        <ScrollArea className="h-[240px] sm:h-[260px] w-full rounded-md border border-slate-200/80 bg-slate-50/50">
-          <div className="p-2 space-y-1.5">
+      <CardContent className="min-h-0 flex-1 p-3 pt-0 sm:p-6 sm:pt-0">
+        <ScrollArea className="h-[240px] w-full rounded-md border border-slate-200/80 bg-slate-50/50 sm:h-[260px]">
+          <div className="space-y-1.5 p-2">
             {itemSales.map((item, index) => (
               <div
                 key={`${String(item.itemName).slice(0, 40)}-${index}`}
-                className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-white border border-slate-100 hover:bg-slate-50 transition-colors"
+                className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-white p-2.5 transition-colors hover:bg-slate-50"
               >
-                <div className="flex items-center gap-3 min-w-0">
+                <div className="flex min-w-0 items-center gap-3">
                   <div
-                    className={`w-7 h-7 shrink-0 rounded-full flex items-center justify-center text-xs font-bold ${
-                      index < 3
-                        ? "bg-amber-100 text-amber-700"
-                        : "bg-slate-200 text-slate-600"
+                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                      index < 3 ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-600'
                     }`}
                   >
                     {index + 1}
                   </div>
                   <div className="min-w-0">
-                    <p className="font-medium text-sm truncate">
-                      {item.itemName}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {item.quantity} sold
-                    </p>
+                    <p className="truncate text-sm font-medium">{item.itemName}</p>
+                    <p className="text-muted-foreground text-xs">{item.quantity} sold</p>
                   </div>
                 </div>
-                <div className="text-right shrink-0">
-                  <p className="font-semibold text-sm text-emerald-600">
+                <div className="shrink-0 text-right">
+                  <p className="text-sm font-semibold text-emerald-600">
                     {formatINR(item.revenue)}
                   </p>
-                  <p className="text-[10px] text-muted-foreground">Revenue</p>
+                  <p className="text-muted-foreground text-[10px]">Revenue</p>
                 </div>
               </div>
             ))}
             {itemSales.length === 0 && (
-              <p className="text-center text-muted-foreground py-8 text-sm">
-                No sales yet today
-              </p>
+              <p className="text-muted-foreground py-8 text-center text-sm">No sales yet today</p>
             )}
           </div>
         </ScrollArea>
@@ -5970,14 +5513,12 @@ const AdminDashboard = () => {
 
   // 4. EMPLOYEE SALES TODAY
   const EmployeeSalesSection = () => (
-    <Card className="min-h-0 flex flex-col overflow-hidden">
-      <CardHeader className="pb-3 flex-shrink-0">
+    <Card className="flex min-h-0 flex-col overflow-hidden">
+      <CardHeader className="flex-shrink-0 pb-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5 text-emerald-600" />
-            <CardTitle className="text-base sm:text-lg truncate">
-              Sales by Employee
-            </CardTitle>
+            <CardTitle className="truncate text-base sm:text-lg">Sales by Employee</CardTitle>
           </div>
         </div>
       </CardHeader>
@@ -5987,16 +5528,14 @@ const AdminDashboard = () => {
             <TableHeader>
               <TableRow className="bg-slate-50">
                 <TableHead className="text-xs">Employee</TableHead>
-                <TableHead className="text-xs text-right">Orders</TableHead>
-                <TableHead className="text-xs text-right">Revenue</TableHead>
+                <TableHead className="text-right text-xs">Orders</TableHead>
+                <TableHead className="text-right text-xs">Revenue</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {employeeSales.map((emp) => (
+              {employeeSales.map(emp => (
                 <TableRow key={emp.employeeId} className="text-sm">
-                  <TableCell className="font-medium">
-                    {emp.employeeName}
-                  </TableCell>
+                  <TableCell className="font-medium">{emp.employeeName}</TableCell>
                   <TableCell className="text-right">{emp.orders}</TableCell>
                   <TableCell className="text-right font-medium text-emerald-600">
                     {formatINR(emp.revenue)}
@@ -6016,41 +5555,39 @@ const AdminDashboard = () => {
       <CardHeader>
         <div className="flex items-center gap-2">
           <Calendar className="h-5 w-5 text-emerald-400" />
-          <CardTitle className="text-lg text-white">
-            End of Day Summary
-          </CardTitle>
+          <CardTitle className="text-lg text-white">End of Day Summary</CardTitle>
         </div>
         <CardDescription className="text-slate-400">
-          {currentTime.toLocaleDateString("en-IN", {
-            weekday: "long",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
+          {currentTime.toLocaleDateString('en-IN', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
           })}
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4 mb-4 sm:mb-6">
-          <div className="text-center p-2 sm:p-3 bg-slate-700/50 rounded-lg min-w-0">
-            <p className="text-xl sm:text-2xl font-bold text-emerald-400 truncate">
+        <div className="mb-4 grid grid-cols-2 gap-2 sm:mb-6 sm:gap-4 md:grid-cols-4">
+          <div className="min-w-0 rounded-lg bg-slate-700/50 p-2 text-center sm:p-3">
+            <p className="truncate text-xl font-bold text-emerald-400 sm:text-2xl">
               {todayStats.totalOrders}
             </p>
             <p className="text-xs text-slate-400">Total Orders</p>
           </div>
-          <div className="text-center p-2 sm:p-3 bg-slate-700/50 rounded-lg min-w-0">
-            <p className="text-xl sm:text-2xl font-bold text-emerald-400 truncate">
+          <div className="min-w-0 rounded-lg bg-slate-700/50 p-2 text-center sm:p-3">
+            <p className="truncate text-xl font-bold text-emerald-400 sm:text-2xl">
               {formatINR(todayStats.totalRevenue)}
             </p>
             <p className="text-xs text-slate-400">Total Revenue</p>
           </div>
-          <div className="text-center p-2 sm:p-3 bg-slate-700/50 rounded-lg min-w-0">
-            <p className="text-xl sm:text-2xl font-bold text-amber-400 truncate">
+          <div className="min-w-0 rounded-lg bg-slate-700/50 p-2 text-center sm:p-3">
+            <p className="truncate text-xl font-bold text-amber-400 sm:text-2xl">
               {todayStats.pendingPayments}
             </p>
             <p className="text-xs text-slate-400">Pending</p>
           </div>
-          <div className="text-center p-2 sm:p-3 bg-slate-700/50 rounded-lg min-w-0">
-            <p className="text-xl sm:text-2xl font-bold text-emerald-400 truncate">
+          <div className="min-w-0 rounded-lg bg-slate-700/50 p-2 text-center sm:p-3">
+            <p className="truncate text-xl font-bold text-emerald-400 sm:text-2xl">
               {todayStats.totalItemsSold}
             </p>
             <p className="text-xs text-slate-400">Items Sold</p>
@@ -6059,22 +5596,19 @@ const AdminDashboard = () => {
 
         {todayStats.topSellingItem && (
           <div className="border-t border-slate-700 pt-4">
-            <p className="text-sm text-slate-400 mb-2">Top selling today</p>
+            <p className="mb-2 text-sm text-slate-400">Top selling today</p>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 shrink-0">
-                {todayStats.topSellingItem.name} —{" "}
-                {todayStats.topSellingItem.quantity} sold
+              <Badge className="shrink-0 border-emerald-500/30 bg-emerald-500/20 text-emerald-400">
+                {todayStats.topSellingItem.name} — {todayStats.topSellingItem.quantity} sold
               </Badge>
               {itemSales
-                .filter(
-                  (item) => item.itemName !== todayStats.topSellingItem?.name,
-                )
+                .filter(item => item.itemName !== todayStats.topSellingItem?.name)
                 .slice(0, 4)
                 .map((item, i) => (
                   <Badge
                     key={`${item.itemName}-${i}`}
                     variant="outline"
-                    className="border-slate-600 text-slate-400 shrink-0"
+                    className="shrink-0 border-slate-600 text-slate-400"
                   >
                     {item.itemName} — {item.quantity} sold
                   </Badge>
@@ -6093,17 +5627,17 @@ const AdminDashboard = () => {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h2 className="text-lg font-bold sm:text-xl">Today's Dashboard</h2>
-          <p className="text-xs sm:text-sm text-muted-foreground truncate max-w-full">
-            {currentTime.toLocaleDateString("en-IN", {
-              weekday: "long",
-              day: "numeric",
-              month: "long",
-              year: "numeric",
-            })}{" "}
-            •{" "}
-            {currentTime.toLocaleTimeString("en-IN", {
-              hour: "2-digit",
-              minute: "2-digit",
+          <p className="text-muted-foreground max-w-full truncate text-xs sm:text-sm">
+            {currentTime.toLocaleDateString('en-IN', {
+              weekday: 'long',
+              day: 'numeric',
+              month: 'long',
+              year: 'numeric',
+            })}{' '}
+            •{' '}
+            {currentTime.toLocaleTimeString('en-IN', {
+              hour: '2-digit',
+              minute: '2-digit',
             })}
           </p>
         </div>
@@ -6112,12 +5646,10 @@ const AdminDashboard = () => {
           size="sm"
           onClick={loadDashboardData}
           disabled={loading}
-          className="shrink-0 w-full sm:w-auto min-h-[44px] sm:min-h-0"
+          className="min-h-[44px] w-full shrink-0 sm:min-h-0 sm:w-auto"
         >
-          <RefreshCw
-            className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`}
-          />
-          {loading ? "Loading..." : "Refresh"}
+          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          {loading ? 'Loading...' : 'Refresh'}
         </Button>
       </div>
 
@@ -6133,7 +5665,7 @@ const AdminDashboard = () => {
                 <AlertCircle className="h-5 w-5 text-amber-600" />
                 <CardTitle className="text-lg">Overtime running</CardTitle>
               </div>
-              <Badge className="bg-amber-100 text-amber-800 border-amber-200">
+              <Badge className="border-amber-200 bg-amber-100 text-amber-800">
                 {overtimeSummary.overtimeRunningCount} over 10h
               </Badge>
             </div>
@@ -6144,14 +5676,9 @@ const AdminDashboard = () => {
           <CardContent className="p-0">
             <ul className="divide-y divide-amber-200/50">
               {overtimeSummary.overtimeRunning.map((s: any) => (
-                <li
-                  key={s.id}
-                  className="px-4 py-2 flex items-center justify-between text-sm"
-                >
+                <li key={s.id} className="flex items-center justify-between px-4 py-2 text-sm">
                   <span className="font-medium">{s.employeeName}</span>
-                  <span className="text-amber-700">
-                    {formatHours(s.workingHours)}
-                  </span>
+                  <span className="text-amber-700">{formatHours(s.workingHours)}</span>
                 </li>
               ))}
             </ul>
@@ -6170,14 +5697,12 @@ const AdminDashboard = () => {
               </div>
               <Badge
                 variant="outline"
-                className="bg-emerald-50 text-emerald-700 border-emerald-200"
+                className="border-emerald-200 bg-emerald-50 text-emerald-700"
               >
                 {activeShiftsNow.length} active
               </Badge>
             </div>
-            <CardDescription>
-              Employees with an active shift right now
-            </CardDescription>
+            <CardDescription>Employees with an active shift right now</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
@@ -6190,69 +5715,65 @@ const AdminDashboard = () => {
                     <TableHead className="text-xs">Actual Login</TableHead>
                     <TableHead className="text-xs">Late</TableHead>
                     <TableHead className="text-xs">Status</TableHead>
-                    <TableHead className="text-xs text-right">Hours</TableHead>
-                    <TableHead className="text-xs text-right">Orders</TableHead>
-                    <TableHead className="text-xs text-right">Sales</TableHead>
+                    <TableHead className="text-right text-xs">Hours</TableHead>
+                    <TableHead className="text-right text-xs">Orders</TableHead>
+                    <TableHead className="text-right text-xs">Sales</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {activeShiftsNow.map((s) => (
+                  {activeShiftsNow.map(s => (
                     <TableRow key={s.id} className="text-sm">
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Avatar className="h-8 w-8">
-                            <AvatarFallback className="text-xs bg-emerald-100 text-emerald-700">
-                              {s.employee?.name?.charAt(0) || "?"}
+                            <AvatarFallback className="bg-emerald-100 text-xs text-emerald-700">
+                              {s.employee?.name?.charAt(0) || '?'}
                             </AvatarFallback>
                           </Avatar>
                           <div>
-                            <p className="font-medium">
-                              {s.employee?.name || "—"}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {s.employee?.employeeCode || ""}
+                            <p className="font-medium">{s.employee?.name || '—'}</p>
+                            <p className="text-muted-foreground text-xs">
+                              {s.employee?.employeeCode || ''}
                             </p>
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="text-xs">
-                        {(s.branch as any)?.name || "—"}
-                      </TableCell>
+                      <TableCell className="text-xs">{(s.branch as any)?.name || '—'}</TableCell>
                       <TableCell className="text-xs">
                         {s.late
-                          ? new Date(s.late.scheduledStart).toLocaleTimeString(
-                              "en-IN",
-                              { hour: "2-digit", minute: "2-digit", hour12: true },
-                            )
-                          : formatShiftTime24ToAmPm((s.employee as any)?.shiftStartTime ?? "") || "—"}
+                          ? new Date(s.late.scheduledStart).toLocaleTimeString('en-IN', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              hour12: true,
+                            })
+                          : formatShiftTime24ToAmPm((s.employee as any)?.shiftStartTime ?? '') ||
+                            '—'}
                       </TableCell>
                       <TableCell className="text-xs">
                         {s.shiftStart
-                          ? new Date(s.shiftStart).toLocaleTimeString("en-IN", {
-                              hour: "2-digit",
-                              minute: "2-digit",
+                          ? new Date(s.shiftStart).toLocaleTimeString('en-IN', {
+                              hour: '2-digit',
+                              minute: '2-digit',
                               hour12: true,
                             })
-                          : "—"}
+                          : '—'}
                       </TableCell>
                       <TableCell className="text-xs">
                         {s.late
                           ? s.late.lateMinutes === 0
-                            ? "On time"
+                            ? 'On time'
                             : formatHours(s.late.lateMinutes / 60)
-                          : "—"}
+                          : '—'}
                       </TableCell>
                       <TableCell>
-                        <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">
-                          {(s as any).status || "ACTIVE"}
+                        <Badge className="border-emerald-200 bg-emerald-100 text-emerald-800">
+                          {(s as any).status || 'ACTIVE'}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right text-xs">
                         {formatHours(s.totalHours ?? 0, true)}
                       </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {s.ordersCount ?? 0}
-                      </TableCell>
+                      <TableCell className="text-right font-medium">{s.ordersCount ?? 0}</TableCell>
                       <TableCell className="text-right font-medium text-emerald-600">
                         {formatINR((s.totalSales as number) ?? 0)}
                       </TableCell>
@@ -6278,15 +5799,13 @@ const AdminDashboard = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">
-              No one on shift right now.
-            </p>
+            <p className="text-muted-foreground text-sm">No one on shift right now.</p>
           </CardContent>
         </Card>
       )}
 
       {/* Two Column Layout for Item Sales & Employee Sales */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <ItemSalesSection />
         <EmployeeSalesSection />
       </div>
@@ -6297,49 +5816,49 @@ const AdminDashboard = () => {
   );
 
   const MenuSection = () => (
-    <div className="space-y-6 min-h-0" style={{ overflowAnchor: "auto" }}>
+    <div className="min-h-0 space-y-6" style={{ overflowAnchor: 'auto' }}>
       {viewingCategory ? (
         <>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 min-w-0">
+            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setViewingCategory(null)}
-                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 shrink-0"
+                className="min-h-[44px] w-full shrink-0 sm:min-h-0 sm:w-auto"
               >
-                <ChevronLeft className="h-4 w-4 mr-1" />
+                <ChevronLeft className="mr-1 h-4 w-4" />
                 Back to Categories
               </Button>
               <div className="min-w-0">
-                <h2 className="text-lg sm:text-xl font-bold truncate">
+                <h2 className="truncate text-lg font-bold sm:text-xl">
                   {viewingCategoryData?.name}
                 </h2>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-muted-foreground text-sm">
                   {viewingCategoryData?.items?.length || 0} items
                 </p>
               </div>
             </div>
-            <div className="flex gap-2 w-full sm:w-auto">
+            <div className="flex w-full gap-2 sm:w-auto">
               <Button
                 size="sm"
                 onClick={() => {
                   setEditingItem(null);
                   setItemForm({
-                    name: "",
-                    description: "",
+                    name: '',
+                    description: '',
                     basePrice: 0,
                     hasHalf: false,
                     halfPrice: 0,
                     isActive: true,
                     categoryId: viewingCategory,
-                    imageUrl: "",
+                    imageUrl: '',
                     notifyCustomers: false,
                   });
                   setIsItemDialogOpen(true);
                 }}
               >
-                <Plus className="h-4 w-4 mr-1" />
+                <Plus className="mr-1 h-4 w-4" />
                 Add Item
               </Button>
             </div>
@@ -6351,53 +5870,36 @@ const AdminDashboard = () => {
                 <Table className="min-w-[320px]">
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="whitespace-nowrap">
-                        Item Name
-                      </TableHead>
-                      <TableHead className="whitespace-nowrap">
-                        Full Price
-                      </TableHead>
-                      <TableHead className="whitespace-nowrap">
-                        Half Price
-                      </TableHead>
-                      <TableHead className="whitespace-nowrap">
-                        Status
-                      </TableHead>
-                      <TableHead className="text-right whitespace-nowrap">
-                        Actions
-                      </TableHead>
+                      <TableHead className="whitespace-nowrap">Item Name</TableHead>
+                      <TableHead className="whitespace-nowrap">Full Price</TableHead>
+                      <TableHead className="whitespace-nowrap">Half Price</TableHead>
+                      <TableHead className="whitespace-nowrap">Status</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {viewingCategoryData?.items?.length === 0 && (
                       <TableRow>
-                        <TableCell
-                          colSpan={5}
-                          className="text-center py-8 text-muted-foreground"
-                        >
+                        <TableCell colSpan={5} className="text-muted-foreground py-8 text-center">
                           No items in this category
                         </TableCell>
                       </TableRow>
                     )}
                     {viewingCategoryData?.items?.map((item: any) => (
                       <TableRow key={item.id}>
-                        <TableCell className="font-medium">
-                          {item.name}
-                        </TableCell>
+                        <TableCell className="font-medium">{item.name}</TableCell>
                         <TableCell>{formatINR(item.basePrice)}</TableCell>
-                        <TableCell>
-                          {item.hasHalf ? formatINR(item.halfPrice) : "-"}
-                        </TableCell>
+                        <TableCell>{item.hasHalf ? formatINR(item.halfPrice) : '-'}</TableCell>
                         <TableCell>
                           <Badge
                             className={
                               item.isActive
-                                ? "bg-emerald-100 text-emerald-800 border-emerald-200"
-                                : ""
+                                ? 'border-emerald-200 bg-emerald-100 text-emerald-800'
+                                : ''
                             }
-                            variant={item.isActive ? "outline" : "secondary"}
+                            variant={item.isActive ? 'outline' : 'secondary'}
                           >
-                            {item.isActive ? "Live" : "Hidden"}
+                            {item.isActive ? 'Live' : 'Hidden'}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
@@ -6410,14 +5912,13 @@ const AdminDashboard = () => {
                                 setEditingItem(item);
                                 setItemForm({
                                   name: item.name,
-                                  description: item.description || "",
+                                  description: item.description || '',
                                   basePrice: item.basePrice,
                                   hasHalf: item.hasHalf,
                                   halfPrice: item.halfPrice || 0,
                                   isActive: item.isActive,
-                                  categoryId:
-                                    item.categoryId || viewingCategory,
-                                  imageUrl: item.imageUrl || "",
+                                  categoryId: item.categoryId || viewingCategory,
+                                  imageUrl: item.imageUrl || '',
                                   notifyCustomers: false,
                                 });
                                 setIsItemDialogOpen(true);
@@ -6447,10 +5948,8 @@ const AdminDashboard = () => {
         <>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
-              <h2 className="text-lg sm:text-xl font-bold">Menu Categories</h2>
-              <p className="text-sm text-muted-foreground">
-                Manage categories and their items
-              </p>
+              <h2 className="text-lg font-bold sm:text-xl">Menu Categories</h2>
+              <p className="text-muted-foreground text-sm">Manage categories and their items</p>
             </div>
             <Button
               size="sm"
@@ -6458,27 +5957,25 @@ const AdminDashboard = () => {
                 setEditingCategory(null);
                 setIsCategoryDialogOpen(true);
               }}
-              className="w-full sm:w-auto min-h-[44px] sm:min-h-0 shrink-0"
+              className="min-h-[44px] w-full shrink-0 sm:min-h-0 sm:w-auto"
             >
-              <Plus className="h-4 w-4 mr-1" />
+              <Plus className="mr-1 h-4 w-4" />
               Add Category
             </Button>
             <CategoryDialog
               open={isCategoryDialogOpen}
               editingCategory={editingCategory}
-              onOpenChange={(open) => {
+              onOpenChange={open => {
                 if (!open) setEditingCategory(null);
                 setIsCategoryDialogOpen(open);
               }}
-              onCreated={(cat) => {
-                setCategories((prev) => [...prev, cat]);
+              onCreated={cat => {
+                setCategories(prev => [...prev, cat]);
                 setIsCategoryDialogOpen(false);
                 setEditingCategory(null);
               }}
-              onUpdated={(cat) => {
-                setCategories((prev) =>
-                  prev.map((c) => (c.id === cat.id ? { ...c, ...cat } : c)),
-                );
+              onUpdated={cat => {
+                setCategories(prev => prev.map(c => (c.id === cat.id ? { ...c, ...cat } : c)));
                 setIsCategoryDialogOpen(false);
                 setEditingCategory(null);
               }}
@@ -6486,23 +5983,23 @@ const AdminDashboard = () => {
             />
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1 min-w-0">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="relative min-w-0 flex-1">
+              <Search className="text-muted-foreground absolute top-2.5 left-2.5 h-4 w-4" />
               <Input
                 placeholder="Search categories..."
-                className="pl-8 min-h-[44px] sm:min-h-0"
+                className="min-h-[44px] pl-8 sm:min-h-0"
                 value={menuSearchQuery}
-                onChange={(e) => setMenuSearchQuery(e.target.value)}
+                onChange={e => setMenuSearchQuery(e.target.value)}
               />
             </div>
             <div className="flex flex-wrap gap-2">
               <Select value={menuFilterBy} onValueChange={setMenuFilterBy}>
-                <SelectTrigger className="w-full sm:w-32 min-h-[44px] sm:min-h-0">
+                <SelectTrigger className="min-h-[44px] w-full sm:min-h-0 sm:w-32">
                   <SelectValue placeholder="Filter" />
                 </SelectTrigger>
                 <SelectContent>
-                  {MENU_CATEGORY_FILTER_OPTIONS.map((opt) => (
+                  {MENU_CATEGORY_FILTER_OPTIONS.map(opt => (
                     <SelectItem key={opt.value} value={opt.value}>
                       {opt.label}
                     </SelectItem>
@@ -6510,11 +6007,11 @@ const AdminDashboard = () => {
                 </SelectContent>
               </Select>
               <Select value={menuSortBy} onValueChange={setMenuSortBy}>
-                <SelectTrigger className="w-full sm:w-40 min-h-[44px] sm:min-h-0">
+                <SelectTrigger className="min-h-[44px] w-full sm:min-h-0 sm:w-40">
                   <SelectValue placeholder="Sort" />
                 </SelectTrigger>
                 <SelectContent>
-                  {MENU_SORT_OPTIONS.map((opt) => (
+                  {MENU_SORT_OPTIONS.map(opt => (
                     <SelectItem key={opt.value} value={opt.value}>
                       {opt.label}
                     </SelectItem>
@@ -6528,24 +6025,20 @@ const AdminDashboard = () => {
             <CardContent className="p-0">
               <div
                 className="overflow-x-auto overflow-y-visible"
-                style={{ overflowAnchor: "auto" }}
+                style={{ overflowAnchor: 'auto' }}
               >
                 <Table className="min-w-[720px]">
                   <TableHeader>
                     <TableRow className="bg-slate-50">
-                      <TableHead className="whitespace-nowrap sticky left-0 z-10 bg-slate-50 border-r min-w-[100px]">
+                      <TableHead className="sticky left-0 z-10 min-w-[100px] border-r bg-slate-50 whitespace-nowrap">
                         Image
                       </TableHead>
-                      <TableHead className="whitespace-nowrap min-w-[130px]">
+                      <TableHead className="min-w-[130px] whitespace-nowrap">
                         Category Name
                       </TableHead>
-                      <TableHead className="whitespace-nowrap min-w-[90px]">
-                        Items
-                      </TableHead>
-                      <TableHead className="whitespace-nowrap min-w-[120px]">
-                        Status
-                      </TableHead>
-                      <TableHead className="text-right whitespace-nowrap sticky right-0 z-10 bg-slate-50 border-l min-w-[200px]">
+                      <TableHead className="min-w-[90px] whitespace-nowrap">Items</TableHead>
+                      <TableHead className="min-w-[120px] whitespace-nowrap">Status</TableHead>
+                      <TableHead className="sticky right-0 z-10 min-w-[200px] border-l bg-slate-50 text-right whitespace-nowrap">
                         Actions
                       </TableHead>
                     </TableRow>
@@ -6553,83 +6046,67 @@ const AdminDashboard = () => {
                   <TableBody>
                     {filteredCategories.length === 0 && (
                       <TableRow>
-                        <TableCell
-                          colSpan={5}
-                          className="text-center py-8 text-muted-foreground"
-                        >
+                        <TableCell colSpan={5} className="text-muted-foreground py-8 text-center">
                           {menuSearchQuery
-                            ? "No categories found matching your search"
-                            : "No categories yet. Create your first category!"}
+                            ? 'No categories found matching your search'
+                            : 'No categories yet. Create your first category!'}
                         </TableCell>
                       </TableRow>
                     )}
-                    {filteredCategories.map((category) => {
+                    {filteredCategories.map(category => {
                       const status = getCategoryStatus(category);
                       return (
-                        <TableRow
-                          key={category.id}
-                          className="hover:bg-slate-50/50"
-                        >
-                          <TableCell className="sticky left-0 z-10 bg-white border-r">
+                        <TableRow key={category.id} className="hover:bg-slate-50/50">
+                          <TableCell className="sticky left-0 z-10 border-r bg-white">
                             <div className="flex items-center gap-2">
                               {category.imageUrl ? (
                                 <img
                                   src={category.imageUrl}
                                   alt={category.name}
-                                  className="h-10 w-10 object-cover rounded-lg border shrink-0"
-                                  onError={(e) => {
-                                    e.currentTarget.style.display = "none";
-                                    e.currentTarget.nextElementSibling?.classList.remove(
-                                      "hidden",
-                                    );
+                                  className="h-10 w-10 shrink-0 rounded-lg border object-cover"
+                                  onError={e => {
+                                    e.currentTarget.style.display = 'none';
+                                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
                                   }}
                                 />
                               ) : (
-                                <div className="h-10 w-10 bg-gray-100 rounded-lg border flex items-center justify-center shrink-0">
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-gray-100">
                                   <Utensils className="h-5 w-5 text-gray-400" />
                                 </div>
                               )}
-                              <div className="hidden text-xs text-muted-foreground">
-                                No image
-                              </div>
+                              <div className="text-muted-foreground hidden text-xs">No image</div>
                             </div>
                           </TableCell>
-                          <TableCell className="font-medium min-w-[130px]">
+                          <TableCell className="min-w-[130px] font-medium">
                             {category.name}
                           </TableCell>
                           <TableCell className="min-w-[90px]">
-                            <span className="text-sm font-medium">
-                              {status.totalItems}
-                            </span>
-                            <span className="text-xs text-muted-foreground ml-0.5">
-                              items
-                            </span>
+                            <span className="text-sm font-medium">{status.totalItems}</span>
+                            <span className="text-muted-foreground ml-0.5 text-xs">items</span>
                           </TableCell>
                           <TableCell className="min-w-[120px]">
-                            <div className="flex flex-wrap gap-1 items-center">
+                            <div className="flex flex-wrap items-center gap-1">
                               {status.liveItems > 0 && (
-                                <Badge className="bg-green-100 text-green-800 border-green-200 text-[11px] px-1.5 py-0">
+                                <Badge className="border-green-200 bg-green-100 px-1.5 py-0 text-[11px] text-green-800">
                                   {status.liveItems} Live
                                 </Badge>
                               )}
                               {status.pendingItems > 0 && (
-                                <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200 text-[11px] px-1.5 py-0">
+                                <Badge className="border-yellow-200 bg-yellow-100 px-1.5 py-0 text-[11px] text-yellow-800">
                                   {status.pendingItems} Pending
                                 </Badge>
                               )}
                               {status.totalItems === 0 && (
-                                <span className="text-xs text-muted-foreground">
-                                  —
-                                </span>
+                                <span className="text-muted-foreground text-xs">—</span>
                               )}
                             </div>
                           </TableCell>
-                          <TableCell className="text-right sticky right-0 z-10 bg-white border-l">
-                            <div className="flex justify-end gap-1.5 flex-wrap">
+                          <TableCell className="sticky right-0 z-10 border-l bg-white text-right">
+                            <div className="flex flex-wrap justify-end gap-1.5">
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className="shrink-0 h-8"
+                                className="h-8 shrink-0"
                                 onClick={() => setViewingCategory(category.id)}
                               >
                                 <Eye className="h-4 w-4 sm:mr-1" />
@@ -6638,7 +6115,7 @@ const AdminDashboard = () => {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className="shrink-0 h-8"
+                                className="h-8 shrink-0"
                                 onClick={() => {
                                   setEditingCategory(category);
                                   setIsCategoryDialogOpen(true);
@@ -6650,15 +6127,13 @@ const AdminDashboard = () => {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-8 w-8 p-0 text-red-500 shrink-0"
-                                onClick={() =>
-                                  handleDeleteCategory(category.id)
-                                }
+                                className="h-8 w-8 shrink-0 p-0 text-red-500"
+                                onClick={() => handleDeleteCategory(category.id)}
                                 disabled={category.items?.length > 0}
                                 title={
                                   category.items?.length > 0
-                                    ? "Delete all items first"
-                                    : "Delete category"
+                                    ? 'Delete all items first'
+                                    : 'Delete category'
                                 }
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -6681,7 +6156,7 @@ const AdminDashboard = () => {
   const PerformanceSection = () => {
     type ApiPerfRow = {
       key: string;
-      actor: "ALL" | "ADMIN" | "EMPLOYEE" | "CUSTOMER";
+      actor: 'ALL' | 'ADMIN' | 'EMPLOYEE' | 'CUSTOMER';
       count: number;
       errorCount: number;
       avgMs: number;
@@ -6692,7 +6167,7 @@ const AdminDashboard = () => {
     type ApiPerfSummary = {
       now: number;
       windowMinutes: number;
-      actor: "ALL" | "ADMIN" | "EMPLOYEE" | "CUSTOMER";
+      actor: 'ALL' | 'ADMIN' | 'EMPLOYEE' | 'CUSTOMER';
       totalCount: number;
       totalErrorCount: number;
       totalBytesSent?: number;
@@ -6728,9 +6203,9 @@ const AdminDashboard = () => {
       maxMinutes: number;
     };
 
-    const [apiPerfActor, setApiPerfActor] = useState<
-      "ALL" | "ADMIN" | "EMPLOYEE" | "CUSTOMER"
-    >("ALL");
+    const [apiPerfActor, setApiPerfActor] = useState<'ALL' | 'ADMIN' | 'EMPLOYEE' | 'CUSTOMER'>(
+      'ALL'
+    );
     const [apiPerfWindowMinutes, setApiPerfWindowMinutes] = useState<number>(60);
     const [apiPerfLoading, setApiPerfLoading] = useState(false);
     const [apiPerf, setApiPerf] = useState<ApiPerfSummary | null>(null);
@@ -6742,9 +6217,7 @@ const AdminDashboard = () => {
     const [sysPerfLoading, setSysPerfLoading] = useState(false);
     const [sysPerf, setSysPerf] = useState<SystemPerf | null>(null);
     const [metricsLoading, setMetricsLoading] = useState(false);
-    const [metricsSummary, setMetricsSummary] = useState<MetricsSummary | null>(
-      null,
-    );
+    const [metricsSummary, setMetricsSummary] = useState<MetricsSummary | null>(null);
     const [completionLoading, setCompletionLoading] = useState(false);
     const [completionRows, setCompletionRows] = useState<CompletionRow[]>([]);
 
@@ -6763,10 +6236,10 @@ const AdminDashboard = () => {
       if (!token) return;
       setApiPerfLoading(true);
       try {
-        const fetchSummary = async (actor: "ALL" | "ADMIN" | "EMPLOYEE" | "CUSTOMER") => {
+        const fetchSummary = async (actor: 'ALL' | 'ADMIN' | 'EMPLOYEE' | 'CUSTOMER') => {
           const params = new URLSearchParams({
             windowMinutes: String(apiPerfWindowMinutes),
-            top: "30",
+            top: '30',
             actor,
           });
           const res = await fetch(`${apiBase}/performance/summary?${params}`, {
@@ -6775,19 +6248,19 @@ const AdminDashboard = () => {
           const data = await res.json().catch(() => null);
           if (!res.ok) {
             throw new Error(
-              (data && typeof data === "object" && "message" in data
+              (data && typeof data === 'object' && 'message' in data
                 ? String((data as any).message)
-                : "Failed to load performance") || "Failed to load performance",
+                : 'Failed to load performance') || 'Failed to load performance'
             );
           }
           return data as ApiPerfSummary;
         };
 
         const [all, customer, employee, admin] = await Promise.all([
-          fetchSummary("ALL"),
-          fetchSummary("CUSTOMER"),
-          fetchSummary("EMPLOYEE"),
-          fetchSummary("ADMIN"),
+          fetchSummary('ALL'),
+          fetchSummary('CUSTOMER'),
+          fetchSummary('EMPLOYEE'),
+          fetchSummary('ADMIN'),
         ]);
 
         setApiPerf(all);
@@ -6810,10 +6283,10 @@ const AdminDashboard = () => {
         const data = await res.json().catch(() => null);
         if (!res.ok) {
           const msg =
-            data && typeof data === "object" && "message" in data
-              ? String((data as { message?: unknown }).message || "")
-              : "";
-          throw new Error(msg || "Failed to load system metrics");
+            data && typeof data === 'object' && 'message' in data
+              ? String((data as { message?: unknown }).message || '')
+              : '';
+          throw new Error(msg || 'Failed to load system metrics');
         }
         setSysPerf(data as SystemPerf);
       } catch (e) {
@@ -6833,7 +6306,7 @@ const AdminDashboard = () => {
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         });
         const data = await res.json().catch(() => null);
-        if (!res.ok) throw new Error("Failed to load metrics");
+        if (!res.ok) throw new Error('Failed to load metrics');
         setMetricsSummary(data as MetricsSummary);
       } catch {
         setMetricsSummary(null);
@@ -6852,13 +6325,13 @@ const AdminDashboard = () => {
         const data = await res.json().catch(() => null);
         if (!res.ok) {
           const msg =
-            data && typeof data === "object" && "message" in data
-              ? String((data as { message?: unknown }).message || "")
-              : "";
-          throw new Error(msg || "Failed to load completion times");
+            data && typeof data === 'object' && 'message' in data
+              ? String((data as { message?: unknown }).message || '')
+              : '';
+          throw new Error(msg || 'Failed to load completion times');
         }
         const rows =
-          data && typeof data === "object" && "rows" in data
+          data && typeof data === 'object' && 'rows' in data
             ? (data as { rows?: unknown }).rows
             : undefined;
         setCompletionRows(Array.isArray(rows) ? (rows as any[]) : []);
@@ -6870,7 +6343,7 @@ const AdminDashboard = () => {
     }, [token]);
 
     useEffect(() => {
-      if (activeSection !== "performance") return;
+      if (activeSection !== 'performance') return;
       loadApiPerf();
       loadSysPerf();
       loadCompletion();
@@ -6885,27 +6358,15 @@ const AdminDashboard = () => {
         window.clearInterval(id3);
         window.clearInterval(id4);
       };
-    }, [
-      activeSection,
-      loadApiPerf,
-      loadSysPerf,
-      loadCompletion,
-      loadMetricsSummary,
-    ]);
+    }, [activeSection, loadApiPerf, loadSysPerf, loadCompletion, loadMetricsSummary]);
 
     const overall = useMemo(() => {
       const rows = apiPerf?.rows ?? [];
       const total = rows.reduce((s, r) => s + (r.count || 0), 0);
       const weightedAvg =
-        total > 0
-          ? rows.reduce((s, r) => s + (Number(r.avgMs) || 0) * r.count, 0) /
-            total
-          : 0;
+        total > 0 ? rows.reduce((s, r) => s + (Number(r.avgMs) || 0) * r.count, 0) / total : 0;
       const weightedP95 =
-        total > 0
-          ? rows.reduce((s, r) => s + (Number(r.p95Ms) || 0) * r.count, 0) /
-            total
-          : 0;
+        total > 0 ? rows.reduce((s, r) => s + (Number(r.p95Ms) || 0) * r.count, 0) / total : 0;
       return {
         rpm: apiPerf?.rpm ?? 0,
         avgMs: Math.round(weightedAvg),
@@ -6920,10 +6381,8 @@ const AdminDashboard = () => {
       <div className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <h2 className="text-lg font-bold sm:text-xl">
-              Performance Dashboard
-            </h2>
-            <p className="text-xs sm:text-sm text-muted-foreground truncate max-w-full">
+            <h2 className="text-lg font-bold sm:text-xl">Performance Dashboard</h2>
+            <p className="text-muted-foreground max-w-full truncate text-xs sm:text-sm">
               Live backend API latency and traffic (auto refresh every 30 seconds).
             </p>
           </div>
@@ -6931,14 +6390,10 @@ const AdminDashboard = () => {
             <Select
               value={apiPerfActor}
               onValueChange={(v: any) =>
-                setApiPerfActor(
-                  v === "ADMIN" || v === "EMPLOYEE" || v === "CUSTOMER"
-                    ? v
-                    : "ALL",
-                )
+                setApiPerfActor(v === 'ADMIN' || v === 'EMPLOYEE' || v === 'CUSTOMER' ? v : 'ALL')
               }
             >
-              <SelectTrigger className="w-full sm:w-[150px] min-w-0 min-h-[44px] sm:min-h-0">
+              <SelectTrigger className="min-h-[44px] w-full min-w-0 sm:min-h-0 sm:w-[150px]">
                 <SelectValue placeholder="Actor" />
               </SelectTrigger>
               <SelectContent>
@@ -6950,9 +6405,9 @@ const AdminDashboard = () => {
             </Select>
             <Select
               value={String(apiPerfWindowMinutes)}
-              onValueChange={(v) => setApiPerfWindowMinutes(Number(v) || 60)}
+              onValueChange={v => setApiPerfWindowMinutes(Number(v) || 60)}
             >
-              <SelectTrigger className="w-full sm:w-[150px] min-w-0 min-h-[44px] sm:min-h-0">
+              <SelectTrigger className="min-h-[44px] w-full min-w-0 sm:min-h-0 sm:w-[150px]">
                 <SelectValue placeholder="Window" />
               </SelectTrigger>
               <SelectContent>
@@ -6970,101 +6425,87 @@ const AdminDashboard = () => {
               onClick={loadApiPerf}
               className="min-h-[44px] sm:min-h-0"
             >
-              <RefreshCw className="h-4 w-4 mr-1" />
+              <RefreshCw className="mr-1 h-4 w-4" />
               Refresh
             </LoaderButton>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
           <Card className="bg-white">
             <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Requests / min</p>
+              <p className="text-muted-foreground text-xs">Requests / min</p>
               <p className="mt-1 text-lg font-bold text-slate-900">
-                {overall.rpm ? overall.rpm.toFixed(1) : "0.0"}
+                {overall.rpm ? overall.rpm.toFixed(1) : '0.0'}
               </p>
             </CardContent>
           </Card>
           <Card className="bg-white">
             <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">API Avg (ms)</p>
-              <p className="mt-1 text-lg font-bold text-slate-900">
-                {overall.avgMs || 0}
-              </p>
+              <p className="text-muted-foreground text-xs">API Avg (ms)</p>
+              <p className="mt-1 text-lg font-bold text-slate-900">{overall.avgMs || 0}</p>
             </CardContent>
           </Card>
           <Card className="bg-white">
             <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">API P95 (ms)</p>
-              <p className="mt-1 text-lg font-bold text-amber-700">
-                {overall.p95Ms || 0}
-              </p>
+              <p className="text-muted-foreground text-xs">API P95 (ms)</p>
+              <p className="mt-1 text-lg font-bold text-amber-700">{overall.p95Ms || 0}</p>
             </CardContent>
           </Card>
           <Card className="bg-white">
             <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Errors (5xx)</p>
-              <p className="mt-1 text-lg font-bold text-red-600">
-                {overall.totalErrorCount || 0}
-              </p>
+              <p className="text-muted-foreground text-xs">Errors (5xx)</p>
+              <p className="mt-1 text-lg font-bold text-red-600">{overall.totalErrorCount || 0}</p>
             </CardContent>
           </Card>
           <Card className="bg-white">
             <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Active devices</p>
+              <p className="text-muted-foreground text-xs">Active devices</p>
               <p className="mt-1 text-lg font-bold text-slate-900">
                 {metricsLoading && !metricsSummary
-                  ? "…"
-                  : metricsSummary?.socketio?.activeConnections ?? 0}
+                  ? '…'
+                  : (metricsSummary?.socketio?.activeConnections ?? 0)}
               </p>
-              <p className="text-[10px] text-muted-foreground mt-1">
-                Socket.IO connections
-              </p>
+              <p className="text-muted-foreground mt-1 text-[10px]">Socket.IO connections</p>
             </CardContent>
           </Card>
           <Card className="bg-white">
             <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Total requests</p>
-              <p className="mt-1 text-lg font-bold text-slate-900">
-                {overall.totalCount || 0}
-              </p>
+              <p className="text-muted-foreground text-xs">Total requests</p>
+              <p className="mt-1 text-lg font-bold text-slate-900">{overall.totalCount || 0}</p>
             </CardContent>
           </Card>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Card className="bg-white">
             <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Network Egress (24h)</p>
+              <p className="text-muted-foreground text-xs">Network Egress (24h)</p>
               <p className="mt-1 text-lg font-bold text-slate-900">
-                {sysPerf ? formatBytes(sysPerf.networkEgressBytes) : "—"}
+                {sysPerf ? formatBytes(sysPerf.networkEgressBytes) : '—'}
               </p>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                Estimated from API responses
-              </p>
+              <p className="text-muted-foreground mt-1 text-[11px]">Estimated from API responses</p>
             </CardContent>
           </Card>
           <Card className="bg-white">
             <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">CPU Usage</p>
+              <p className="text-muted-foreground text-xs">CPU Usage</p>
               <p className="mt-1 text-lg font-bold text-slate-900">
-                {sysPerf ? `${sysPerf.cpuUsagePct}%` : "—"}
+                {sysPerf ? `${sysPerf.cpuUsagePct}%` : '—'}
               </p>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                Based on 1‑min load average
-              </p>
+              <p className="text-muted-foreground mt-1 text-[11px]">Based on 1‑min load average</p>
             </CardContent>
           </Card>
           <Card className="bg-white">
             <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Disk Usage</p>
+              <p className="text-muted-foreground text-xs">Disk Usage</p>
               <p className="mt-1 text-lg font-bold text-slate-900">
-                {sysPerf ? `${sysPerf.diskUsagePct}%` : "—"}
+                {sysPerf ? `${sysPerf.diskUsagePct}%` : '—'}
               </p>
-              <p className="mt-1 text-[11px] text-muted-foreground">
+              <p className="text-muted-foreground mt-1 text-[11px]">
                 {sysPerf
                   ? `${formatBytes(sysPerf.diskUsedBytes)} / ${formatBytes(sysPerf.diskTotalBytes)}`
-                  : ""}
+                  : ''}
               </p>
             </CardContent>
           </Card>
@@ -7072,7 +6513,7 @@ const AdminDashboard = () => {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-base">
               <Activity className="h-4 w-4 text-emerald-600" />
               Slow APIs (by P95)
             </CardTitle>
@@ -7082,42 +6523,34 @@ const AdminDashboard = () => {
           </CardHeader>
           <CardContent className="pt-2">
             {apiPerfLoading && !apiPerf ? (
-              <div className="py-8 text-center text-sm text-muted-foreground">
-                Loading…
-              </div>
+              <div className="text-muted-foreground py-8 text-center text-sm">Loading…</div>
             ) : (apiPerf?.rows?.length ?? 0) === 0 ? (
-              <div className="py-8 text-center text-sm text-muted-foreground">
+              <div className="text-muted-foreground py-8 text-center text-sm">
                 No API traffic in this window yet.
               </div>
             ) : (
               <div className="space-y-4">
                 {(
                   [
-                    { key: "CUSTOMER" as const, label: "Customer APIs" },
-                    { key: "EMPLOYEE" as const, label: "Employee APIs" },
-                    { key: "ADMIN" as const, label: "Admin APIs" },
+                    { key: 'CUSTOMER' as const, label: 'Customer APIs' },
+                    { key: 'EMPLOYEE' as const, label: 'Employee APIs' },
+                    { key: 'ADMIN' as const, label: 'Admin APIs' },
                   ] as const
-                ).map((grp) => {
+                ).map(grp => {
                   const s = apiPerfByActor[grp.key];
                   const rows = s?.rows ?? [];
                   return (
                     <div key={grp.key} className="space-y-2">
-                      <div className="text-sm font-semibold text-slate-900">
-                        {grp.label}
-                      </div>
+                      <div className="text-sm font-semibold text-slate-900">{grp.label}</div>
                       {rows.length === 0 ? (
-                        <div className="text-xs text-muted-foreground">
-                          No traffic.
-                        </div>
+                        <div className="text-muted-foreground text-xs">No traffic.</div>
                       ) : (
                         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
                           <Table>
                             <TableHeader>
                               <TableRow className="bg-slate-50">
                                 <TableHead>API</TableHead>
-                                <TableHead className="text-right whitespace-nowrap">
-                                  Hits
-                                </TableHead>
+                                <TableHead className="text-right whitespace-nowrap">Hits</TableHead>
                                 <TableHead className="text-right whitespace-nowrap">
                                   Avg (ms)
                                 </TableHead>
@@ -7127,20 +6560,14 @@ const AdminDashboard = () => {
                                 <TableHead className="text-right whitespace-nowrap">
                                   Max (ms)
                                 </TableHead>
-                                <TableHead className="text-right whitespace-nowrap">
-                                  5xx
-                                </TableHead>
+                                <TableHead className="text-right whitespace-nowrap">5xx</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {rows.map((r) => (
+                              {rows.map(r => (
                                 <TableRow key={`${grp.key}-${r.key}`}>
-                                  <TableCell className="font-medium">
-                                    {r.key}
-                                  </TableCell>
-                                  <TableCell className="text-right">
-                                    {r.count}
-                                  </TableCell>
+                                  <TableCell className="font-medium">{r.key}</TableCell>
+                                  <TableCell className="text-right">{r.count}</TableCell>
                                   <TableCell className="text-right">
                                     {Math.round(r.avgMs)}
                                   </TableCell>
@@ -7150,7 +6577,7 @@ const AdminDashboard = () => {
                                   <TableCell className="text-right">
                                     {Math.round(r.maxMs)}
                                   </TableCell>
-                                  <TableCell className="text-right text-red-600 font-semibold">
+                                  <TableCell className="text-right font-semibold text-red-600">
                                     {r.errorCount}
                                   </TableCell>
                                 </TableRow>
@@ -7176,11 +6603,9 @@ const AdminDashboard = () => {
           </CardHeader>
           <CardContent className="pt-2">
             {completionLoading && completionRows.length === 0 ? (
-              <div className="py-8 text-center text-sm text-muted-foreground">
-                Loading…
-              </div>
+              <div className="text-muted-foreground py-8 text-center text-sm">Loading…</div>
             ) : completionRows.length === 0 ? (
-              <div className="py-8 text-center text-sm text-muted-foreground">
+              <div className="text-muted-foreground py-8 text-center text-sm">
                 No completed orders in this window yet.
               </div>
             ) : (
@@ -7189,34 +6614,24 @@ const AdminDashboard = () => {
                   <TableHeader>
                     <TableRow className="bg-slate-50">
                       <TableHead>Employee</TableHead>
-                      <TableHead className="text-right whitespace-nowrap">
-                        Orders
-                      </TableHead>
-                      <TableHead className="text-right whitespace-nowrap">
-                        Avg (min)
-                      </TableHead>
-                      <TableHead className="text-right whitespace-nowrap">
-                        Min
-                      </TableHead>
-                      <TableHead className="text-right whitespace-nowrap">
-                        Max
-                      </TableHead>
+                      <TableHead className="text-right whitespace-nowrap">Orders</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">Avg (min)</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">Min</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">Max</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {completionRows.map((r) => (
+                    {completionRows.map(r => (
                       <TableRow key={String(r.employeeId)}>
                         <TableCell className="font-medium">
                           {r.employeeName}
                           {r.employeeCode ? (
-                            <span className="text-xs text-muted-foreground ml-2 font-mono">
+                            <span className="text-muted-foreground ml-2 font-mono text-xs">
                               {r.employeeCode}
                             </span>
                           ) : null}
                         </TableCell>
-                        <TableCell className="text-right">
-                          {r.ordersCompleted}
-                        </TableCell>
+                        <TableCell className="text-right">{r.ordersCompleted}</TableCell>
                         <TableCell className="text-right font-semibold text-emerald-700">
                           {r.avgMinutes}
                         </TableCell>
@@ -7236,91 +6651,83 @@ const AdminDashboard = () => {
 
   // EMPLOYEES SECTION – Active Employees = permanent roster; Shift Status = currently on shift (from /shift/active)
   const onShiftEmployeeIds = useMemo(
-    () =>
-      new Set(
-        (activeShiftsNow || []).map((s: any) => s.employee?.id).filter(Boolean),
-      ),
-    [activeShiftsNow],
+    () => new Set((activeShiftsNow || []).map((s: any) => s.employee?.id).filter(Boolean)),
+    [activeShiftsNow]
   );
   const filteredEmployees = useMemo(
     () =>
-      employees.filter((e) => {
+      employees.filter(e => {
         const matchesSearch =
           e.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (e.email || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (e.employeeCode || "")
-            .toLowerCase()
-            .includes(searchQuery.toLowerCase());
-        const statusUpper = String(e.status || "").toUpperCase();
-        const filterUpper = String(statusFilter || "").toUpperCase();
-        const matchesStatus =
-          statusFilter === "all" || statusUpper === filterUpper;
+          (e.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (e.employeeCode || '').toLowerCase().includes(searchQuery.toLowerCase());
+        const statusUpper = String(e.status || '').toUpperCase();
+        const filterUpper = String(statusFilter || '').toUpperCase();
+        const matchesStatus = statusFilter === 'all' || statusUpper === filterUpper;
         return matchesSearch && matchesStatus;
       }),
-    [employees, searchQuery, statusFilter],
+    [employees, searchQuery, statusFilter]
   );
   const activeCount = employees.filter(
-    (e) => String(e.status || "").toUpperCase() === "ACTIVE",
+    e => String(e.status || '').toUpperCase() === 'ACTIVE'
   ).length;
 
   const EmployeesSection = () => (
-    <div className="space-y-4 min-w-0 overflow-hidden">
+    <div className="min-w-0 space-y-4 overflow-hidden">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-bold">Employees</h2>
-          <p className="text-sm text-muted-foreground">
-            Active employees = roster status Active (not email verification).
-            &quot;Currently on Shift&quot; uses live shift data.
+          <p className="text-muted-foreground text-sm">
+            Active employees = roster status Active (not email verification). &quot;Currently on
+            Shift&quot; uses live shift data.
           </p>
         </div>
         <Button size="sm" onClick={() => setIsEmployeeDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-1" />
+          <Plus className="mr-1 h-4 w-4" />
           Add Employee
         </Button>
       </div>
 
       {/* Summary: Total, Active, Currently on Shift */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <Card className="bg-slate-50 border-slate-200">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Card className="border-slate-200 bg-slate-50">
           <CardContent className="p-3">
-            <p className="text-xs text-muted-foreground">Total Employees</p>
+            <p className="text-muted-foreground text-xs">Total Employees</p>
             <p className="text-xl font-bold">{employees.length}</p>
           </CardContent>
         </Card>
-        <Card className="bg-emerald-50 border-emerald-200">
+        <Card className="border-emerald-200 bg-emerald-50">
           <CardContent className="p-3">
-            <p className="text-xs text-muted-foreground">Active Employees</p>
+            <p className="text-muted-foreground text-xs">Active Employees</p>
             <p className="text-xl font-bold text-emerald-700">{activeCount}</p>
           </CardContent>
         </Card>
-        <Card className="bg-amber-50 border-amber-200">
+        <Card className="border-amber-200 bg-amber-50">
           <CardContent className="p-3">
-            <p className="text-xs text-muted-foreground">Currently on Shift</p>
-            <p className="text-xl font-bold text-amber-700">
-              {activeShiftsNow.length}
-            </p>
+            <p className="text-muted-foreground text-xs">Currently on Shift</p>
+            <p className="text-xl font-bold text-amber-700">{activeShiftsNow.length}</p>
           </CardContent>
         </Card>
       </div>
 
       <Card className="min-w-0 overflow-hidden">
-        <CardHeader className="pb-3 px-3 sm:px-6">
-          <div className="flex flex-col sm:flex-row gap-2">
-            <div className="relative flex-1 min-w-0">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+        <CardHeader className="px-3 pb-3 sm:px-6">
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="relative min-w-0 flex-1">
+              <Search className="text-muted-foreground absolute top-2.5 left-2.5 h-4 w-4" />
               <Input
                 placeholder="Search by name, email, code..."
-                className="pl-8 w-full"
+                className="w-full pl-8"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={e => setSearchQuery(e.target.value)}
               />
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full sm:w-36 min-w-0">
+              <SelectTrigger className="w-full min-w-0 sm:w-36">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
-                {EMPLOYEE_STATUS_FILTER_OPTIONS.map((opt) => (
+                {EMPLOYEE_STATUS_FILTER_OPTIONS.map(opt => (
                   <SelectItem key={opt.value} value={opt.value}>
                     {opt.label}
                   </SelectItem>
@@ -7328,67 +6735,44 @@ const AdminDashboard = () => {
               </SelectContent>
             </Select>
           </div>
-          <p className="text-xs text-muted-foreground mt-1">
+          <p className="text-muted-foreground mt-1 text-xs">
             Showing {filteredEmployees.length} employee
-            {filteredEmployees.length !== 1 ? "s" : ""} (filter:{" "}
-            {statusFilter === "ACTIVE"
-              ? "Active"
-              : statusFilter === "all"
-                ? "All"
-                : statusFilter}
-            )
+            {filteredEmployees.length !== 1 ? 's' : ''} (filter:{' '}
+            {statusFilter === 'ACTIVE' ? 'Active' : statusFilter === 'all' ? 'All' : statusFilter})
           </p>
         </CardHeader>
-        <CardContent className="p-0 overflow-hidden">
-          <div className="overflow-x-auto -mx-1 px-1">
+        <CardContent className="overflow-hidden p-0">
+          <div className="-mx-1 overflow-x-auto px-1">
             <Table className="min-w-[640px]">
               <TableHeader>
                 <TableRow className="bg-slate-50">
-                  <TableHead className="text-xs font-semibold whitespace-nowrap">
-                    Code
-                  </TableHead>
-                  <TableHead className="text-xs font-semibold whitespace-nowrap">
-                    Name
-                  </TableHead>
-                  <TableHead className="text-xs font-semibold min-w-[140px] sm:min-w-[200px]">
+                  <TableHead className="text-xs font-semibold whitespace-nowrap">Code</TableHead>
+                  <TableHead className="text-xs font-semibold whitespace-nowrap">Name</TableHead>
+                  <TableHead className="min-w-[140px] text-xs font-semibold sm:min-w-[200px]">
                     Email
                   </TableHead>
                   <TableHead className="text-xs font-semibold">Role</TableHead>
-                  <TableHead className="text-xs font-semibold">
-                    Verified
-                  </TableHead>
-                  <TableHead className="text-xs font-semibold">
-                    Status
-                  </TableHead>
-                  <TableHead className="text-xs font-semibold">
-                    Shift Status
-                  </TableHead>
-                  <TableHead className="text-xs font-semibold text-right">
-                    Actions
-                  </TableHead>
+                  <TableHead className="text-xs font-semibold">Verified</TableHead>
+                  <TableHead className="text-xs font-semibold">Status</TableHead>
+                  <TableHead className="text-xs font-semibold">Shift Status</TableHead>
+                  <TableHead className="text-right text-xs font-semibold">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredEmployees.length === 0 ? (
                   <TableRow>
-                    <TableCell
-                      colSpan={8}
-                      className="text-center py-8 text-muted-foreground"
-                    >
-                      No employees match the filter. Try &quot;All&quot; or a
-                      different search.
+                    <TableCell colSpan={8} className="text-muted-foreground py-8 text-center">
+                      No employees match the filter. Try &quot;All&quot; or a different search.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredEmployees.map((emp) => (
+                  filteredEmployees.map(emp => (
                     <TableRow key={emp.id} className="text-sm">
-                      <TableCell className="font-mono text-xs">
-                        {emp.employeeCode || "—"}
-                      </TableCell>
+                      <TableCell className="font-mono text-xs">{emp.employeeCode || '—'}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Avatar className="h-8 w-8">
-                            <AvatarFallback className="bg-emerald-100 text-emerald-700 text-xs">
+                            <AvatarFallback className="bg-emerald-100 text-xs text-emerald-700">
                               {emp.name.charAt(0)}
                             </AvatarFallback>
                           </Avatar>
@@ -7396,19 +6780,16 @@ const AdminDashboard = () => {
                         </div>
                       </TableCell>
                       <TableCell className="min-w-[200px]">
-                        <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex flex-wrap items-center gap-2">
                           {emp.emailVerified && (
                             <span
-                              className="shrink-0 flex items-center justify-center h-5 w-5 rounded-full bg-emerald-100 text-emerald-700"
+                              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700"
                               title="Email verified"
                             >
-                              <CheckCircle2
-                                className="h-3.5 w-3.5"
-                                aria-hidden
-                              />
+                              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
                             </span>
                           )}
-                          <span className="text-slate-800 font-medium break-all">
+                          <span className="font-medium break-all text-slate-800">
                             {emp.email ? (
                               <a
                                 href={`mailto:${emp.email}`}
@@ -7417,34 +6798,32 @@ const AdminDashboard = () => {
                                 {emp.email}
                               </a>
                             ) : (
-                              "—"
+                              '—'
                             )}
                           </span>
                           {!emp.emailVerified && (
                             <Button
                               size="sm"
                               variant="outline"
-                              className="h-7 px-2 text-xs shrink-0"
+                              className="h-7 shrink-0 px-2 text-xs"
                               disabled={verifyingEmployeeId === emp.id}
                               onClick={() => setEmployeeToVerify(emp)}
                               title="Verify employee email"
                             >
-                              <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-                              {verifyingEmployeeId === emp.id
-                                ? "Sending..."
-                                : "Verify"}
+                              <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+                              {verifyingEmployeeId === emp.id ? 'Sending...' : 'Verify'}
                             </Button>
                           )}
                         </div>
                       </TableCell>
-                      <TableCell>{emp.role || "—"}</TableCell>
+                      <TableCell>{emp.role || '—'}</TableCell>
                       <TableCell>
                         {emp.emailVerified ? (
-                          <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">
+                          <Badge className="border-emerald-200 bg-emerald-100 text-emerald-800">
                             Verified
                           </Badge>
                         ) : (
-                          <Badge className="bg-amber-100 text-amber-800 border-amber-200">
+                          <Badge className="border-amber-200 bg-amber-100 text-amber-800">
                             Not Verified
                           </Badge>
                         )}
@@ -7453,23 +6832,20 @@ const AdminDashboard = () => {
                         <StatusBadge status={emp.status} />
                       </TableCell>
                       <TableCell>
-                        {String(emp.status || "").toUpperCase() !== "ACTIVE" ? (
+                        {String(emp.status || '').toUpperCase() !== 'ACTIVE' ? (
                           <span className="text-muted-foreground">—</span>
                         ) : onShiftEmployeeIds.has(emp.id) ? (
-                          <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">
+                          <Badge className="border-emerald-200 bg-emerald-100 text-emerald-800">
                             On Shift
                           </Badge>
                         ) : (
-                          <Badge
-                            variant="outline"
-                            className="text-muted-foreground"
-                          >
+                          <Badge variant="outline" className="text-muted-foreground">
                             Off Shift
                           </Badge>
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                        <div className="flex flex-wrap items-center justify-end gap-1.5">
                           <Button
                             size="sm"
                             variant="outline"
@@ -7477,7 +6853,7 @@ const AdminDashboard = () => {
                             disabled={changingPasswordEmployeeId === emp.id}
                             title="Change password (director receives email)"
                           >
-                            <Lock className="h-4 w-4 mr-1" />
+                            <Lock className="mr-1 h-4 w-4" />
                             Change password
                           </Button>
                           <Button
@@ -7485,7 +6861,7 @@ const AdminDashboard = () => {
                             variant="outline"
                             onClick={() => setEditingEmployee(emp)}
                           >
-                            <Edit2 className="h-4 w-4 mr-1" />
+                            <Edit2 className="mr-1 h-4 w-4" />
                             Edit
                           </Button>
                         </div>
@@ -7504,27 +6880,21 @@ const AdminDashboard = () => {
   // Memoized order cards grid so cards don't re-render on every parent update (stable, no flash)
   const ordersGridContent = useMemo(
     () => (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 min-w-0">
-        {(orderTableFilter === "all"
+      <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {(orderTableFilter === 'all'
           ? ordersByTable
-          : ordersByTable.filter(
-              (t) => String(t.tableId) === String(orderTableFilter),
-            )
-        ).map((table) => (
-          <Card key={table.tableId} className="overflow-hidden card-gpu">
-            <CardHeader className="pb-2 bg-slate-50">
+          : ordersByTable.filter(t => String(t.tableId) === String(orderTableFilter))
+        ).map(table => (
+          <Card key={table.tableId} className="card-gpu overflow-hidden">
+            <CardHeader className="bg-slate-50 pb-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="p-1.5 bg-emerald-100 rounded-md">
+                  <div className="rounded-md bg-emerald-100 p-1.5">
                     <Utensils className="h-4 w-4 text-emerald-600" />
                   </div>
                   <div>
-                    <CardTitle className="text-base">
-                      Table {table.tableNumber}
-                    </CardTitle>
-                    <p className="text-xs text-muted-foreground">
-                      {table.orders.length} orders
-                    </p>
+                    <CardTitle className="text-base">Table {table.tableNumber}</CardTitle>
+                    <p className="text-muted-foreground text-xs">{table.orders.length} orders</p>
                   </div>
                 </div>
                 <Badge variant="outline" className="text-emerald-600">
@@ -7548,61 +6918,54 @@ const AdminDashboard = () => {
             </CardContent>
           </Card>
         ))}
-        {(orderTableFilter === "all"
+        {(orderTableFilter === 'all'
           ? ordersByTable.length === 0
-          : ordersByTable.filter(
-              (t) => String(t.tableId) === String(orderTableFilter),
-            ).length === 0) && (
+          : ordersByTable.filter(t => String(t.tableId) === String(orderTableFilter)).length ===
+            0) && (
           <Card className="col-span-full">
             <CardContent className="p-8 text-center">
-              <ShoppingCart className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-20" />
-              <p className="text-muted-foreground">
-                No orders found for the selected date
-              </p>
+              <ShoppingCart className="text-muted-foreground mx-auto mb-3 h-12 w-12 opacity-20" />
+              <p className="text-muted-foreground">No orders found for the selected date</p>
             </CardContent>
           </Card>
         )}
       </div>
     ),
-    [ordersByTable, orderTableFilter, handleOpenOrderDialog],
+    [ordersByTable, orderTableFilter, handleOpenOrderDialog]
   );
 
   // ORDERS SECTION - Updated with table view and popup
   const OrdersSection = () => (
-    <div className="space-y-4 min-w-0">
+    <div className="min-w-0 space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <h2 className="text-lg sm:text-xl font-bold truncate">
-            Orders by Table
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            View all orders grouped by table
-          </p>
+          <h2 className="truncate text-lg font-bold sm:text-xl">Orders by Table</h2>
+          <p className="text-muted-foreground text-sm">View all orders grouped by table</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
             <Input
               type="date"
-              className="w-full min-w-0 sm:w-36 min-h-[44px] sm:min-h-0"
+              className="min-h-[44px] w-full min-w-0 sm:min-h-0 sm:w-36"
               value={orderStartDate}
-              onChange={(e) => setOrderStartDate(e.target.value)}
+              onChange={e => setOrderStartDate(e.target.value)}
               placeholder="Start date"
             />
             <Input
               type="date"
-              className="w-full min-w-0 sm:w-36 min-h-[44px] sm:min-h-0"
+              className="min-h-[44px] w-full min-w-0 sm:min-h-0 sm:w-36"
               value={orderEndDate}
-              onChange={(e) => setOrderEndDate(e.target.value)}
+              onChange={e => setOrderEndDate(e.target.value)}
               placeholder="End date"
             />
           </div>
           <Select value={orderTableFilter} onValueChange={setOrderTableFilter}>
-            <SelectTrigger className="w-full sm:w-36 min-h-[44px] sm:min-h-0">
+            <SelectTrigger className="min-h-[44px] w-full sm:min-h-0 sm:w-36">
               <SelectValue placeholder="All Tables" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Tables</SelectItem>
-              {ordersByTable.map((t) => (
+              {ordersByTable.map(t => (
                 <SelectItem key={t.tableId} value={String(t.tableId)}>
                   Table {t.tableNumber}
                 </SelectItem>
@@ -7613,15 +6976,15 @@ const AdminDashboard = () => {
             size="sm"
             variant="outline"
             onClick={() => {
-              setOrderStartDate("");
-              setOrderEndDate("");
-              setOrderTableFilter("all");
+              setOrderStartDate('');
+              setOrderEndDate('');
+              setOrderTableFilter('all');
               // Load without filters immediately for UX
               loadAllOrders();
             }}
             disabled={ordersLoading}
             title="Reset filters"
-            className="min-h-[44px] sm:min-h-0 shrink-0 w-full sm:w-auto"
+            className="min-h-[44px] w-full shrink-0 sm:min-h-0 sm:w-auto"
           >
             Reset
           </Button>
@@ -7631,61 +6994,56 @@ const AdminDashboard = () => {
             onClick={loadAllOrders}
             disabled={ordersLoading}
             title="Refresh orders"
-            className="min-h-[44px] sm:min-h-0 shrink-0"
+            className="min-h-[44px] shrink-0 sm:min-h-0"
           >
-            <RefreshCw
-              className={`h-4 w-4 ${ordersLoading ? "animate-spin" : ""}`}
-            />
+            <RefreshCw className={`h-4 w-4 ${ordersLoading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
-        <Card className="bg-blue-50 border-blue-100 min-w-0">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-4">
+        <Card className="min-w-0 border-blue-100 bg-blue-50">
           <CardContent className="p-2 sm:p-3">
-            <p className="text-xs text-muted-foreground">Total Orders</p>
-            <p className="text-lg sm:text-xl font-bold text-blue-700 truncate">
+            <p className="text-muted-foreground text-xs">Total Orders</p>
+            <p className="truncate text-lg font-bold text-blue-700 sm:text-xl">
               {allOrders.length}
             </p>
           </CardContent>
         </Card>
-        <Card className="bg-emerald-50 border-emerald-100 min-w-0">
+        <Card className="min-w-0 border-emerald-100 bg-emerald-50">
           <CardContent className="p-2 sm:p-3">
-            <p className="text-xs text-muted-foreground">Total Revenue</p>
-            <p className="text-lg sm:text-xl font-bold text-emerald-700 truncate">
+            <p className="text-muted-foreground text-xs">Total Revenue</p>
+            <p className="truncate text-lg font-bold text-emerald-700 sm:text-xl">
               {formatINR(
                 allOrders
-                  .filter((o) => o.paymentStatus === "PAID")
-                  .reduce((sum, o) => sum + o.totalAmount, 0),
+                  .filter(o => o.paymentStatus === 'PAID')
+                  .reduce((sum, o) => sum + o.totalAmount, 0)
               )}
             </p>
           </CardContent>
         </Card>
-        <Card className="bg-amber-50 border-amber-100 min-w-0">
+        <Card className="min-w-0 border-amber-100 bg-amber-50">
           <CardContent className="p-2 sm:p-3">
-            <p className="text-xs text-muted-foreground">Pending Orders</p>
-            <p className="text-lg sm:text-xl font-bold text-amber-700 truncate">
-              {
-                allOrders.filter((o) => o.paymentStatus !== "PAID")
-                  .length
-              }
+            <p className="text-muted-foreground text-xs">Pending Orders</p>
+            <p className="truncate text-lg font-bold text-amber-700 sm:text-xl">
+              {allOrders.filter(o => o.paymentStatus !== 'PAID').length}
             </p>
           </CardContent>
         </Card>
-        <Card className="bg-amber-50 border-amber-100 min-w-0">
+        <Card className="min-w-0 border-amber-100 bg-amber-50">
           <CardContent className="p-2 sm:p-3">
-            <p className="text-xs text-muted-foreground">Tables Active</p>
-            <p className="text-lg sm:text-xl font-bold text-amber-700 truncate">
+            <p className="text-muted-foreground text-xs">Tables Active</p>
+            <p className="truncate text-lg font-bold text-amber-700 sm:text-xl">
               {ordersByTable.length}
             </p>
           </CardContent>
         </Card>
-        <Card className="bg-purple-50 border-purple-100 min-w-0">
+        <Card className="min-w-0 border-purple-100 bg-purple-50">
           <CardContent className="p-2 sm:p-3">
-            <p className="text-xs text-muted-foreground">Pending Payment</p>
-            <p className="text-lg sm:text-xl font-bold text-purple-700 truncate">
-              {allOrders.filter((o) => o.paymentStatus !== "PAID").length}
+            <p className="text-muted-foreground text-xs">Pending Payment</p>
+            <p className="truncate text-lg font-bold text-purple-700 sm:text-xl">
+              {allOrders.filter(o => o.paymentStatus !== 'PAID').length}
             </p>
           </CardContent>
         </Card>
@@ -7698,22 +7056,18 @@ const AdminDashboard = () => {
 
   // CUSTOMER LEADERBOARD SECTION – Top customers by amount (default) / orders
   const CustomerLeaderboardSection = () => (
-    <div className="space-y-4 min-w-0">
+    <div className="min-w-0 space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <h2 className="text-lg sm:text-xl font-bold truncate">
-            Customer Leaderboard
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Highest paying customers (descending)
-          </p>
+          <h2 className="truncate text-lg font-bold sm:text-xl">Customer Leaderboard</h2>
+          <p className="text-muted-foreground text-sm">Highest paying customers (descending)</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Select
             value={leaderboardSortBy}
-            onValueChange={(v: "orders" | "amount") => setLeaderboardSortBy(v)}
+            onValueChange={(v: 'orders' | 'amount') => setLeaderboardSortBy(v)}
           >
-            <SelectTrigger className="w-full sm:w-[180px] min-w-0 min-h-[44px] sm:min-h-0">
+            <SelectTrigger className="min-h-[44px] w-full min-w-0 sm:min-h-0 sm:w-[180px]">
               <SelectValue placeholder="Sort by" />
             </SelectTrigger>
             <SelectContent>
@@ -7723,9 +7077,9 @@ const AdminDashboard = () => {
           </Select>
           <Select
             value={String(leaderboardLimit)}
-            onValueChange={(v) => setLeaderboardLimit(Number(v))}
+            onValueChange={v => setLeaderboardLimit(Number(v))}
           >
-            <SelectTrigger className="w-full sm:w-[120px] min-w-0 min-h-[44px] sm:min-h-0">
+            <SelectTrigger className="min-h-[44px] w-full min-w-0 sm:min-h-0 sm:w-[120px]">
               <SelectValue placeholder="Top" />
             </SelectTrigger>
             <SelectContent>
@@ -7742,9 +7096,7 @@ const AdminDashboard = () => {
             disabled={leaderboardLoading}
             className="min-h-[44px] sm:min-h-0"
           >
-            <RefreshCw
-              className={`h-4 w-4 mr-1 ${leaderboardLoading ? "animate-spin" : ""}`}
-            />
+            <RefreshCw className={`mr-1 h-4 w-4 ${leaderboardLoading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
           <Button
@@ -7755,25 +7107,24 @@ const AdminDashboard = () => {
             onClick={() => {
               const rows = leaderboard.map((r, idx) => ({
                 rank: idx + 1,
-                customerName: r.customerName || "",
-                customerMobile: r.customerMobile || "",
+                customerName: r.customerName || '',
+                customerMobile: r.customerMobile || '',
                 totalOrders: r.totalOrders ?? 0,
                 totalSpent: r.totalSpent ?? 0,
-                lastOrderDate: r.lastOrderDate || "",
+                lastOrderDate: r.lastOrderDate || '',
               }));
               const header = [
-                "Rank",
-                "Customer Name",
-                "Mobile Number",
-                "Total Orders",
-                "Total Spent",
-                "Last Order Date",
+                'Rank',
+                'Customer Name',
+                'Mobile Number',
+                'Total Orders',
+                'Total Spent',
+                'Last Order Date',
               ];
-              const escape = (v: unknown) =>
-                `"${String(v ?? "").replace(/"/g, '""')}"`;
+              const escape = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
               const csv = [
-                header.join(","),
-                ...rows.map((r) =>
+                header.join(','),
+                ...rows.map(r =>
                   [
                     r.rank,
                     r.customerName,
@@ -7783,12 +7134,12 @@ const AdminDashboard = () => {
                     r.lastOrderDate,
                   ]
                     .map(escape)
-                    .join(","),
+                    .join(',')
                 ),
-              ].join("\n");
-              const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+              ].join('\n');
+              const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
               const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
+              const a = document.createElement('a');
               a.href = url;
               a.download = `customer-leads-${new Date().toISOString().slice(0, 10)}.csv`;
               document.body.appendChild(a);
@@ -7803,13 +7154,13 @@ const AdminDashboard = () => {
       </div>
 
       {leaderboardLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {[1, 2, 3, 4, 5].map((i) => (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3, 4, 5].map(i => (
             <Card key={i} className="overflow-hidden">
               <CardContent className="p-4">
-                <div className="h-5 w-32 rounded bg-slate-200 animate-pulse mb-3" />
-                <div className="h-4 w-24 rounded bg-slate-100 animate-pulse mb-2" />
-                <div className="h-4 w-20 rounded bg-slate-100 animate-pulse" />
+                <div className="mb-3 h-5 w-32 animate-pulse rounded bg-slate-200" />
+                <div className="mb-2 h-4 w-24 animate-pulse rounded bg-slate-100" />
+                <div className="h-4 w-20 animate-pulse rounded bg-slate-100" />
               </CardContent>
             </Card>
           ))}
@@ -7817,11 +7168,9 @@ const AdminDashboard = () => {
       ) : leaderboard.length === 0 ? (
         <Card>
           <CardContent className="p-12 text-center">
-            <Trophy className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-            <p className="text-muted-foreground font-medium">
-              No customer data yet
-            </p>
-            <p className="text-sm text-muted-foreground mt-1">
+            <Trophy className="text-muted-foreground mx-auto mb-3 h-12 w-12 opacity-50" />
+            <p className="text-muted-foreground font-medium">No customer data yet</p>
+            <p className="text-muted-foreground mt-1 text-sm">
               Orders with a mobile number will appear here.
             </p>
           </CardContent>
@@ -7834,19 +7183,13 @@ const AdminDashboard = () => {
               <TableHeader>
                 <TableRow className="bg-slate-50">
                   <TableHead className="w-14 whitespace-nowrap">Rank</TableHead>
-                  <TableHead className="min-w-[140px] sm:min-w-[180px] whitespace-nowrap">
+                  <TableHead className="min-w-[140px] whitespace-nowrap sm:min-w-[180px]">
                     Customer Name
                   </TableHead>
-                  <TableHead className="min-w-[140px] whitespace-nowrap">
-                    Mobile Number
-                  </TableHead>
-                  <TableHead className="w-20 whitespace-nowrap text-right">
-                    Action
-                  </TableHead>
-                  <TableHead className="w-24 whitespace-nowrap text-right">
-                    Total Orders
-                  </TableHead>
-                  <TableHead className="min-w-[100px] whitespace-nowrap text-right">
+                  <TableHead className="min-w-[140px] whitespace-nowrap">Mobile Number</TableHead>
+                  <TableHead className="w-20 text-right whitespace-nowrap">Action</TableHead>
+                  <TableHead className="w-24 text-right whitespace-nowrap">Total Orders</TableHead>
+                  <TableHead className="min-w-[100px] text-right whitespace-nowrap">
                     Total Spent
                   </TableHead>
                 </TableRow>
@@ -7855,11 +7198,11 @@ const AdminDashboard = () => {
                 {leaderboard.map((row, idx) => (
                   <TableRow key={`${row.customerMobile}-${idx}`}>
                     <TableCell className="font-medium">{idx + 1}</TableCell>
-                    <TableCell className="font-medium align-top">
-                      {(row.customerName || "—").toUpperCase()}
+                    <TableCell className="align-top font-medium">
+                      {(row.customerName || '—').toUpperCase()}
                     </TableCell>
                     <TableCell className="text-muted-foreground align-top font-mono text-sm">
-                      {row.customerMobile || "—"}
+                      {row.customerMobile || '—'}
                     </TableCell>
                     <TableCell className="text-right align-top">
                       <Button
@@ -7872,24 +7215,23 @@ const AdminDashboard = () => {
                             const res = await fetch(
                               `${apiBase}/orders/customer-leads/${encodeURIComponent(row.customerMobile)}`,
                               {
-                                method: "DELETE",
+                                method: 'DELETE',
                                 headers: { Authorization: `Bearer ${token}` },
-                              },
+                              }
                             );
                             if (!res.ok) {
                               const err = await res.json().catch(() => ({}));
                               toast({
-                                title: "Failed",
+                                title: 'Failed',
                                 description:
-                                  (err as any).message ||
-                                  "Could not delete this mobile number.",
-                                variant: "destructive",
+                                  (err as any).message || 'Could not delete this mobile number.',
+                                variant: 'destructive',
                               });
                               return;
                             }
                             const data = await res.json().catch(() => ({}));
                             toast({
-                              title: "Deleted",
+                              title: 'Deleted',
                               description: `Mobile cleared from ${data.clearedCount ?? 0} order(s).`,
                             });
                             // refresh leaderboard
@@ -7902,16 +7244,16 @@ const AdminDashboard = () => {
                                 fetch(`${apiBase}/orders/customer-leaderboard?${params}`, {
                                   headers: { Authorization: `Bearer ${token}` },
                                 })
-                                  .then((r) => (r.ok ? r.json() : null))
-                                  .then((d) => d && setLeaderboard(d.leaderboard ?? []))
+                                  .then(r => (r.ok ? r.json() : null))
+                                  .then(d => d && setLeaderboard(d.leaderboard ?? []))
                                   .catch(() => {});
                               } catch {}
                             }, 150);
                           } catch (e: any) {
                             toast({
-                              title: "Failed",
-                              description: e?.message || "Delete failed",
-                              variant: "destructive",
+                              title: 'Failed',
+                              description: e?.message || 'Delete failed',
+                              variant: 'destructive',
                             });
                           }
                         }}
@@ -7919,10 +7261,10 @@ const AdminDashboard = () => {
                         Delete
                       </Button>
                     </TableCell>
-                    <TableCell className="text-right font-semibold align-top">
+                    <TableCell className="text-right align-top font-semibold">
                       {row.totalOrders}
                     </TableCell>
-                    <TableCell className="text-right font-semibold text-emerald-700 align-top">
+                    <TableCell className="text-right align-top font-semibold text-emerald-700">
                       {formatINR(row.totalSpent)}
                     </TableCell>
                   </TableRow>
@@ -7938,54 +7280,44 @@ const AdminDashboard = () => {
   // WORK HOURS SECTION - Updated with filters and daily stats
   const WorkHoursSection = () => (
     <div className="space-y-4">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
         <div>
           <h2 className="text-xl font-bold">Employee Work Hours</h2>
-          <p className="text-sm text-muted-foreground">
-            Track attendance, hours and sales
-          </p>
+          <p className="text-muted-foreground text-sm">Track attendance, hours and sales</p>
         </div>
-        <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 w-full md:w-auto">
-          <Select
-            value={hoursEmployeeFilter}
-            onValueChange={setHoursEmployeeFilter}
-          >
-            <SelectTrigger className="w-full sm:w-40 min-h-[44px]">
+        <div className="flex w-full flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center md:w-auto">
+          <Select value={hoursEmployeeFilter} onValueChange={setHoursEmployeeFilter}>
+            <SelectTrigger className="min-h-[44px] w-full sm:w-40">
               <SelectValue placeholder="All Employees" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Employees</SelectItem>
               {employees
-                .filter(
-                  (e) =>
-                    String(e.status || "").toUpperCase() === "ACTIVE",
-                )
-                .map((emp) => (
+                .filter(e => String(e.status || '').toUpperCase() === 'ACTIVE')
+                .map(emp => (
                   <SelectItem key={emp.id} value={String(emp.id)}>
                     {emp.name}
                   </SelectItem>
                 ))}
             </SelectContent>
           </Select>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full sm:w-auto">
-            <div className="flex flex-col gap-1 min-w-0">
-              <Label className="text-xs text-muted-foreground">
-                Start Date
-              </Label>
+          <div className="grid w-full grid-cols-1 gap-2 sm:w-auto sm:grid-cols-2">
+            <div className="flex min-w-0 flex-col gap-1">
+              <Label className="text-muted-foreground text-xs">Start Date</Label>
               <Input
                 type="date"
-                className="w-full min-w-0 bg-background border border-input min-h-[44px]"
+                className="bg-background border-input min-h-[44px] w-full min-w-0 border"
                 value={hoursStartDate}
-                onChange={(e) => setHoursStartDate(e.target.value)}
+                onChange={e => setHoursStartDate(e.target.value)}
               />
             </div>
-            <div className="flex flex-col gap-1 min-w-0">
-              <Label className="text-xs text-muted-foreground">End Date</Label>
+            <div className="flex min-w-0 flex-col gap-1">
+              <Label className="text-muted-foreground text-xs">End Date</Label>
               <Input
                 type="date"
-                className="w-full min-w-0 bg-background border border-input min-h-[44px]"
+                className="bg-background border-input min-h-[44px] w-full min-w-0 border"
                 value={hoursEndDate}
-                onChange={(e) => setHoursEndDate(e.target.value)}
+                onChange={e => setHoursEndDate(e.target.value)}
               />
             </div>
           </div>
@@ -7999,7 +7331,7 @@ const AdminDashboard = () => {
           >
             {shiftHistoryLoading ? (
               <span
-                className="inline-block h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin"
+                className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
                 aria-hidden
               />
             ) : (
@@ -8010,46 +7342,42 @@ const AdminDashboard = () => {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <Card className="bg-blue-50 border-blue-100">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <Card className="border-blue-100 bg-blue-50">
           <CardContent className="p-3">
-            <p className="text-xs text-muted-foreground">Total Shifts</p>
-            <p className="text-xl font-bold text-blue-700">
-              {hoursSummary.totalShifts}
-            </p>
+            <p className="text-muted-foreground text-xs">Total Shifts</p>
+            <p className="text-xl font-bold text-blue-700">{hoursSummary.totalShifts}</p>
           </CardContent>
         </Card>
-        <Card className="bg-emerald-50 border-emerald-100">
+        <Card className="border-emerald-100 bg-emerald-50">
           <CardContent className="p-3">
-            <p className="text-xs text-muted-foreground">Total Hours</p>
+            <p className="text-muted-foreground text-xs">Total Hours</p>
             <p className="text-xl font-bold text-emerald-700">
               {formatHours(hoursSummary.totalHours)}
             </p>
           </CardContent>
         </Card>
-        <Card className="bg-purple-50 border-purple-100">
+        <Card className="border-purple-100 bg-purple-50">
           <CardContent className="p-3">
-            <p className="text-xs text-muted-foreground">Total Sales</p>
+            <p className="text-muted-foreground text-xs">Total Sales</p>
             <p className="text-xl font-bold text-purple-700">
               {formatINR(hoursSummary.totalSales)}
             </p>
           </CardContent>
         </Card>
-        <Card className="bg-amber-50 border-amber-100">
+        <Card className="border-amber-100 bg-amber-50">
           <CardContent className="p-3">
-            <p className="text-xs text-muted-foreground">Avg Hours/Shift</p>
+            <p className="text-muted-foreground text-xs">Avg Hours/Shift</p>
             <p className="text-xl font-bold text-amber-700">
               {hoursSummary.totalShifts > 0
-                ? formatHours(
-                    hoursSummary.totalHours / hoursSummary.totalShifts,
-                  )
-                : "0 min"}
+                ? formatHours(hoursSummary.totalHours / hoursSummary.totalShifts)
+                : '0 min'}
             </p>
           </CardContent>
         </Card>
-        <Card className="bg-slate-50 border-slate-200">
+        <Card className="border-slate-200 bg-slate-50">
           <CardContent className="p-3">
-            <p className="text-xs text-muted-foreground">Break (fixed)</p>
+            <p className="text-muted-foreground text-xs">Break (fixed)</p>
             <p className="text-xl font-bold text-slate-700">
               {formatBreakTime(BREAK_TIME_MINUTES)}
             </p>
@@ -8069,23 +7397,17 @@ const AdminDashboard = () => {
                 <TableHeader>
                   <TableRow className="bg-slate-50">
                     <TableHead className="text-xs">Date</TableHead>
-                    <TableHead className="text-xs text-right">Shifts</TableHead>
-                    <TableHead className="text-xs text-right">Hours</TableHead>
-                    <TableHead className="text-xs text-right">Sales</TableHead>
+                    <TableHead className="text-right text-xs">Shifts</TableHead>
+                    <TableHead className="text-right text-xs">Hours</TableHead>
+                    <TableHead className="text-right text-xs">Sales</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {dailyStats.map((stat) => (
+                  {dailyStats.map(stat => (
                     <TableRow key={stat.date} className="text-sm">
-                      <TableCell>
-                        {new Date(stat.date).toLocaleDateString("en-IN")}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {stat.shifts}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatHours(stat.totalHours)}
-                      </TableCell>
+                      <TableCell>{new Date(stat.date).toLocaleDateString('en-IN')}</TableCell>
+                      <TableCell className="text-right">{stat.shifts}</TableCell>
+                      <TableCell className="text-right">{formatHours(stat.totalHours)}</TableCell>
                       <TableCell className="text-right font-medium text-emerald-600">
                         {formatINR(stat.totalSales)}
                       </TableCell>
@@ -8114,19 +7436,19 @@ const AdminDashboard = () => {
                   <TableHead className="text-xs">In Time</TableHead>
                   <TableHead className="text-xs">Out Time</TableHead>
                   <TableHead className="text-xs">Status</TableHead>
-                  <TableHead className="text-xs text-right">Hours</TableHead>
-                  <TableHead className="text-xs text-right">Orders</TableHead>
-                  <TableHead className="text-xs text-right">Sales</TableHead>
+                  <TableHead className="text-right text-xs">Hours</TableHead>
+                  <TableHead className="text-right text-xs">Orders</TableHead>
+                  <TableHead className="text-right text-xs">Sales</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {(() => {
                   const palette = [
-                    "bg-emerald-50",
-                    "bg-amber-50",
-                    "bg-sky-50",
-                    "bg-violet-50",
-                    "bg-rose-50",
+                    'bg-emerald-50',
+                    'bg-amber-50',
+                    'bg-sky-50',
+                    'bg-violet-50',
+                    'bg-rose-50',
                   ];
                   const groups = new Map<string, any[]>();
                   for (const s of shifts) {
@@ -8142,41 +7464,34 @@ const AdminDashboard = () => {
                     return [
                       <TableRow key={`date-${dateKey}`} className={`${color}`}>
                         <TableCell colSpan={9} className="text-xs font-semibold text-slate-700">
-                          {new Date(dateKey).toLocaleDateString("en-IN", {
-                            weekday: "long",
-                            year: "numeric",
-                            month: "short",
-                            day: "numeric",
+                          {new Date(dateKey).toLocaleDateString('en-IN', {
+                            weekday: 'long',
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
                           })}
                         </TableCell>
                       </TableRow>,
-                      ...rows.map((shift) => (
+                      ...rows.map(shift => (
                         <TableRow key={shift.id} className="text-sm">
-                          <TableCell className="font-medium">
-                            {shift.employee?.name}
-                          </TableCell>
-                          <TableCell>{(shift as any).branch?.name || "—"}</TableCell>
+                          <TableCell className="font-medium">{shift.employee?.name}</TableCell>
+                          <TableCell>{(shift as any).branch?.name || '—'}</TableCell>
                           <TableCell>
-                            {new Date(shift.shiftStart).toLocaleDateString("en-IN")}
+                            {new Date(shift.shiftStart).toLocaleDateString('en-IN')}
                           </TableCell>
-                          <TableCell>
-                            {new Date(shift.shiftStart).toLocaleTimeString()}
-                          </TableCell>
+                          <TableCell>{new Date(shift.shiftStart).toLocaleTimeString()}</TableCell>
                           <TableCell>
                             {shift.shiftEnd
                               ? new Date(shift.shiftEnd).toLocaleTimeString()
-                              : "Active"}
+                              : 'Active'}
                           </TableCell>
                           <TableCell>
-                            {(shift as any).status ||
-                              (shift.shiftEnd ? "ENDED" : "ACTIVE")}
+                            {(shift as any).status || (shift.shiftEnd ? 'ENDED' : 'ACTIVE')}
                           </TableCell>
                           <TableCell className="text-right">
                             {formatHours(shift.totalHours || 0)}
                           </TableCell>
-                          <TableCell className="text-right">
-                            {shift.orders?.length || 0}
-                          </TableCell>
+                          <TableCell className="text-right">{shift.orders?.length || 0}</TableCell>
                           <TableCell className="text-right font-medium text-emerald-600">
                             {formatINR(shift.totalSales || 0)}
                           </TableCell>
@@ -8187,10 +7502,7 @@ const AdminDashboard = () => {
                 })()}
                 {shifts.length === 0 && (
                   <TableRow>
-                    <TableCell
-                      colSpan={9}
-                      className="text-center py-8 text-muted-foreground"
-                    >
+                    <TableCell colSpan={9} className="text-muted-foreground py-8 text-center">
                       No shifts found for the selected filters
                     </TableCell>
                   </TableRow>
@@ -8208,7 +7520,7 @@ const AdminDashboard = () => {
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
     setOvertimeDateFrom(start.toISOString().slice(0, 10));
     setOvertimeDateTo(now.toISOString().slice(0, 10));
-    setOvertimeEmployeeFilter("all");
+    setOvertimeEmployeeFilter('all');
   }, []);
 
   // OVERTIME SECTION – Shifts > 10h; filter by date and employee
@@ -8216,20 +7528,19 @@ const AdminDashboard = () => {
     <div className="space-y-4">
       <div>
         <h2 className="text-xl font-bold">Overtime</h2>
-        <p className="text-sm text-muted-foreground">
-          Shifts over employee&apos;s working hours per day. Auto-closed at
-          04:00 AM if not ended.
+        <p className="text-muted-foreground text-sm">
+          Shifts over employee&apos;s working hours per day. Auto-closed at 04:00 AM if not ended.
         </p>
       </div>
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex flex-col sm:flex-row gap-2 flex-wrap">
+          <div className="flex flex-col flex-wrap gap-2 sm:flex-row">
             <div className="flex flex-col gap-1">
               <Label className="text-xs">Date From</Label>
               <Input
                 type="date"
                 value={overtimeDateFrom}
-                onChange={(e) => setOvertimeDateFrom(e.target.value)}
+                onChange={e => setOvertimeDateFrom(e.target.value)}
                 className="w-full sm:w-40"
               />
             </div>
@@ -8238,27 +7549,21 @@ const AdminDashboard = () => {
               <Input
                 type="date"
                 value={overtimeDateTo}
-                onChange={(e) => setOvertimeDateTo(e.target.value)}
+                onChange={e => setOvertimeDateTo(e.target.value)}
                 className="w-full sm:w-40"
               />
             </div>
             <div className="flex flex-col gap-1">
               <Label className="text-xs">Employee</Label>
-              <Select
-                value={overtimeEmployeeFilter}
-                onValueChange={setOvertimeEmployeeFilter}
-              >
+              <Select value={overtimeEmployeeFilter} onValueChange={setOvertimeEmployeeFilter}>
                 <SelectTrigger className="w-full sm:w-44">
                   <SelectValue placeholder="All" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Employees</SelectItem>
                   {employees
-                    .filter(
-                      (e) =>
-                        String(e.status || "").toUpperCase() === "ACTIVE",
-                    )
-                    .map((emp) => (
+                    .filter(e => String(e.status || '').toUpperCase() === 'ACTIVE')
+                    .map(emp => (
                       <SelectItem key={emp.id} value={String(emp.id)}>
                         {emp.name}
                       </SelectItem>
@@ -8282,7 +7587,7 @@ const AdminDashboard = () => {
                 loading={overtimeLoading}
                 loadingLabel="Applying..."
               >
-                <Search className="h-4 w-4 mr-1" />
+                <Search className="mr-1 h-4 w-4" />
                 Apply
               </LoaderButton>
             </div>
@@ -8290,42 +7595,42 @@ const AdminDashboard = () => {
         </CardHeader>
         <CardContent className="p-0">
           {overtimeRecords.length === 0 && !overtimeLoading ? (
-            <p className="text-center py-8 text-muted-foreground text-sm">
+            <p className="text-muted-foreground py-8 text-center text-sm">
               No overtime records for the selected filters
             </p>
           ) : (
             <>
-              <div className="md:hidden space-y-2 p-3">
-                {overtimeRecords.map((r) => {
-                  const isLive = r.live === true || r.status === "RUNNING";
+              <div className="space-y-2 p-3 md:hidden">
+                {overtimeRecords.map(r => {
+                  const isLive = r.live === true || r.status === 'RUNNING';
                   const endTime = r.shiftEnd
-                    ? new Date(r.shiftEnd).toLocaleTimeString("en-IN", {
-                        hour: "2-digit",
-                        minute: "2-digit",
+                    ? new Date(r.shiftEnd).toLocaleTimeString('en-IN', {
+                        hour: '2-digit',
+                        minute: '2-digit',
                       })
-                    : "—";
+                    : '—';
                   return (
                     <div
                       key={r.id}
-                      className="rounded-lg border bg-slate-50/50 p-3 text-sm grid grid-cols-2 gap-x-3 gap-y-1"
+                      className="grid grid-cols-2 gap-x-3 gap-y-1 rounded-lg border bg-slate-50/50 p-3 text-sm"
                     >
                       <span className="text-muted-foreground">Employee</span>
                       <span className="font-medium">{r.employeeName}</span>
                       <span className="text-muted-foreground">Role</span>
-                      <span>{r.role ?? "—"}</span>
+                      <span>{r.role ?? '—'}</span>
                       <span className="text-muted-foreground">Date</span>
                       <span>
-                        {new Date(r.shiftDate).toLocaleDateString("en-IN", {
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric",
+                        {new Date(r.shiftDate).toLocaleDateString('en-IN', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
                         })}
                       </span>
                       <span className="text-muted-foreground">Start</span>
                       <span>
-                        {new Date(r.shiftStart).toLocaleTimeString("en-IN", {
-                          hour: "2-digit",
-                          minute: "2-digit",
+                        {new Date(r.shiftStart).toLocaleTimeString('en-IN', {
+                          hour: '2-digit',
+                          minute: '2-digit',
                         })}
                       </span>
                       <span className="text-muted-foreground">End</span>
@@ -8337,52 +7642,43 @@ const AdminDashboard = () => {
                         {formatHours(Number(r.overtimeHours))}
                       </span>
                       <span className="text-muted-foreground">Reason</span>
-                      <span>{r.reason ?? "—"}</span>
+                      <span>{r.reason ?? '—'}</span>
                       <span className="text-muted-foreground">Status</span>
                       <span>
                         {isLive ? (
-                          <Badge className="bg-amber-100 text-amber-800 border-amber-200">
+                          <Badge className="border-amber-200 bg-amber-100 text-amber-800">
                             RUNNING
                           </Badge>
                         ) : (
                           <Select
                             value={r.status}
-                            onValueChange={async (status) => {
+                            onValueChange={async status => {
                               try {
-                                const res = await fetch(
-                                  `${apiBase}/overtime/${r.id}/status`,
-                                  {
-                                    method: "PATCH",
-                                    headers: {
-                                      "Content-Type": "application/json",
-                                      Authorization: `Bearer ${token}`,
-                                    },
-                                    body: JSON.stringify({ status }),
+                                const res = await fetch(`${apiBase}/overtime/${r.id}/status`, {
+                                  method: 'PATCH',
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                    Authorization: `Bearer ${token}`,
                                   },
-                                );
+                                  body: JSON.stringify({ status }),
+                                });
                                 if (res.ok) {
                                   loadOvertime();
                                   if (
                                     overtimeSummary.pendingOvertimeCount > 0 ||
                                     overtimeSummary.overtimeRunningCount > 0
                                   ) {
-                                    const sumRes = await fetch(
-                                      `${apiBase}/overtime/summary`,
-                                      {
-                                        headers: {
-                                          Authorization: `Bearer ${token}`,
-                                        },
+                                    const sumRes = await fetch(`${apiBase}/overtime/summary`, {
+                                      headers: {
+                                        Authorization: `Bearer ${token}`,
                                       },
-                                    );
+                                    });
                                     if (sumRes.ok) {
                                       const summary = await sumRes.json();
                                       setOvertimeSummary({
-                                        pendingOvertimeCount:
-                                          summary.pendingOvertimeCount ?? 0,
-                                        overtimeRunningCount:
-                                          summary.overtimeRunningCount ?? 0,
-                                        overtimeRunning:
-                                          summary.overtimeRunning ?? [],
+                                        pendingOvertimeCount: summary.pendingOvertimeCount ?? 0,
+                                        overtimeRunningCount: summary.overtimeRunningCount ?? 0,
+                                        overtimeRunning: summary.overtimeRunning ?? [],
                                       });
                                     }
                                   }
@@ -8390,7 +7686,7 @@ const AdminDashboard = () => {
                               } catch (_e) {}
                             }}
                           >
-                            <SelectTrigger className="w-full max-w-[120px] h-9 text-xs">
+                            <SelectTrigger className="h-9 w-full max-w-[120px] text-xs">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -8406,120 +7702,88 @@ const AdminDashboard = () => {
                   );
                 })}
               </div>
-              <div className="hidden md:block overflow-x-auto">
+              <div className="hidden overflow-x-auto md:block">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-slate-50">
-                      <TableHead className="text-xs font-semibold">
-                        Employee
-                      </TableHead>
-                      <TableHead className="text-xs font-semibold">
-                        Role
-                      </TableHead>
-                      <TableHead className="text-xs font-semibold">
-                        Date
-                      </TableHead>
-                      <TableHead className="text-xs font-semibold">
-                        Start
-                      </TableHead>
-                      <TableHead className="text-xs font-semibold">
-                        End
-                      </TableHead>
-                      <TableHead className="text-xs font-semibold">
-                        Total Hours
-                      </TableHead>
-                      <TableHead className="text-xs font-semibold">
-                        Overtime
-                      </TableHead>
-                      <TableHead className="text-xs font-semibold">
-                        Reason
-                      </TableHead>
-                      <TableHead className="text-xs font-semibold">
-                        Status
-                      </TableHead>
+                      <TableHead className="text-xs font-semibold">Employee</TableHead>
+                      <TableHead className="text-xs font-semibold">Role</TableHead>
+                      <TableHead className="text-xs font-semibold">Date</TableHead>
+                      <TableHead className="text-xs font-semibold">Start</TableHead>
+                      <TableHead className="text-xs font-semibold">End</TableHead>
+                      <TableHead className="text-xs font-semibold">Total Hours</TableHead>
+                      <TableHead className="text-xs font-semibold">Overtime</TableHead>
+                      <TableHead className="text-xs font-semibold">Reason</TableHead>
+                      <TableHead className="text-xs font-semibold">Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {overtimeRecords.map((r) => {
-                      const isLive = r.live === true || r.status === "RUNNING";
+                    {overtimeRecords.map(r => {
+                      const isLive = r.live === true || r.status === 'RUNNING';
                       const endTime = r.shiftEnd
-                        ? new Date(r.shiftEnd).toLocaleTimeString("en-IN", {
-                            hour: "2-digit",
-                            minute: "2-digit",
+                        ? new Date(r.shiftEnd).toLocaleTimeString('en-IN', {
+                            hour: '2-digit',
+                            minute: '2-digit',
                           })
-                        : "—";
+                        : '—';
                       return (
                         <TableRow key={r.id} className="text-sm">
-                          <TableCell className="font-medium">
-                            {r.employeeName}
-                          </TableCell>
-                          <TableCell>{r.role ?? "—"}</TableCell>
+                          <TableCell className="font-medium">{r.employeeName}</TableCell>
+                          <TableCell>{r.role ?? '—'}</TableCell>
                           <TableCell>
-                            {new Date(r.shiftDate).toLocaleDateString("en-IN", {
-                              day: "numeric",
-                              month: "short",
-                              year: "numeric",
+                            {new Date(r.shiftDate).toLocaleDateString('en-IN', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric',
                             })}
                           </TableCell>
                           <TableCell>
-                            {new Date(r.shiftStart).toLocaleTimeString(
-                              "en-IN",
-                              { hour: "2-digit", minute: "2-digit" },
-                            )}
+                            {new Date(r.shiftStart).toLocaleTimeString('en-IN', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
                           </TableCell>
                           <TableCell>{endTime}</TableCell>
-                          <TableCell>
-                            {formatHours(Number(r.totalHours))}
-                          </TableCell>
+                          <TableCell>{formatHours(Number(r.totalHours))}</TableCell>
                           <TableCell className="font-medium text-amber-600">
                             {formatHours(Number(r.overtimeHours))}
                           </TableCell>
-                          <TableCell>{r.reason ?? "—"}</TableCell>
+                          <TableCell>{r.reason ?? '—'}</TableCell>
                           <TableCell>
                             {isLive ? (
-                              <Badge className="bg-amber-100 text-amber-800 border-amber-200">
+                              <Badge className="border-amber-200 bg-amber-100 text-amber-800">
                                 RUNNING
                               </Badge>
                             ) : (
                               <Select
                                 value={r.status}
-                                onValueChange={async (status) => {
+                                onValueChange={async status => {
                                   try {
-                                    const res = await fetch(
-                                      `${apiBase}/overtime/${r.id}/status`,
-                                      {
-                                        method: "PATCH",
-                                        headers: {
-                                          "Content-Type": "application/json",
-                                          Authorization: `Bearer ${token}`,
-                                        },
-                                        body: JSON.stringify({ status }),
+                                    const res = await fetch(`${apiBase}/overtime/${r.id}/status`, {
+                                      method: 'PATCH',
+                                      headers: {
+                                        'Content-Type': 'application/json',
+                                        Authorization: `Bearer ${token}`,
                                       },
-                                    );
+                                      body: JSON.stringify({ status }),
+                                    });
                                     if (res.ok) {
                                       loadOvertime();
                                       if (
-                                        overtimeSummary.pendingOvertimeCount >
-                                          0 ||
+                                        overtimeSummary.pendingOvertimeCount > 0 ||
                                         overtimeSummary.overtimeRunningCount > 0
                                       ) {
-                                        const sumRes = await fetch(
-                                          `${apiBase}/overtime/summary`,
-                                          {
-                                            headers: {
-                                              Authorization: `Bearer ${token}`,
-                                            },
+                                        const sumRes = await fetch(`${apiBase}/overtime/summary`, {
+                                          headers: {
+                                            Authorization: `Bearer ${token}`,
                                           },
-                                        );
+                                        });
                                         if (sumRes.ok) {
                                           const summary = await sumRes.json();
                                           setOvertimeSummary({
-                                            pendingOvertimeCount:
-                                              summary.pendingOvertimeCount ?? 0,
-                                            overtimeRunningCount:
-                                              summary.overtimeRunningCount ?? 0,
-                                            overtimeRunning:
-                                              summary.overtimeRunning ?? [],
+                                            pendingOvertimeCount: summary.pendingOvertimeCount ?? 0,
+                                            overtimeRunningCount: summary.overtimeRunningCount ?? 0,
+                                            overtimeRunning: summary.overtimeRunning ?? [],
                                           });
                                         }
                                       }
@@ -8527,19 +7791,13 @@ const AdminDashboard = () => {
                                   } catch (_e) {}
                                 }}
                               >
-                                <SelectTrigger className="w-[110px] h-8 text-xs">
+                                <SelectTrigger className="h-8 w-[110px] text-xs">
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="PENDING">
-                                    Pending
-                                  </SelectItem>
-                                  <SelectItem value="APPROVED">
-                                    Approved
-                                  </SelectItem>
-                                  <SelectItem value="REJECTED">
-                                    Rejected
-                                  </SelectItem>
+                                  <SelectItem value="PENDING">Pending</SelectItem>
+                                  <SelectItem value="APPROVED">Approved</SelectItem>
+                                  <SelectItem value="REJECTED">Rejected</SelectItem>
                                   <SelectItem value="PAID">Paid</SelectItem>
                                 </SelectContent>
                               </Select>
@@ -8559,23 +7817,23 @@ const AdminDashboard = () => {
   );
 
   const formatLateMinutes = (mins: number) => {
-    if (mins < 60) return `${mins} Minute${mins !== 1 ? "s" : ""}`;
+    if (mins < 60) return `${mins} Minute${mins !== 1 ? 's' : ''}`;
     const h = Math.floor(mins / 60);
     const m = mins % 60;
-    if (m === 0) return `${h} Hour${h !== 1 ? "s" : ""}`;
-    return `${h} Hour${h !== 1 ? "s" : ""} ${m} Min`;
+    if (m === 0) return `${h} Hour${h !== 1 ? 's' : ''}`;
+    return `${h} Hour${h !== 1 ? 's' : ''} ${m} Min`;
   };
 
   /** Format "HH:mm" (24h) to "10:00 AM" / "3:23 PM" for Scheduled Start in Late Entries. */
   const formatShiftTime24ToAmPm = (timeStr: string): string => {
-    if (!timeStr || typeof timeStr !== "string") return timeStr || "—";
+    if (!timeStr || typeof timeStr !== 'string') return timeStr || '—';
     const match = /^(\d{1,2}):(\d{2})$/.exec(timeStr.trim());
     if (!match) return timeStr;
     const hour = parseInt(match[1], 10);
     const minute = match[2];
     if (hour < 0 || hour > 23) return timeStr;
     const h = hour % 12 || 12;
-    const ampm = hour < 12 ? "AM" : "PM";
+    const ampm = hour < 12 ? 'AM' : 'PM';
     return `${h}:${minute} ${ampm}`;
   };
 
@@ -8583,20 +7841,23 @@ const AdminDashboard = () => {
     <div className="space-y-4">
       <div>
         <h2 className="text-xl font-bold">Late Entries</h2>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-muted-foreground text-sm">
           Employees who started their shift after the scheduled shift start time.
-          <span className="block mt-1 text-xs">Scheduled Start = shift start time (e.g. 10:00 AM). Actual Login = when the employee started their shift.</span>
+          <span className="mt-1 block text-xs">
+            Scheduled Start = shift start time (e.g. 10:00 AM). Actual Login = when the employee
+            started their shift.
+          </span>
         </p>
       </div>
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex flex-col sm:flex-row gap-2 flex-wrap">
+          <div className="flex flex-col flex-wrap gap-2 sm:flex-row">
             <div className="flex flex-col gap-1">
               <Label className="text-xs">Date From</Label>
               <Input
                 type="date"
                 value={lateDateFrom}
-                onChange={(e) => setLateDateFrom(e.target.value)}
+                onChange={e => setLateDateFrom(e.target.value)}
                 className="w-full sm:w-40"
               />
             </div>
@@ -8605,27 +7866,21 @@ const AdminDashboard = () => {
               <Input
                 type="date"
                 value={lateDateTo}
-                onChange={(e) => setLateDateTo(e.target.value)}
+                onChange={e => setLateDateTo(e.target.value)}
                 className="w-full sm:w-40"
               />
             </div>
             <div className="flex flex-col gap-1">
               <Label className="text-xs">Employee</Label>
-              <Select
-                value={lateEmployeeFilter}
-                onValueChange={setLateEmployeeFilter}
-              >
+              <Select value={lateEmployeeFilter} onValueChange={setLateEmployeeFilter}>
                 <SelectTrigger className="w-full sm:w-44">
                   <SelectValue placeholder="All" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Employees</SelectItem>
                   {employees
-                    .filter(
-                      (e) =>
-                        String(e.status || "").toUpperCase() === "ACTIVE",
-                    )
-                    .map((emp) => (
+                    .filter(e => String(e.status || '').toUpperCase() === 'ACTIVE')
+                    .map(emp => (
                       <SelectItem key={emp.id} value={String(emp.id)}>
                         {emp.name}
                       </SelectItem>
@@ -8638,9 +7893,9 @@ const AdminDashboard = () => {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  setLateDateFrom("");
-                  setLateDateTo("");
-                  setLateEmployeeFilter("all");
+                  setLateDateFrom('');
+                  setLateDateTo('');
+                  setLateEmployeeFilter('all');
                 }}
                 loading={lateLoading}
                 loadingLabel="Resetting..."
@@ -8653,7 +7908,7 @@ const AdminDashboard = () => {
                 loading={lateLoading}
                 loadingLabel="Applying..."
               >
-                <Search className="h-4 w-4 mr-1" />
+                <Search className="mr-1 h-4 w-4" />
                 Apply
               </LoaderButton>
             </div>
@@ -8661,38 +7916,34 @@ const AdminDashboard = () => {
         </CardHeader>
         <CardContent className="p-0">
           {lateEntries.length === 0 && !lateLoading ? (
-            <p className="text-center py-8 text-muted-foreground text-sm">
+            <p className="text-muted-foreground py-8 text-center text-sm">
               No late entries for the selected filters
             </p>
           ) : (
             <>
-              <div className="md:hidden space-y-2 p-3">
-                {lateEntries.map((e) => (
+              <div className="space-y-2 p-3 md:hidden">
+                {lateEntries.map(e => (
                   <div
                     key={e.id}
-                    className="rounded-lg border bg-slate-50/50 p-3 text-sm grid grid-cols-2 gap-x-3 gap-y-1"
+                    className="grid grid-cols-2 gap-x-3 gap-y-1 rounded-lg border bg-slate-50/50 p-3 text-sm"
                   >
                     <span className="text-muted-foreground">Employee</span>
-                    <span className="font-medium">
-                      {e.employee?.name ?? "—"}
-                    </span>
+                    <span className="font-medium">{e.employee?.name ?? '—'}</span>
                     <span className="text-muted-foreground">Date</span>
                     <span>
-                      {new Date(e.date).toLocaleDateString("en-IN", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
+                      {new Date(e.date).toLocaleDateString('en-IN', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
                       })}
                     </span>
-                    <span className="text-muted-foreground">
-                      Scheduled Start
-                    </span>
+                    <span className="text-muted-foreground">Scheduled Start</span>
                     <span>{formatShiftTime24ToAmPm(e.shiftStartTime)}</span>
                     <span className="text-muted-foreground">Actual Login</span>
                     <span>
-                      {new Date(e.actualLoginTime).toLocaleTimeString("en-IN", {
-                        hour: "2-digit",
-                        minute: "2-digit",
+                      {new Date(e.actualLoginTime).toLocaleTimeString('en-IN', {
+                        hour: '2-digit',
+                        minute: '2-digit',
                       })}
                     </span>
                     <span className="text-muted-foreground">Late</span>
@@ -8702,46 +7953,45 @@ const AdminDashboard = () => {
                   </div>
                 ))}
               </div>
-              <div className="hidden md:block overflow-x-auto">
+              <div className="hidden overflow-x-auto md:block">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-slate-50">
-                      <TableHead className="text-xs font-semibold">
-                        Employee
-                      </TableHead>
-                      <TableHead className="text-xs font-semibold">
-                        Date
-                      </TableHead>
-                      <TableHead className="text-xs font-semibold" title="Scheduled shift start time">
+                      <TableHead className="text-xs font-semibold">Employee</TableHead>
+                      <TableHead className="text-xs font-semibold">Date</TableHead>
+                      <TableHead
+                        className="text-xs font-semibold"
+                        title="Scheduled shift start time"
+                      >
                         Scheduled Start
                       </TableHead>
-                      <TableHead className="text-xs font-semibold" title="When the employee actually started their shift">
+                      <TableHead
+                        className="text-xs font-semibold"
+                        title="When the employee actually started their shift"
+                      >
                         Actual Login
                       </TableHead>
-                      <TableHead className="text-xs font-semibold">
-                        Late
-                      </TableHead>
+                      <TableHead className="text-xs font-semibold">Late</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {lateEntries.map((e) => (
+                    {lateEntries.map(e => (
                       <TableRow key={e.id} className="text-sm">
-                        <TableCell className="font-medium">
-                          {e.employee?.name ?? "—"}
-                        </TableCell>
+                        <TableCell className="font-medium">{e.employee?.name ?? '—'}</TableCell>
                         <TableCell>
-                          {new Date(e.date).toLocaleDateString("en-IN", {
-                            day: "numeric",
-                            month: "short",
-                            year: "numeric",
+                          {new Date(e.date).toLocaleDateString('en-IN', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric',
                           })}
                         </TableCell>
                         <TableCell>{formatShiftTime24ToAmPm(e.shiftStartTime)}</TableCell>
                         <TableCell>
-                          {new Date(e.actualLoginTime).toLocaleTimeString(
-                            "en-IN",
-                            { hour: "2-digit", minute: "2-digit", hour12: true },
-                          )}
+                          {new Date(e.actualLoginTime).toLocaleTimeString('en-IN', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: true,
+                          })}
                         </TableCell>
                         <TableCell className="font-medium text-amber-600">
                           {formatLateMinutes(e.lateDurationMinutes)}
@@ -8762,13 +8012,13 @@ const AdminDashboard = () => {
     <div className="space-y-4">
       <div>
         <h2 className="text-xl font-bold">Leave Requests</h2>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-muted-foreground text-sm">
           Review employee leave requests and approve/reject with remarks.
         </p>
       </div>
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex flex-col sm:flex-row gap-2 flex-wrap">
+          <div className="flex flex-col flex-wrap gap-2 sm:flex-row">
             <div className="flex flex-col gap-1">
               <Label className="text-xs">Status</Label>
               <Select value={leaveStatusFilter} onValueChange={setLeaveStatusFilter}>
@@ -8791,7 +8041,7 @@ const AdminDashboard = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Employees</SelectItem>
-                  {employees.map((emp) => (
+                  {employees.map(emp => (
                     <SelectItem key={emp.id} value={String(emp.id)}>
                       {emp.name}
                     </SelectItem>
@@ -8804,7 +8054,7 @@ const AdminDashboard = () => {
               <Input
                 type="date"
                 value={leaveDateFrom}
-                onChange={(e) => setLeaveDateFrom(e.target.value)}
+                onChange={e => setLeaveDateFrom(e.target.value)}
                 className="w-full sm:w-40"
               />
             </div>
@@ -8813,7 +8063,7 @@ const AdminDashboard = () => {
               <Input
                 type="date"
                 value={leaveDateTo}
-                onChange={(e) => setLeaveDateTo(e.target.value)}
+                onChange={e => setLeaveDateTo(e.target.value)}
                 className="w-full sm:w-40"
               />
             </div>
@@ -8822,10 +8072,10 @@ const AdminDashboard = () => {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  setLeaveStatusFilter("PENDING");
-                  setLeaveEmployeeFilter("all");
-                  setLeaveDateFrom("");
-                  setLeaveDateTo("");
+                  setLeaveStatusFilter('PENDING');
+                  setLeaveEmployeeFilter('all');
+                  setLeaveDateFrom('');
+                  setLeaveDateTo('');
                 }}
                 loading={leaveLoading}
                 loadingLabel="Resetting..."
@@ -8838,7 +8088,7 @@ const AdminDashboard = () => {
                 loading={leaveLoading}
                 loadingLabel="Loading..."
               >
-                <Search className="h-4 w-4 mr-1" />
+                <Search className="mr-1 h-4 w-4" />
                 Apply
               </LoaderButton>
             </div>
@@ -8846,7 +8096,7 @@ const AdminDashboard = () => {
         </CardHeader>
         <CardContent className="p-0">
           {leaveRequests.length === 0 && !leaveLoading ? (
-            <p className="text-center py-8 text-muted-foreground text-sm">
+            <p className="text-muted-foreground py-8 text-center text-sm">
               No leave requests for selected filters
             </p>
           ) : (
@@ -8864,30 +8114,30 @@ const AdminDashboard = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {leaveRequests.map((l) => (
+                  {leaveRequests.map(l => (
                     <TableRow key={l.id}>
                       <TableCell className="font-medium">
-                        {l.employee?.name ?? "—"}
-                        <div className="text-xs text-muted-foreground">
-                          {l.employee?.employeeCode ?? ""}
+                        {l.employee?.name ?? '—'}
+                        <div className="text-muted-foreground text-xs">
+                          {l.employee?.employeeCode ?? ''}
                         </div>
                       </TableCell>
                       <TableCell>{l.leaveType}</TableCell>
                       <TableCell>
-                        {new Date(l.startDate).toLocaleDateString("en-IN")} to{" "}
-                        {new Date(l.endDate).toLocaleDateString("en-IN")}
+                        {new Date(l.startDate).toLocaleDateString('en-IN')} to{' '}
+                        {new Date(l.endDate).toLocaleDateString('en-IN')}
                       </TableCell>
-                      <TableCell className="max-w-[220px] truncate" title={l.reason || ""}>
-                        {l.reason || "—"}
+                      <TableCell className="max-w-[220px] truncate" title={l.reason || ''}>
+                        {l.reason || '—'}
                       </TableCell>
                       <TableCell>
                         <Badge
                           variant={
-                            l.status === "APPROVED"
-                              ? "default"
-                              : l.status === "REJECTED"
-                                ? "destructive"
-                                : "secondary"
+                            l.status === 'APPROVED'
+                              ? 'default'
+                              : l.status === 'REJECTED'
+                                ? 'destructive'
+                                : 'secondary'
                           }
                         >
                           {l.status}
@@ -8896,25 +8146,25 @@ const AdminDashboard = () => {
                       <TableCell className="min-w-[220px]">
                         <Input
                           placeholder="Optional remarks"
-                          value={leaveRemarksById[l.id] ?? ""}
-                          onChange={(e) =>
-                            setLeaveRemarksById((prev) => ({
+                          value={leaveRemarksById[l.id] ?? ''}
+                          onChange={e =>
+                            setLeaveRemarksById(prev => ({
                               ...prev,
                               [l.id]: e.target.value,
                             }))
                           }
-                          disabled={l.status !== "PENDING" || leaveActionLoadingId === l.id}
+                          disabled={l.status !== 'PENDING' || leaveActionLoadingId === l.id}
                         />
                       </TableCell>
                       <TableCell className="text-right">
-                        {l.status !== "PENDING" ? (
-                          <span className="text-xs text-muted-foreground">No action</span>
+                        {l.status !== 'PENDING' ? (
+                          <span className="text-muted-foreground text-xs">No action</span>
                         ) : (
                           <div className="flex items-center justify-end gap-2">
                             <LoaderButton
                               size="sm"
                               variant="outline"
-                              onClick={() => updateLeaveStatus(l.id, "REJECTED")}
+                              onClick={() => updateLeaveStatus(l.id, 'REJECTED')}
                               loading={leaveActionLoadingId === l.id}
                               loadingLabel="Saving..."
                             >
@@ -8922,7 +8172,7 @@ const AdminDashboard = () => {
                             </LoaderButton>
                             <LoaderButton
                               size="sm"
-                              onClick={() => updateLeaveStatus(l.id, "APPROVED")}
+                              onClick={() => updateLeaveStatus(l.id, 'APPROVED')}
                               loading={leaveActionLoadingId === l.id}
                               loadingLabel="Saving..."
                             >
@@ -8944,22 +8194,15 @@ const AdminDashboard = () => {
 
   // Customer Queries Section
   const CustomerQueriesSection = () => (
-    <div className="space-y-6 min-w-0">
+    <div className="min-w-0 space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <h2 className="text-xl sm:text-2xl font-bold tracking-tight">
-            Customer Queries
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Issues and help requests from customers
-          </p>
+          <h2 className="text-xl font-bold tracking-tight sm:text-2xl">Customer Queries</h2>
+          <p className="text-muted-foreground text-sm">Issues and help requests from customers</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-          <Select
-            value={queryStatusFilter}
-            onValueChange={setQueryStatusFilter}
-          >
-            <SelectTrigger className="w-full sm:w-40 min-h-[44px] sm:min-h-0">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          <Select value={queryStatusFilter} onValueChange={setQueryStatusFilter}>
+            <SelectTrigger className="min-h-[44px] w-full sm:min-h-0 sm:w-40">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
@@ -8972,9 +8215,9 @@ const AdminDashboard = () => {
           <Button
             variant="outline"
             onClick={loadCustomerQueries}
-            className="min-h-[44px] sm:min-h-0 shrink-0 w-full sm:w-auto"
+            className="min-h-[44px] w-full shrink-0 sm:min-h-0 sm:w-auto"
           >
-            <RefreshCw className="h-4 w-4 mr-2" />
+            <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
           </Button>
         </div>
@@ -8986,80 +8229,64 @@ const AdminDashboard = () => {
               <Table className="min-w-[800px]">
                 <TableHeader>
                   <TableRow className="bg-slate-50">
-                    <TableHead className="whitespace-nowrap sticky left-0 z-10 bg-slate-50 border-r min-w-[52px]">
+                    <TableHead className="sticky left-0 z-10 min-w-[52px] border-r bg-slate-50 whitespace-nowrap">
                       ID
                     </TableHead>
-                    <TableHead className="whitespace-nowrap min-w-[100px]">
-                      Customer
-                    </TableHead>
-                    <TableHead className="whitespace-nowrap min-w-[100px]">
-                      Mobile
-                    </TableHead>
-                    <TableHead className="whitespace-nowrap min-w-[90px]">
-                      Branch
-                    </TableHead>
-                    <TableHead className="whitespace-nowrap min-w-[70px]">
-                      Order
-                    </TableHead>
-                    <TableHead className="whitespace-nowrap min-w-[90px]">
-                      Issue Type
-                    </TableHead>
-                    <TableHead className="whitespace-nowrap min-w-[90px]">
-                      Status
-                    </TableHead>
-                    <TableHead className="whitespace-nowrap min-w-[110px]">
-                      Date
-                    </TableHead>
-                    <TableHead className="text-right whitespace-nowrap sticky right-0 z-10 bg-slate-50 border-l min-w-[180px]">
+                    <TableHead className="min-w-[100px] whitespace-nowrap">Customer</TableHead>
+                    <TableHead className="min-w-[100px] whitespace-nowrap">Mobile</TableHead>
+                    <TableHead className="min-w-[90px] whitespace-nowrap">Branch</TableHead>
+                    <TableHead className="min-w-[70px] whitespace-nowrap">Order</TableHead>
+                    <TableHead className="min-w-[90px] whitespace-nowrap">Issue Type</TableHead>
+                    <TableHead className="min-w-[90px] whitespace-nowrap">Status</TableHead>
+                    <TableHead className="min-w-[110px] whitespace-nowrap">Date</TableHead>
+                    <TableHead className="sticky right-0 z-10 min-w-[180px] border-l bg-slate-50 text-right whitespace-nowrap">
                       Actions
                     </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {customerQueries.map((q) => (
+                  {customerQueries.map(q => (
                     <TableRow key={q.id} className="hover:bg-slate-50/50">
-                      <TableCell className="font-medium sticky left-0 z-10 bg-white border-r whitespace-nowrap">
+                      <TableCell className="sticky left-0 z-10 border-r bg-white font-medium whitespace-nowrap">
                         {q.id}
                       </TableCell>
                       <TableCell className="min-w-[100px]">{q.name}</TableCell>
-                      <TableCell className="whitespace-nowrap min-w-[100px]">
-                        {q.mobile}
-                      </TableCell>
+                      <TableCell className="min-w-[100px] whitespace-nowrap">{q.mobile}</TableCell>
                       <TableCell
-                        className="min-w-[90px] truncate max-w-[120px]"
+                        className="max-w-[120px] min-w-[90px] truncate"
                         title={q.branch?.name ?? undefined}
                       >
-                        {q.branch?.name ?? "—"}
+                        {q.branch?.name ?? '—'}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
-                        {q.orderId != null ? `#${q.orderId}` : "—"}
+                        {q.orderId != null ? `#${q.orderId}` : '—'}
                       </TableCell>
                       <TableCell className="min-w-[90px]">
-                        {q.issueType.replace(/_/g, " ")}
+                        {q.issueType.replace(/_/g, ' ')}
                       </TableCell>
                       <TableCell>
                         <Badge
                           variant={
-                            q.status === "RESOLVED"
-                              ? "default"
-                              : q.status === "IN_PROGRESS"
-                                ? "secondary"
-                                : "outline"
+                            q.status === 'RESOLVED'
+                              ? 'default'
+                              : q.status === 'IN_PROGRESS'
+                                ? 'secondary'
+                                : 'outline'
                           }
-                          className="text-xs shrink-0"
+                          className="shrink-0 text-xs"
                         >
                           {q.status}
                         </Badge>
                       </TableCell>
-                      <TableCell className="whitespace-nowrap text-xs">
+                      <TableCell className="text-xs whitespace-nowrap">
                         {new Date(q.createdAt).toLocaleString()}
                       </TableCell>
-                      <TableCell className="text-right sticky right-0 z-10 bg-white border-l">
-                        <div className="flex justify-end gap-1 flex-wrap">
+                      <TableCell className="sticky right-0 z-10 border-l bg-white text-right">
+                        <div className="flex flex-wrap justify-end gap-1">
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="shrink-0 h-8"
+                            className="h-8 shrink-0"
                             onClick={() => {
                               setSelectedQuery(q);
                               setQueryDialogOpen(true);
@@ -9068,11 +8295,11 @@ const AdminDashboard = () => {
                             <Eye className="h-4 w-4 sm:mr-1" />
                             <span className="hidden sm:inline">View</span>
                           </Button>
-                          {q.status !== "RESOLVED" && (
+                          {q.status !== 'RESOLVED' && (
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="shrink-0 h-8"
+                              className="h-8 shrink-0"
                               disabled={resolvingQueryId === q.id}
                               onClick={async () => {
                                 setResolvingQueryId(q.id);
@@ -9080,20 +8307,18 @@ const AdminDashboard = () => {
                                   const res = await fetch(
                                     `${apiBase}/customer-queries/${q.id}/resolve`,
                                     {
-                                      method: "POST",
+                                      method: 'POST',
                                       headers: {
                                         Authorization: `Bearer ${token}`,
                                       },
-                                    },
+                                    }
                                   );
                                   if (res.ok) {
                                     const data = await res.json();
-                                    if (data.waMeLink)
-                                      window.open(data.waMeLink, "_blank");
+                                    if (data.waMeLink) window.open(data.waMeLink, '_blank');
                                     toast({
-                                      title: "Resolved",
-                                      description:
-                                        "Open WhatsApp to notify the customer.",
+                                      title: 'Resolved',
+                                      description: 'Open WhatsApp to notify the customer.',
                                     });
                                     loadCustomerQueries();
                                     loadPendingQueriesCount();
@@ -9103,17 +8328,17 @@ const AdminDashboard = () => {
                                 }
                               }}
                             >
-                              {resolvingQueryId === q.id ? "..." : "Resolve"}
+                              {resolvingQueryId === q.id ? '...' : 'Resolve'}
                             </Button>
                           )}
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="shrink-0 h-8"
+                            className="h-8 shrink-0"
                             onClick={() =>
                               window.open(
-                                `https://wa.me/91${q.mobile.replace(/\D/g, "").slice(-10)}`,
-                                "_blank",
+                                `https://wa.me/91${q.mobile.replace(/\D/g, '').slice(-10)}`,
+                                '_blank'
                               )
                             }
                           >
@@ -9125,10 +8350,7 @@ const AdminDashboard = () => {
                   ))}
                   {customerQueries.length === 0 && (
                     <TableRow>
-                      <TableCell
-                        colSpan={9}
-                        className="text-center py-8 text-muted-foreground"
-                      >
+                      <TableCell colSpan={9} className="text-muted-foreground py-8 text-center">
                         No customer queries found
                       </TableCell>
                     </TableRow>
@@ -9141,7 +8363,7 @@ const AdminDashboard = () => {
       </Card>
       <Dialog open={queryDialogOpen} onOpenChange={setQueryDialogOpen}>
         <DialogContent
-          className="w-[calc(100vw-1rem)] sm:w-[calc(100vw-2rem)] max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6"
+          className="max-h-[90vh] w-[calc(100vw-1rem)] max-w-lg overflow-y-auto p-4 sm:w-[calc(100vw-2rem)] sm:p-6"
           aria-describedby="query-dialog-desc"
         >
           <DialogHeader>
@@ -9153,38 +8375,34 @@ const AdminDashboard = () => {
           {selectedQuery && (
             <div className="space-y-3 text-sm">
               <p>
-                <span className="font-medium">Customer:</span>{" "}
-                {selectedQuery.name}
+                <span className="font-medium">Customer:</span> {selectedQuery.name}
               </p>
               <p>
-                <span className="font-medium">Mobile:</span>{" "}
-                {selectedQuery.mobile}
+                <span className="font-medium">Mobile:</span> {selectedQuery.mobile}
               </p>
               <p>
-                <span className="font-medium">Branch:</span>{" "}
-                {selectedQuery.branch?.name ?? "—"}
+                <span className="font-medium">Branch:</span> {selectedQuery.branch?.name ?? '—'}
               </p>
               <p>
-                <span className="font-medium">Order ID:</span>{" "}
+                <span className="font-medium">Order ID:</span>{' '}
                 {selectedQuery.orderId != null
-                  ? `ORD${String(selectedQuery.orderId).padStart(4, "0")}`
-                  : "—"}
+                  ? `ORD${String(selectedQuery.orderId).padStart(4, '0')}`
+                  : '—'}
               </p>
               <p>
-                <span className="font-medium">Issue type:</span>{" "}
-                {selectedQuery.issueType.replace(/_/g, " ")}
+                <span className="font-medium">Issue type:</span>{' '}
+                {selectedQuery.issueType.replace(/_/g, ' ')}
               </p>
               <p>
-                <span className="font-medium">Status:</span>{" "}
-                {selectedQuery.status}
+                <span className="font-medium">Status:</span> {selectedQuery.status}
               </p>
               <p>
-                <span className="font-medium">Date:</span>{" "}
+                <span className="font-medium">Date:</span>{' '}
                 {new Date(selectedQuery.createdAt).toLocaleString()}
               </p>
               <div>
-                <p className="font-medium mb-1">Message:</p>
-                <p className="rounded bg-muted p-3 text-muted-foreground">
+                <p className="mb-1 font-medium">Message:</p>
+                <p className="bg-muted text-muted-foreground rounded p-3">
                   {selectedQuery.message}
                 </p>
               </div>
@@ -9197,49 +8415,43 @@ const AdminDashboard = () => {
 
   // Removed Items Section
   const RemovedItemsSection = () => (
-    <div className="space-y-6 min-w-0">
+    <div className="min-w-0 space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <h2 className="text-xl sm:text-2xl font-bold tracking-tight">
-            Removed Items Report
-          </h2>
-          <p className="text-sm text-muted-foreground">
+          <h2 className="text-xl font-bold tracking-tight sm:text-2xl">Removed Items Report</h2>
+          <p className="text-muted-foreground text-sm">
             Track items removed by employees from orders
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
           <Input
             type="date"
             value={removedItemsDateFilter}
-            onChange={(e) => setRemovedItemsDateFilter(e.target.value)}
-            className="w-full sm:w-40 min-h-[44px] sm:min-h-0"
+            onChange={e => setRemovedItemsDateFilter(e.target.value)}
+            className="min-h-[44px] w-full sm:min-h-0 sm:w-40"
           />
           <Button
             variant="outline"
             onClick={loadRemovedItems}
             disabled={removedItemsLoading}
-            className="min-h-[44px] sm:min-h-0 shrink-0"
+            className="min-h-[44px] shrink-0 sm:min-h-0"
           >
-            <RefreshCw
-              className={`h-4 w-4 mr-2 ${removedItemsLoading ? "animate-spin" : ""}`}
-            />
-            {removedItemsLoading ? "Refreshing..." : "Refresh"}
+            <RefreshCw className={`mr-2 h-4 w-4 ${removedItemsLoading ? 'animate-spin' : ''}`} />
+            {removedItemsLoading ? 'Refreshing...' : 'Refresh'}
           </Button>
         </div>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 md:grid-cols-3">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-red-100 rounded-lg">
+              <div className="rounded-lg bg-red-100 p-2">
                 <AlertCircle className="h-5 w-5 text-red-600" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">
-                  Total Items Removed
-                </p>
+                <p className="text-muted-foreground text-sm">Total Items Removed</p>
                 <p className="text-2xl font-bold">{removedItems.length}</p>
               </div>
             </div>
@@ -9248,11 +8460,11 @@ const AdminDashboard = () => {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-amber-100 rounded-lg">
+              <div className="rounded-lg bg-amber-100 p-2">
                 <IndianRupee className="h-5 w-5 text-amber-600" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Total Loss</p>
+                <p className="text-muted-foreground text-sm">Total Loss</p>
                 <p className="text-2xl font-bold">{formatINR(totalLoss)}</p>
               </div>
             </div>
@@ -9261,16 +8473,14 @@ const AdminDashboard = () => {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
+              <div className="rounded-lg bg-blue-100 p-2">
                 <Calendar className="h-5 w-5 text-blue-600" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Daily Avg Loss</p>
+                <p className="text-muted-foreground text-sm">Daily Avg Loss</p>
                 <p className="text-2xl font-bold">
                   {formatINR(
-                    dailyRemovalSummaries.length > 0
-                      ? totalLoss / dailyRemovalSummaries.length
-                      : 0,
+                    dailyRemovalSummaries.length > 0 ? totalLoss / dailyRemovalSummaries.length : 0
                   )}
                 </p>
               </div>
@@ -9286,74 +8496,56 @@ const AdminDashboard = () => {
         </CardHeader>
         <CardContent>
           <div
-            className="overflow-x-auto overflow-y-visible -mx-1 px-1"
-            style={{ overflowAnchor: "auto" }}
+            className="-mx-1 overflow-x-auto overflow-y-visible px-1"
+            style={{ overflowAnchor: 'auto' }}
           >
             <ScrollArea className="h-[400px] w-full">
               <div className="min-w-[900px]">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="whitespace-nowrap sticky left-0 z-10 bg-white border-r min-w-[100px]">
+                      <TableHead className="sticky left-0 z-10 min-w-[100px] border-r bg-white whitespace-nowrap">
                         Date
                       </TableHead>
-                      <TableHead className="whitespace-nowrap">
-                        Order #
-                      </TableHead>
+                      <TableHead className="whitespace-nowrap">Order #</TableHead>
                       <TableHead className="whitespace-nowrap">Table</TableHead>
                       <TableHead className="whitespace-nowrap">Item</TableHead>
                       <TableHead className="whitespace-nowrap">Qty</TableHead>
                       <TableHead className="whitespace-nowrap">Price</TableHead>
                       <TableHead className="whitespace-nowrap">Loss</TableHead>
-                      <TableHead className="whitespace-nowrap">
-                        Removed By
-                      </TableHead>
-                      <TableHead className="whitespace-nowrap min-w-[120px]">
-                        Reason
-                      </TableHead>
+                      <TableHead className="whitespace-nowrap">Removed By</TableHead>
+                      <TableHead className="min-w-[120px] whitespace-nowrap">Reason</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {removedItems.length === 0 && (
                       <TableRow>
-                        <TableCell
-                          colSpan={9}
-                          className="text-center text-muted-foreground py-8"
-                        >
+                        <TableCell colSpan={9} className="text-muted-foreground py-8 text-center">
                           No removed items found for the selected date
                         </TableCell>
                       </TableRow>
                     )}
-                    {removedItems.map((item) => (
+                    {removedItems.map(item => (
                       <TableRow key={item.id}>
-                        <TableCell className="sticky left-0 z-10 bg-white border-r whitespace-nowrap">
+                        <TableCell className="sticky left-0 z-10 border-r bg-white whitespace-nowrap">
                           {new Date(item.removedAt).toLocaleDateString()}
                         </TableCell>
+                        <TableCell className="whitespace-nowrap">#{item.orderId}</TableCell>
                         <TableCell className="whitespace-nowrap">
-                          #{item.orderId}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap">
-                          {item.tableNumber || "N/A"}
+                          {item.tableNumber || 'N/A'}
                         </TableCell>
                         <TableCell className="font-medium whitespace-nowrap">
                           {item.itemName}
                         </TableCell>
-                        <TableCell className="whitespace-nowrap">
-                          {item.quantity}
-                        </TableCell>
+                        <TableCell className="whitespace-nowrap">{item.quantity}</TableCell>
                         <TableCell className="whitespace-nowrap">
                           {formatINR(item.itemPrice)}
                         </TableCell>
-                        <TableCell className="text-red-600 font-medium whitespace-nowrap">
+                        <TableCell className="font-medium whitespace-nowrap text-red-600">
                           {formatINR(item.itemPrice * item.quantity)}
                         </TableCell>
-                        <TableCell className="whitespace-nowrap">
-                          {item.removedBy}
-                        </TableCell>
-                        <TableCell
-                          className="max-w-[150px] truncate"
-                          title={item.reason}
-                        >
+                        <TableCell className="whitespace-nowrap">{item.removedBy}</TableCell>
+                        <TableCell className="max-w-[150px] truncate" title={item.reason}>
                           {item.reason}
                         </TableCell>
                       </TableRow>
@@ -9382,13 +8574,11 @@ const AdminDashboard = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {dailyRemovalSummaries.map((summary) => (
+                {dailyRemovalSummaries.map(summary => (
                   <TableRow key={summary.date}>
-                    <TableCell>
-                      {new Date(summary.date).toLocaleDateString()}
-                    </TableCell>
+                    <TableCell>{new Date(summary.date).toLocaleDateString()}</TableCell>
                     <TableCell>{summary.totalItems}</TableCell>
-                    <TableCell className="text-red-600 font-medium">
+                    <TableCell className="font-medium text-red-600">
                       {formatINR(summary.totalLoss)}
                     </TableCell>
                   </TableRow>
@@ -9407,29 +8597,27 @@ const AdminDashboard = () => {
     const q = salaryTableSearch.trim().toLowerCase();
     if (q)
       list = list.filter(
-        (s) =>
-          (s.employee?.name ?? "").toLowerCase().includes(q) ||
-          (s.employeeCode ?? "").toLowerCase().includes(q),
+        s =>
+          (s.employee?.name ?? '').toLowerCase().includes(q) ||
+          (s.employeeCode ?? '').toLowerCase().includes(q)
       );
     if (salaryTableMonthFilter) {
-      const [y, m] = salaryTableMonthFilter.split("-").map(Number);
+      const [y, m] = salaryTableMonthFilter.split('-').map(Number);
       const monthName = [
-        "January",
-        "February",
-        "March",
-        "April",
-        "May",
-        "June",
-        "July",
-        "August",
-        "September",
-        "October",
-        "November",
-        "December",
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December',
       ][(m || 1) - 1];
-      list = list.filter(
-        (s) => String(s.year) === String(y) && String(s.month) === monthName,
-      );
+      list = list.filter(s => String(s.year) === String(y) && String(s.month) === monthName);
     }
     return list;
   }, [salarySlips, salaryTableSearch, salaryTableMonthFilter]);
@@ -9445,60 +8633,60 @@ const AdminDashboard = () => {
     const currentYear = now.getFullYear();
     return salarySlips
       .filter(
-        (s) =>
+        s =>
           s.year === currentYear &&
           s.month ===
             [
-              "January",
-              "February",
-              "March",
-              "April",
-              "May",
-              "June",
-              "July",
-              "August",
-              "September",
-              "October",
-              "November",
-              "December",
-            ][currentMonth],
+              'January',
+              'February',
+              'March',
+              'April',
+              'May',
+              'June',
+              'July',
+              'August',
+              'September',
+              'October',
+              'November',
+              'December',
+            ][currentMonth]
       )
       .reduce((sum, s) => sum + (s.netSalary || 0), 0);
   }, [salarySlips]);
 
   const RevenueSection = () => {
     const now = new Date();
-    const fallbackYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const fallbackYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     const activeYm = monthlyTargetInfo?.yearMonth || fallbackYm;
-    const [targetYear, targetMonth] = activeYm.split("-").map(Number);
+    const [targetYear, targetMonth] = activeYm.split('-').map(Number);
     const statusLabel =
-      monthlyTargetInfo?.status === "ON_TRACK"
-        ? "✓ ON TRACK"
-        : monthlyTargetInfo?.status === "NEED_TO_PUSH"
-          ? "⚠️ NEED TO PUSH"
-          : monthlyTargetInfo?.status === "CRITICAL"
-            ? "🔴 CRITICAL"
+      monthlyTargetInfo?.status === 'ON_TRACK'
+        ? '✓ ON TRACK'
+        : monthlyTargetInfo?.status === 'NEED_TO_PUSH'
+          ? '⚠️ NEED TO PUSH'
+          : monthlyTargetInfo?.status === 'CRITICAL'
+            ? '🔴 CRITICAL'
             : monthlyTargetInfo?.targetSet
-              ? "—"
-              : "Target not set";
+              ? '—'
+              : 'Target not set';
 
     const saveMonthlyTarget = async () => {
       if (!token) return;
       const amount = Number(monthlyTargetInput);
       if (!Number.isFinite(amount) || amount < 0) {
         toast({
-          title: "Invalid amount",
-          description: "Please enter a valid non-negative target amount.",
-          variant: "destructive",
+          title: 'Invalid amount',
+          description: 'Please enter a valid non-negative target amount.',
+          variant: 'destructive',
         });
         return;
       }
       setSavingMonthlyTarget(true);
       try {
         const res = await fetch(`${apiBase}/monthly-targets/set`, {
-          method: "POST",
+          method: 'POST',
           headers: {
-            "Content-Type": "application/json",
+            'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
@@ -9510,31 +8698,28 @@ const AdminDashboard = () => {
         const data = await res.json().catch(() => null);
         if (!res.ok) {
           const msg =
-            data && typeof data === "object" && "message" in data
+            data && typeof data === 'object' && 'message' in data
               ? String((data as any).message)
-              : "Failed to save monthly target";
+              : 'Failed to save monthly target';
           throw new Error(msg);
         }
-        setMonthlyTargetInput("");
+        setMonthlyTargetInput('');
         await loadDashboardData();
         toast({
-          title: "Monthly target saved",
+          title: 'Monthly target saved',
           description:
             data &&
-            typeof data === "object" &&
-            "directorNotification" in data &&
-            (data as any).directorNotification === "sent"
-              ? "Directors were notified by email."
-              : "Saved successfully.",
+            typeof data === 'object' &&
+            'directorNotification' in data &&
+            (data as any).directorNotification === 'sent'
+              ? 'Directors were notified by email.'
+              : 'Saved successfully.',
         });
       } catch (e) {
         toast({
-          title: "Could not save target",
-          description:
-            e instanceof Error
-              ? e.message
-              : "Network error. Please try again.",
-          variant: "destructive",
+          title: 'Could not save target',
+          description: e instanceof Error ? e.message : 'Network error. Please try again.',
+          variant: 'destructive',
         });
       } finally {
         setSavingMonthlyTarget(false);
@@ -9544,13 +8729,13 @@ const AdminDashboard = () => {
     return (
       <div className="w-full min-w-0 space-y-6 overflow-hidden">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2 min-w-0">
-            <BarChart3 className="h-5 w-5 text-emerald-600 shrink-0" />
-            <h2 className="text-xl font-bold truncate">Revenue</h2>
+          <div className="flex min-w-0 items-center gap-2">
+            <BarChart3 className="h-5 w-5 shrink-0 text-emerald-600" />
+            <h2 className="truncate text-xl font-bold">Revenue</h2>
           </div>
-          <p className="text-sm text-muted-foreground max-w-xl">
-            Monthly figures are saved at month close (before optional order
-            archive), so history stays available after orders are cleared.
+          <p className="text-muted-foreground max-w-xl text-sm">
+            Monthly figures are saved at month close (before optional order archive), so history
+            stays available after orders are cleared.
           </p>
         </div>
 
@@ -9564,95 +8749,72 @@ const AdminDashboard = () => {
         />
 
         <Card className="w-full min-w-0 overflow-hidden rounded-xl border border-slate-200 shadow-sm">
-          <CardHeader className="px-3 sm:px-6 pb-2">
+          <CardHeader className="px-3 pb-2 sm:px-6">
             <CardTitle className="text-lg">Monthly performance</CardTitle>
             <CardDescription>
-              Closed months are saved at month end (before optional order
-              archive). The current month updates live until it is closed. New
-              customers counts first-time orders (by phone or session) in that
-              month.
+              Closed months are saved at month end (before optional order archive). The current
+              month updates live until it is closed. New customers counts first-time orders (by
+              phone or session) in that month.
             </CardDescription>
           </CardHeader>
-          <CardContent className="px-2 sm:px-6 pb-6">
-            <div className="overflow-x-auto -mx-1 px-1">
+          <CardContent className="px-2 pb-6 sm:px-6">
+            <div className="-mx-1 overflow-x-auto px-1">
               <Table className="min-w-[880px]">
                 <TableHeader>
                   <TableRow className="bg-slate-50">
                     <TableHead className="whitespace-nowrap">Month</TableHead>
-                    <TableHead className="whitespace-nowrap text-right">
-                      Total orders
-                    </TableHead>
-                    <TableHead className="whitespace-nowrap text-right">
-                      New customers
-                    </TableHead>
-                    <TableHead className="whitespace-nowrap text-right">
-                      Avg orders / day
-                    </TableHead>
-                    <TableHead className="whitespace-nowrap text-right">
-                      Avg order value
-                    </TableHead>
-                    <TableHead className="whitespace-nowrap text-right">
-                      Total sales
-                    </TableHead>
-                    <TableHead className="w-12 text-center whitespace-nowrap">
-                      More
-                    </TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Total orders</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">New customers</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Avg orders / day</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Avg order value</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Total sales</TableHead>
+                    <TableHead className="w-12 text-center whitespace-nowrap">More</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {monthlyRevenueSnapshots.length === 0 ? (
                     <TableRow>
-                      <TableCell
-                        colSpan={7}
-                        className="text-center py-10 text-muted-foreground"
-                      >
-                        No revenue data loaded. Snapshots are created when each
-                        month closes; the current month appears here as soon as
-                        there is activity.
+                      <TableCell colSpan={7} className="text-muted-foreground py-10 text-center">
+                        No revenue data loaded. Snapshots are created when each month closes; the
+                        current month appears here as soon as there is activity.
                       </TableCell>
                     </TableRow>
                   ) : (
-                    monthlyRevenueSnapshots.map((row) => {
-                      const label = new Date(
-                        row.year,
-                        row.month - 1,
-                        1,
-                      ).toLocaleDateString("en-IN", {
-                        month: "long",
-                        year: "numeric",
-                      });
+                    monthlyRevenueSnapshots.map(row => {
+                      const label = new Date(row.year, row.month - 1, 1).toLocaleDateString(
+                        'en-IN',
+                        {
+                          month: 'long',
+                          year: 'numeric',
+                        }
+                      );
                       const open = revenueExpandedYearMonth === row.yearMonth;
                       return (
                         <React.Fragment key={row.yearMonth}>
                           <TableRow className="hover:bg-slate-50/80">
                             <TableCell className="font-medium">
-                              <span className="inline-flex items-center gap-2 flex-wrap">
+                              <span className="inline-flex flex-wrap items-center gap-2">
                                 {label}
                                 {row.isLive ? (
-                                  <Badge
-                                    variant="secondary"
-                                    className="text-xs font-normal"
-                                  >
+                                  <Badge variant="secondary" className="text-xs font-normal">
                                     Live
                                   </Badge>
                                 ) : null}
                               </span>
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
-                              {row.totalOrders.toLocaleString("en-IN")}
+                              {row.totalOrders.toLocaleString('en-IN')}
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
-                              {row.newCustomersCount.toLocaleString("en-IN")}
+                              {row.newCustomersCount.toLocaleString('en-IN')}
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
                               {Math.round(row.avgOrdersPerDay * 1000) / 1000}
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
-                              {row.paidOrdersCount > 0
-                                ? formatINR(row.avgOrderValue)
-                                : "—"}
+                              {row.paidOrdersCount > 0 ? formatINR(row.avgOrderValue) : '—'}
                             </TableCell>
-                            <TableCell className="text-right tabular-nums font-medium text-emerald-800">
+                            <TableCell className="text-right font-medium text-emerald-800 tabular-nums">
                               {formatINR(row.totalSales)}
                             </TableCell>
                             <TableCell className="text-center">
@@ -9663,62 +8825,54 @@ const AdminDashboard = () => {
                                 className="h-9 w-9 rounded-lg"
                                 aria-expanded={open}
                                 aria-label={
-                                  open
-                                    ? "Hide extra metrics"
-                                    : "View loss and staff metrics"
+                                  open ? 'Hide extra metrics' : 'View loss and staff metrics'
                                 }
                                 onClick={() =>
-                                  setRevenueExpandedYearMonth((ym) =>
-                                    ym === row.yearMonth ? null : row.yearMonth,
+                                  setRevenueExpandedYearMonth(ym =>
+                                    ym === row.yearMonth ? null : row.yearMonth
                                   )
                                 }
                               >
                                 <Eye
-                                  className={`h-4 w-4 ${open ? "text-emerald-700" : "text-slate-600"}`}
+                                  className={`h-4 w-4 ${open ? 'text-emerald-700' : 'text-slate-600'}`}
                                 />
                               </Button>
                             </TableCell>
                           </TableRow>
                           {open ? (
-                            <TableRow className="bg-slate-50/90 border-0 hover:bg-slate-50/90">
+                            <TableRow className="border-0 bg-slate-50/90 hover:bg-slate-50/90">
                               <TableCell colSpan={7} className="py-4">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+                                <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
                                   <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-                                    <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                                    <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
                                       Loss (removed items)
                                     </p>
-                                    <p className="text-base font-semibold text-slate-900 mt-0.5">
+                                    <p className="mt-0.5 text-base font-semibold text-slate-900">
                                       {formatINR(row.totalLoss)}
                                     </p>
                                   </div>
                                   <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-                                    <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                                    <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
                                       Employee overtime (approved hrs)
                                     </p>
-                                    <p className="text-base font-semibold text-slate-900 mt-0.5">
-                                      {Math.round(row.overtimeHoursApproved * 100) /
-                                        100}{" "}
-                                      hrs
+                                    <p className="mt-0.5 text-base font-semibold text-slate-900">
+                                      {Math.round(row.overtimeHoursApproved * 100) / 100} hrs
                                     </p>
                                   </div>
                                   <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-                                    <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                                    <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
                                       Approved leaves
                                     </p>
-                                    <p className="text-base font-semibold text-slate-900 mt-0.5">
-                                      {row.approvedLeavesCount.toLocaleString(
-                                        "en-IN",
-                                      )}
+                                    <p className="mt-0.5 text-base font-semibold text-slate-900">
+                                      {row.approvedLeavesCount.toLocaleString('en-IN')}
                                     </p>
                                   </div>
                                   <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-                                    <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                                    <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
                                       Late entries
                                     </p>
-                                    <p className="text-base font-semibold text-slate-900 mt-0.5">
-                                      {row.lateEntriesCount.toLocaleString(
-                                        "en-IN",
-                                      )}
+                                    <p className="mt-0.5 text-base font-semibold text-slate-900">
+                                      {row.lateEntriesCount.toLocaleString('en-IN')}
                                     </p>
                                   </div>
                                 </div>
@@ -9752,74 +8906,68 @@ const AdminDashboard = () => {
   }) => {
     const { onOpenGenerateDialog, onOpenGenerateAgain } = sectionProps;
     const logoUrl =
-      (typeof window !== "undefined" &&
-        window.localStorage.getItem("branch_logo_url")) ||
+      (typeof window !== 'undefined' && window.localStorage.getItem('branch_logo_url')) ||
       branchForm?.logoUrl ||
       cafeLogo;
     const companyNameFromSettings =
       branchForm?.name ||
       branch?.name ||
-      (typeof window !== "undefined"
-        ? window.localStorage.getItem("branch_name")
-        : null) ||
-      "Cafe Chapter 1 Restro Private Limited";
+      (typeof window !== 'undefined' ? window.localStorage.getItem('branch_name') : null) ||
+      'Cafe Chapter 1 Restro Private Limited';
     const pdfBuildOpts = {
       logoUrl: String(logoUrl),
       companyName: companyNameFromSettings,
-      companyAddress:
-        branchForm?.location ?? branch?.location ?? "Gautam Nagar",
-      companyPincode: branchForm?.pincode || branch?.pincode || "",
-      phone: branchForm?.phone || "",
+      companyAddress: branchForm?.location ?? branch?.location ?? 'Gautam Nagar',
+      companyPincode: branchForm?.pincode || branch?.pincode || '',
+      phone: branchForm?.phone || '',
     };
     return (
       <div className="w-full min-w-0 space-y-6 overflow-hidden">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2 min-w-0">
-            <IndianRupee className="h-5 w-5 text-emerald-600 shrink-0" />
-            <h2 className="text-xl font-bold truncate">Salary Slips</h2>
+          <div className="flex min-w-0 items-center gap-2">
+            <IndianRupee className="h-5 w-5 shrink-0 text-emerald-600" />
+            <h2 className="truncate text-xl font-bold">Salary Slips</h2>
           </div>
           <Button
             type="button"
-            onClick={(e) => {
+            onClick={e => {
               e.preventDefault();
               e.stopPropagation();
               onOpenGenerateDialog();
             }}
-            className="w-full sm:w-auto min-h-12 rounded-lg bg-gradient-to-r from-[#064E3B] to-[#047857] hover:opacity-90 text-white font-semibold shrink-0"
+            className="min-h-12 w-full shrink-0 rounded-lg bg-gradient-to-r from-[#064E3B] to-[#047857] font-semibold text-white hover:opacity-90 sm:w-auto"
           >
-            <IndianRupee className="h-5 w-5 mr-2" />
+            <IndianRupee className="mr-2 h-5 w-5" />
             Generate Salary Slip
           </Button>
         </div>
 
         {/* Analytics cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Card className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm overflow-hidden">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Card className="overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">
+                <p className="text-muted-foreground text-sm font-medium">
                   Total Salary Paid This Month
                 </p>
-                <p className="text-2xl font-bold text-emerald-700 mt-1">
+                <p className="mt-1 text-2xl font-bold text-emerald-700">
                   {formatINR(salaryTotalThisMonth)}
                 </p>
               </div>
-              <div className="p-3 rounded-xl bg-emerald-100">
+              <div className="rounded-xl bg-emerald-100 p-3">
                 <IndianRupee className="h-8 w-8 text-emerald-700" />
               </div>
             </div>
           </Card>
-          <Card className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm overflow-hidden">
+          <Card className="overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">
-                  Payslips Generated
-                </p>
-                <p className="text-2xl font-bold text-slate-800 mt-1">
+                <p className="text-muted-foreground text-sm font-medium">Payslips Generated</p>
+                <p className="mt-1 text-2xl font-bold text-slate-800">
                   {salarySlipsFiltered.length}
                 </p>
               </div>
-              <div className="p-3 rounded-xl bg-slate-100">
+              <div className="rounded-xl bg-slate-100 p-3">
                 <Users className="h-8 w-8 text-slate-600" />
               </div>
             </div>
@@ -9830,64 +8978,53 @@ const AdminDashboard = () => {
           <CardHeader className="px-3 sm:px-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle className="text-lg">Generated Slips</CardTitle>
-              <div className="flex flex-wrap items-center gap-2 min-w-0">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <Input
                   placeholder="Search employee..."
                   value={salaryTableSearch}
-                  onChange={(e) => {
+                  onChange={e => {
                     setSalaryTableSearch(e.target.value);
                     setSalaryTablePage(0);
                   }}
-                  className="h-11 rounded-lg border border-slate-200 w-full min-w-0 sm:w-48 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                  className="h-11 w-full min-w-0 rounded-lg border border-slate-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 sm:w-48"
                 />
                 <input
                   type="month"
                   value={salaryTableMonthFilter}
-                  onChange={(e) => {
+                  onChange={e => {
                     setSalaryTableMonthFilter(e.target.value);
                     setSalaryTablePage(0);
                   }}
-                  className="h-11 rounded-lg border border-slate-200 px-3 w-full sm:w-40 text-sm"
+                  className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm sm:w-40"
                   title="Filter by month"
                 />
               </div>
             </div>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto -mx-1 px-1">
+            <div className="-mx-1 overflow-x-auto px-1">
               <Table className="min-w-[600px]">
                 <TableHeader>
                   <TableRow className="bg-slate-50">
-                    <TableHead className="whitespace-nowrap">
-                      Slip No.
-                    </TableHead>
-                    <TableHead className="whitespace-nowrap">
-                      Employee
-                    </TableHead>
+                    <TableHead className="whitespace-nowrap">Slip No.</TableHead>
+                    <TableHead className="whitespace-nowrap">Employee</TableHead>
                     <TableHead className="whitespace-nowrap">Month</TableHead>
-                    <TableHead className="whitespace-nowrap text-right">
-                      Net Salary
-                    </TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Net Salary</TableHead>
                     <TableHead className="whitespace-nowrap">Status</TableHead>
-                    <TableHead className="whitespace-nowrap text-right">
-                      Actions
-                    </TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {salarySlipsPaginated.length === 0 ? (
                     <TableRow>
-                      <TableCell
-                        colSpan={6}
-                        className="text-center py-8 text-muted-foreground"
-                      >
+                      <TableCell colSpan={6} className="text-muted-foreground py-8 text-center">
                         {salarySlipsFiltered.length === 0
-                          ? "No salary slips yet. Generate one above."
-                          : "No results for this search or filter."}
+                          ? 'No salary slips yet. Generate one above.'
+                          : 'No results for this search or filter.'}
                       </TableCell>
                     </TableRow>
                   ) : (
-                    salarySlipsPaginated.map((slip) => {
+                    salarySlipsPaginated.map(slip => {
                       const rowBg = getSalarySlipMonthColor(slip);
                       return (
                         <TableRow
@@ -9896,10 +9033,10 @@ const AdminDashboard = () => {
                           style={{ backgroundColor: rowBg }}
                         >
                           <TableCell className="font-mono text-xs">
-                            {slip.salaryNumber ?? "—"}
+                            {slip.salaryNumber ?? '—'}
                           </TableCell>
                           <TableCell className="font-medium">
-                            {slip.employee?.name ?? "—"}
+                            {slip.employee?.name ?? '—'}
                           </TableCell>
                           <TableCell>
                             {slip.month} {slip.year}
@@ -9910,12 +9047,12 @@ const AdminDashboard = () => {
                           <TableCell>
                             <Badge
                               className={
-                                slip.status === "Sent"
-                                  ? "bg-emerald-100 text-emerald-800 border-emerald-200"
-                                  : "bg-slate-100 text-slate-800"
+                                slip.status === 'Sent'
+                                  ? 'border-emerald-200 bg-emerald-100 text-emerald-800'
+                                  : 'bg-slate-100 text-slate-800'
                               }
                             >
-                              {slip.status ?? "Paid"}
+                              {slip.status ?? 'Paid'}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right">
@@ -9925,20 +9062,16 @@ const AdminDashboard = () => {
                                   type="button"
                                   variant="outline"
                                   size="sm"
-                                  className="rounded-lg h-9 border-slate-300"
+                                  className="h-9 rounded-lg border-slate-300"
                                 >
-                                  <MoreHorizontal className="h-4 w-4 mr-1" />{" "}
-                                  Actions
+                                  <MoreHorizontal className="mr-1 h-4 w-4" /> Actions
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" className="w-48">
                                 <DropdownMenuItem
                                   onClick={() => {
-                                    const html = buildPayslipHtmlFromSlip(
-                                      slip,
-                                      pdfBuildOpts,
-                                    );
-                                    const w = window.open("", "_blank");
+                                    const html = buildPayslipHtmlFromSlip(slip, pdfBuildOpts);
+                                    const w = window.open('', '_blank');
                                     if (w) {
                                       w.document.write(html);
                                       w.document.close();
@@ -9946,21 +9079,15 @@ const AdminDashboard = () => {
                                     }
                                   }}
                                 >
-                                  <Eye className="h-4 w-4 mr-2" /> View PDF
+                                  <Eye className="mr-2 h-4 w-4" /> View PDF
                                 </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => onOpenGenerateAgain(slip)}
-                                >
-                                  <RefreshCw className="h-4 w-4 mr-2" />{" "}
-                                  Generate Again
+                                <DropdownMenuItem onClick={() => onOpenGenerateAgain(slip)}>
+                                  <RefreshCw className="mr-2 h-4 w-4" /> Generate Again
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   onClick={() => {
-                                    const html = buildPayslipHtmlFromSlip(
-                                      slip,
-                                      pdfBuildOpts,
-                                    );
-                                    const w = window.open("", "_blank");
+                                    const html = buildPayslipHtmlFromSlip(slip, pdfBuildOpts);
+                                    const w = window.open('', '_blank');
                                     if (w) {
                                       w.document.write(html);
                                       w.document.close();
@@ -9972,8 +9099,7 @@ const AdminDashboard = () => {
                                     }
                                   }}
                                 >
-                                  <Download className="h-4 w-4 mr-2" /> Download
-                                  PDF
+                                  <Download className="mr-2 h-4 w-4" /> Download PDF
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -9986,34 +9112,33 @@ const AdminDashboard = () => {
               </Table>
             </div>
             {salarySlipsFiltered.length > SALARY_TABLE_PAGE_SIZE && (
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-4 pt-4 border-t border-slate-200">
-                <p className="text-sm text-muted-foreground order-2 sm:order-1 text-center sm:text-left">
+              <div className="mt-4 flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-muted-foreground order-2 text-center text-sm sm:order-1 sm:text-left">
                   Showing {salaryTablePage * SALARY_TABLE_PAGE_SIZE + 1}–
                   {Math.min(
                     (salaryTablePage + 1) * SALARY_TABLE_PAGE_SIZE,
-                    salarySlipsFiltered.length,
-                  )}{" "}
+                    salarySlipsFiltered.length
+                  )}{' '}
                   of {salarySlipsFiltered.length}
                 </p>
-                <div className="flex gap-2 justify-center sm:justify-end order-1 sm:order-2">
+                <div className="order-1 flex justify-center gap-2 sm:order-2 sm:justify-end">
                   <Button
                     variant="outline"
                     size="sm"
-                    className="rounded-lg h-9 flex-1 sm:flex-initial"
+                    className="h-9 flex-1 rounded-lg sm:flex-initial"
                     disabled={salaryTablePage === 0}
-                    onClick={() => setSalaryTablePage((p) => p - 1)}
+                    onClick={() => setSalaryTablePage(p => p - 1)}
                   >
                     Previous
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    className="rounded-lg h-9 flex-1 sm:flex-initial"
+                    className="h-9 flex-1 rounded-lg sm:flex-initial"
                     disabled={
-                      (salaryTablePage + 1) * SALARY_TABLE_PAGE_SIZE >=
-                      salarySlipsFiltered.length
+                      (salaryTablePage + 1) * SALARY_TABLE_PAGE_SIZE >= salarySlipsFiltered.length
                     }
-                    onClick={() => setSalaryTablePage((p) => p + 1)}
+                    onClick={() => setSalaryTablePage(p => p + 1)}
                   >
                     Next
                   </Button>
@@ -10030,15 +9155,15 @@ const AdminDashboard = () => {
   const CertificatesSection = memo(() => (
     <div className="w-full min-w-0 space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2 min-w-0">
-          <Award className="h-5 w-5 text-emerald-600 shrink-0" />
+        <div className="flex min-w-0 items-center gap-2">
+          <Award className="h-5 w-5 shrink-0 text-emerald-600" />
           <h2 className="text-xl font-bold">Employee Certificates</h2>
         </div>
         <Button
           onClick={() => setIsCertificateDialogOpen(true)}
-          className="w-full sm:w-auto min-h-12 rounded-lg bg-gradient-to-r from-[#064E3B] to-[#047857] hover:opacity-90 text-white font-semibold"
+          className="min-h-12 w-full rounded-lg bg-gradient-to-r from-[#064E3B] to-[#047857] font-semibold text-white hover:opacity-90 sm:w-auto"
         >
-          <Plus className="h-5 w-5 mr-2" />
+          <Plus className="mr-2 h-5 w-5" />
           Generate Certificate
         </Button>
       </div>
@@ -10047,67 +9172,51 @@ const AdminDashboard = () => {
           <CardTitle className="text-lg">Generated Certificates</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto -mx-1 px-1">
+          <div className="-mx-1 overflow-x-auto px-1">
             <Table className="min-w-[600px]">
               <TableHeader>
                 <TableRow className="bg-slate-50">
                   <TableHead className="whitespace-nowrap">Employee</TableHead>
-                  <TableHead className="whitespace-nowrap">
-                    Certificate Name
-                  </TableHead>
+                  <TableHead className="whitespace-nowrap">Certificate Name</TableHead>
                   <TableHead className="whitespace-nowrap">Type</TableHead>
-                  <TableHead className="whitespace-nowrap">
-                    Issue Date
-                  </TableHead>
-                  <TableHead className="whitespace-nowrap">
-                    Expiry Date
-                  </TableHead>
-                  <TableHead className="whitespace-nowrap text-right">
-                    Download
-                  </TableHead>
+                  <TableHead className="whitespace-nowrap">Issue Date</TableHead>
+                  <TableHead className="whitespace-nowrap">Expiry Date</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Download</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {certificates.length === 0 ? (
                   <TableRow>
-                    <TableCell
-                      colSpan={6}
-                      className="text-center py-8 text-muted-foreground"
-                    >
+                    <TableCell colSpan={6} className="text-muted-foreground py-8 text-center">
                       No certificates yet. Generate one above.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  certificates.map((cert) => (
+                  certificates.map(cert => (
                     <TableRow key={cert.id} className="hover:bg-slate-50/50">
-                      <TableCell className="font-medium">
-                        {cert.employee?.name ?? "—"}
-                      </TableCell>
+                      <TableCell className="font-medium">{cert.employee?.name ?? '—'}</TableCell>
                       <TableCell>{cert.name}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-xs">
                           {cert.type}
                         </Badge>
                       </TableCell>
+                      <TableCell className="whitespace-nowrap">{cert.issueDate}</TableCell>
                       <TableCell className="whitespace-nowrap">
-                        {cert.issueDate}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {cert.expiryDate || "N/A"}
+                        {cert.expiryDate || 'N/A'}
                       </TableCell>
                       <TableCell className="text-right">
                         <Button
                           size="sm"
-                          className="rounded-lg h-9 bg-gradient-to-r from-[#064E3B] to-[#047857] hover:opacity-90 text-white"
+                          className="h-9 rounded-lg bg-gradient-to-r from-[#064E3B] to-[#047857] text-white hover:opacity-90"
                           onClick={() =>
                             toast({
-                              title: "Download",
-                              description:
-                                "Certificate download in next update",
+                              title: 'Download',
+                              description: 'Certificate download in next update',
                             })
                           }
                         >
-                          <Download className="h-4 w-4 mr-1" /> PDF
+                          <Download className="mr-1 h-4 w-4" /> PDF
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -10125,15 +9234,15 @@ const AdminDashboard = () => {
   const CertificateDialog = () => {
     const [localForm, setLocalForm] = useState({
       employeeId: 0,
-      name: "",
-      issueDate: new Date().toISOString().split("T")[0],
-      expiryDate: "",
-      type: "",
+      name: '',
+      issueDate: new Date().toISOString().split('T')[0],
+      expiryDate: '',
+      type: '',
     });
     const [isGenerating, setIsGenerating] = useState(false);
 
     const handleGenerate = async () => {
-      const employee = employees.find((e) => e.id === localForm.employeeId);
+      const employee = employees.find(e => e.id === localForm.employeeId);
       if (!employee) return;
 
       setIsGenerating(true);
@@ -10150,31 +9259,27 @@ const AdminDashboard = () => {
           createdAt: new Date().toISOString(),
         };
 
-        setCertificates((prev) => [...prev, newCertificate]);
+        setCertificates(prev => [...prev, newCertificate]);
         setIsCertificateDialogOpen(false);
         setIsGenerating(false);
 
         toast({
-          title: "Certificate generated",
+          title: 'Certificate generated',
           description: `${localForm.name} for ${employee.name}`,
         });
       }, 1000);
     };
 
     return (
-      <Dialog
-        open={isCertificateDialogOpen}
-        onOpenChange={setIsCertificateDialogOpen}
-      >
+      <Dialog open={isCertificateDialogOpen} onOpenChange={setIsCertificateDialogOpen}>
         <DialogContent
-          className="w-[calc(100vw-1rem)] sm:w-[calc(100vw-2rem)] max-w-md max-h-[90vh] overflow-y-auto p-4 sm:p-6"
+          className="max-h-[90vh] w-[calc(100vw-1rem)] max-w-md overflow-y-auto p-4 sm:w-[calc(100vw-2rem)] sm:p-6"
           aria-describedby="certificate-dialog-desc"
         >
           <DialogHeader>
             <DialogTitle>Generate Certificate</DialogTitle>
             <DialogDescription id="certificate-dialog-desc" className="sr-only">
-              Choose employee, certificate name and type, then set issue and
-              expiry dates.
+              Choose employee, certificate name and type, then set issue and expiry dates.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -10182,20 +9287,15 @@ const AdminDashboard = () => {
               <Label>Employee</Label>
               <Select
                 value={String(localForm.employeeId)}
-                onValueChange={(v) =>
-                  setLocalForm({ ...localForm, employeeId: Number(v) })
-                }
+                onValueChange={v => setLocalForm({ ...localForm, employeeId: Number(v) })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select employee" />
                 </SelectTrigger>
                 <SelectContent>
                   {employees
-                    .filter(
-                      (e) =>
-                        String(e.status || "").toUpperCase() === "ACTIVE",
-                    )
-                    .map((emp) => (
+                    .filter(e => String(e.status || '').toUpperCase() === 'ACTIVE')
+                    .map(emp => (
                       <SelectItem key={emp.id} value={String(emp.id)}>
                         {emp.name}
                       </SelectItem>
@@ -10208,30 +9308,22 @@ const AdminDashboard = () => {
               <Input
                 placeholder="e.g., Employee of the Month"
                 value={localForm.name}
-                onChange={(e) =>
-                  setLocalForm({ ...localForm, name: e.target.value })
-                }
+                onChange={e => setLocalForm({ ...localForm, name: e.target.value })}
               />
             </div>
             <div className="grid gap-2">
               <Label>Certificate Type</Label>
               <Select
                 value={localForm.type}
-                onValueChange={(v) => setLocalForm({ ...localForm, type: v })}
+                onValueChange={v => setLocalForm({ ...localForm, type: v })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="experience">
-                    Experience Certificate
-                  </SelectItem>
-                  <SelectItem value="completion">
-                    Completion Certificate
-                  </SelectItem>
-                  <SelectItem value="appreciation">
-                    Appreciation Certificate
-                  </SelectItem>
+                  <SelectItem value="experience">Experience Certificate</SelectItem>
+                  <SelectItem value="completion">Completion Certificate</SelectItem>
+                  <SelectItem value="appreciation">Appreciation Certificate</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -10241,9 +9333,7 @@ const AdminDashboard = () => {
                 <Input
                   type="date"
                   value={localForm.issueDate}
-                  onChange={(e) =>
-                    setLocalForm({ ...localForm, issueDate: e.target.value })
-                  }
+                  onChange={e => setLocalForm({ ...localForm, issueDate: e.target.value })}
                 />
               </div>
               <div className="grid gap-2">
@@ -10251,28 +9341,23 @@ const AdminDashboard = () => {
                 <Input
                   type="date"
                   value={localForm.expiryDate}
-                  onChange={(e) =>
-                    setLocalForm({ ...localForm, expiryDate: e.target.value })
-                  }
+                  onChange={e => setLocalForm({ ...localForm, expiryDate: e.target.value })}
                 />
               </div>
             </div>
           </div>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsCertificateDialogOpen(false)}
-            >
+            <Button variant="outline" onClick={() => setIsCertificateDialogOpen(false)}>
               Cancel
             </Button>
             <Button onClick={handleGenerate} disabled={isGenerating}>
               {isGenerating ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                  <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
                   Generating...
                 </>
               ) : (
-                "Generate"
+                'Generate'
               )}
             </Button>
           </DialogFooter>
@@ -10281,49 +9366,47 @@ const AdminDashboard = () => {
     );
   };
 
-  const currentSection = validSectionKeys.includes(activeSection)
-    ? activeSection
-    : "overview";
+  const currentSection = validSectionKeys.includes(activeSection) ? activeSection : 'overview';
 
   // Memoize section body so cards/lists do NOT re-render when only clock or unrelated state updates
   const mainSectionContent = useMemo(() => {
     switch (currentSection) {
-      case "overview":
+      case 'overview':
         return <OverviewSection />;
-      case "performance":
+      case 'performance':
         return <PerformanceSection />;
-      case "menu":
+      case 'menu':
         return <MenuSection />;
-      case "employees":
+      case 'employees':
         return <EmployeesSection />;
-      case "all-orders":
+      case 'all-orders':
         return <OrdersSection />;
-      case "customer-leaderboard":
+      case 'customer-leaderboard':
         return <CustomerLeaderboardSection />;
-      case "customer-queries":
+      case 'customer-queries':
         return <CustomerQueriesSection />;
-      case "removed-items":
+      case 'removed-items':
         return <RemovedItemsSection />;
-      case "hours":
+      case 'hours':
         return <WorkHoursSection />;
-      case "overtime":
+      case 'overtime':
         return <OvertimeSection />;
-      case "late":
+      case 'late':
         return <LateSection />;
-      case "leaves":
+      case 'leaves':
         return <LeaveRequestsSection />;
-      case "revenue":
+      case 'revenue':
         return <RevenueSection />;
-      case "salary-slips":
+      case 'salary-slips':
         return (
           <SalarySlipsSection
             onOpenGenerateDialog={handleOpenGenerateDialog}
             onOpenGenerateAgain={handleOpenGenerateAgain}
           />
         );
-      case "certificates":
+      case 'certificates':
         return <CertificatesSection />;
-      case "settings":
+      case 'settings':
         return (
           <SettingsSectionContent
             branchForm={branchForm}
@@ -10375,10 +9458,10 @@ const AdminDashboard = () => {
 
   if (!ready || !token) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
         <div className="flex flex-col items-center gap-3">
           <RefreshCw className="h-8 w-8 animate-spin text-emerald-600" />
-          <p className="text-sm text-muted-foreground">Loading...</p>
+          <p className="text-muted-foreground text-sm">Loading...</p>
         </div>
       </div>
     );
@@ -10387,21 +9470,18 @@ const AdminDashboard = () => {
   // Skeleton layout on first load only (after that, we use a blur overlay)
   if (loading && !hasLoadedOnce) {
     return (
-      <div className="min-h-screen flex flex-col bg-slate-50">
-        <header className="h-14 border-b bg-white shrink-0" />
-        <div className="flex-1 flex gap-4 p-4">
-          <aside className="w-56 rounded-lg bg-slate-200/60 animate-pulse shrink-0" />
-          <main className="flex-1 space-y-4 min-w-0">
-            <div className="h-8 w-56 rounded bg-slate-200/60 animate-pulse" />
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {[1, 2, 3, 4].map((i) => (
-                <div
-                  key={i}
-                  className="h-24 rounded-xl bg-slate-200/60 animate-pulse"
-                />
+      <div className="flex min-h-screen flex-col bg-slate-50">
+        <header className="h-14 shrink-0 border-b bg-white" />
+        <div className="flex flex-1 gap-4 p-4">
+          <aside className="w-56 shrink-0 animate-pulse rounded-lg bg-slate-200/60" />
+          <main className="min-w-0 flex-1 space-y-4">
+            <div className="h-8 w-56 animate-pulse rounded bg-slate-200/60" />
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              {[1, 2, 3, 4].map(i => (
+                <div key={i} className="h-24 animate-pulse rounded-xl bg-slate-200/60" />
               ))}
             </div>
-            <div className="h-80 rounded-xl bg-slate-200/60 animate-pulse" />
+            <div className="h-80 animate-pulse rounded-xl bg-slate-200/60" />
           </main>
         </div>
       </div>
@@ -10410,102 +9490,102 @@ const AdminDashboard = () => {
 
   const displayBranchName = (() => {
     const n = branch?.name?.trim();
-    if (!n || n.toLowerCase() === "main branch" || n.toLowerCase() === "main")
-      return "Gautam Nagar";
+    if (!n || n.toLowerCase() === 'main branch' || n.toLowerCase() === 'main')
+      return 'Gautam Nagar';
     return n;
   })();
 
   return (
     <DashboardShell
       role="ADMIN"
-      userName={profile?.name ?? "Admin"}
+      userName={profile?.name ?? 'Admin'}
       branchName={displayBranchName}
       sidebarSections={adminSidebarSections}
       activeKey={currentSection}
-      onSelect={(key) =>
-        validSectionKeys.includes(key) && setActiveSection(key)
-      }
+      onSelect={key => validSectionKeys.includes(key) && setActiveSection(key)}
       notifications={notifications}
       notificationCount={notifications.filter((n: any) => !n.read).length}
       sidebarBadges={{
-        "customer-queries": pendingQueriesCount,
-        ...(overtimeSummary.pendingOvertimeCount +
-          overtimeSummary.overtimeRunningCount >
-        0
+        'customer-queries': pendingQueriesCount,
+        ...(overtimeSummary.pendingOvertimeCount + overtimeSummary.overtimeRunningCount > 0
           ? {
-              overtime:
-                overtimeSummary.pendingOvertimeCount +
-                overtimeSummary.overtimeRunningCount,
+              overtime: overtimeSummary.pendingOvertimeCount + overtimeSummary.overtimeRunningCount,
             }
           : {}),
       }}
-      onNotificationsOpenChange={(open) => {
-        if (open)
-          setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+      onNotificationsOpenChange={open => {
+        if (open) setNotifications(prev => prev.map(n => ({ ...n, read: true })));
       }}
       onClearAllNotifications={async () => {
         setNotifications([]);
         try {
-          localStorage.setItem(
-            "dm_notifications_cleared_at",
-            String(Date.now()),
-          );
+          localStorage.setItem('dm_notifications_cleared_at', String(Date.now()));
         } catch (_) {}
         if (token) {
           try {
             await fetch(`${apiBase}/notifications/mark-all-read`, {
-              method: "POST",
+              method: 'POST',
               headers: { Authorization: `Bearer ${token}` },
             });
           } catch (_) {}
         }
       }}
     >
-      <div className="w-full min-h-full space-y-4 pb-6 relative overflow-x-hidden max-w-full px-0 sm:px-0">
-        {hasLoadedOnce &&
-          branches.length === 0 && (
-            <Alert className="border-amber-200 bg-amber-50/90 text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
-              <Info className="h-4 w-4 text-amber-700 dark:text-amber-300" />
-              <AlertTitle className="text-amber-950 dark:text-amber-50">
+      {/* Show page loader when loading initial data */}
+      {loading && !hasLoadedOnce && (
+        <PageLoader loading text="Loading dashboard..." className="min-h-96" />
+      )}
+      
+      <div className="relative min-h-full w-full max-w-full space-y-4 overflow-x-hidden px-0 pb-6 sm:px-0">
+        {/* Show inline loader for data refreshes */}
+        {loading && hasLoadedOnce && (
+          <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm border-b">
+            <InlineLoader loading text="Refreshing data..." />
+          </div>
+        )}
+        {hasLoadedOnce && branches.length === 0 && (
+          <Alert className="border-amber-200 bg-amber-50/90 text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+            <Info className="h-4 w-4 text-amber-700 dark:text-amber-300" />
+            <AlertTitle className="text-amber-950 dark:text-amber-50">
+              {branchesListUnavailable
+                ? 'Branch list could not be loaded'
+                : 'Create your first branch'}
+            </AlertTitle>
+            <AlertDescription className="space-y-2 text-amber-900/90 dark:text-amber-100/90">
+              <p>
                 {branchesListUnavailable
-                  ? "Branch list could not be loaded"
-                  : "Create your first branch"}
-              </AlertTitle>
-              <AlertDescription className="text-amber-900/90 dark:text-amber-100/90 space-y-2">
-                <p>
-                  {branchesListUnavailable
-                    ? "The server may be starting or temporarily busy (for example 503). This is not because you forgot to add a branch—try again in a moment."
-                    : "Add at least one branch so employees, tables, and orders are tied to a location."}
-                </p>
-                <div className="flex flex-wrap gap-2 pt-1">
+                  ? 'The server may be starting or temporarily busy (for example 503). This is not because you forgot to add a branch—try again in a moment.'
+                  : 'Add at least one branch so employees, tables, and orders are tied to a location.'}
+              </p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="default"
+                  className="bg-amber-800 text-white hover:bg-amber-900"
+                  onClick={() => setActiveSection('settings')}
+                >
+                  Open Settings → Branches
+                </Button>
+                {branchesListUnavailable ? (
                   <Button
                     type="button"
                     size="sm"
-                    variant="default"
-                    className="bg-amber-800 hover:bg-amber-900 text-white"
-                    onClick={() => setActiveSection("settings")}
+                    variant="outline"
+                    className="border-amber-300 bg-white/80"
+                    onClick={() => loadDashboardData()}
                   >
-                    Open Settings → Branches
+                    Retry loading
                   </Button>
-                  {branchesListUnavailable ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="border-amber-300 bg-white/80"
-                      onClick={() => loadDashboardData()}
-                    >
-                      Retry loading
-                    </Button>
-                  ) : null}
-                </div>
-              </AlertDescription>
-            </Alert>
-          )}
+                ) : null}
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
         {loading && hasLoadedOnce && (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/40 backdrop-blur-sm">
-            <div className="flex flex-col items-center gap-3 rounded-xl bg-white/80 px-5 py-4 shadow-lg border border-slate-200">
-              <div className="h-8 w-8 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+            <div className="flex flex-col items-center gap-3 rounded-xl border border-slate-200 bg-white/80 px-5 py-4 shadow-lg">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
               <p className="text-sm text-slate-600">Loading data…</p>
             </div>
           </div>
@@ -10516,7 +9596,7 @@ const AdminDashboard = () => {
       {/* Order Details Dialog – top level so it opens when order card is clicked from Orders section */}
       <Dialog
         open={isOrderDialogOpen}
-        onOpenChange={(open) => {
+        onOpenChange={open => {
           if (!open) {
             setPopupDisplayOrder(null);
             setSelectedOrder(null);
@@ -10525,11 +9605,11 @@ const AdminDashboard = () => {
         }}
       >
         <DialogContent
-          className="w-[calc(100vw-1rem)] sm:w-[calc(100vw-2rem)] max-w-lg max-h-[90vh] overflow-y-auto overflow-x-hidden p-4 sm:p-6"
+          className="max-h-[90vh] w-[calc(100vw-1rem)] max-w-lg overflow-x-hidden overflow-y-auto p-4 sm:w-[calc(100vw-2rem)] sm:p-6"
           aria-describedby="order-details-desc"
         >
           <DialogHeader>
-            <DialogTitle className="text-base sm:text-lg truncate pr-8">
+            <DialogTitle className="truncate pr-8 text-base sm:text-lg">
               Order Details #{selectedOrder?.id ?? popupDisplayOrder?.id}
             </DialogTitle>
             <DialogDescription id="order-details-desc" className="sr-only">
@@ -10543,108 +9623,86 @@ const AdminDashboard = () => {
                 (displayOrder as any).table?.tableNumber ??
                 displayOrder.tableNumber ??
                 displayOrder.tableId ??
-                "—";
-              const items = Array.isArray(displayOrder.items)
-                ? displayOrder.items
-                : [];
+                '—';
+              const items = Array.isArray(displayOrder.items) ? displayOrder.items : [];
               return (
-                <div className="space-y-4 py-2 sm:py-4 min-w-0">
+                <div className="min-w-0 space-y-4 py-2 sm:py-4">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
-                      <p className="text-sm text-muted-foreground">Table</p>
-                      <p className="font-medium truncate">Table {tableLabel}</p>
+                      <p className="text-muted-foreground text-sm">Table</p>
+                      <p className="truncate font-medium">Table {tableLabel}</p>
                     </div>
-                    <div className="text-left sm:text-right min-w-0">
-                      <p className="text-sm text-muted-foreground">Time</p>
-                      <p className="font-medium text-sm sm:text-base break-words">
+                    <div className="min-w-0 text-left sm:text-right">
+                      <p className="text-muted-foreground text-sm">Time</p>
+                      <p className="text-sm font-medium break-words sm:text-base">
                         {new Date(displayOrder.createdAt).toLocaleString()}
                       </p>
                     </div>
                   </div>
                   {(displayOrder.employee || displayOrder.branch) && (
-                    <div className="text-sm text-muted-foreground space-y-1 min-w-0 break-words">
-                      {displayOrder.branch?.name && (
-                        <p>Branch: {displayOrder.branch.name}</p>
-                      )}
+                    <div className="text-muted-foreground min-w-0 space-y-1 text-sm break-words">
+                      {displayOrder.branch?.name && <p>Branch: {displayOrder.branch.name}</p>}
                       {displayOrder.employee && (
                         <p>
-                          Accepted by:{" "}
-                          <span className="font-medium text-foreground">
+                          Accepted by:{' '}
+                          <span className="text-foreground font-medium">
                             {displayOrder.employee.name}
                           </span>
                           {displayOrder.employee.role
                             ? ` (${displayOrder.employee.role})`
                             : displayOrder.employee.employeeCode
                               ? ` (${displayOrder.employee.employeeCode})`
-                              : ""}
+                              : ''}
                         </p>
                       )}
                     </div>
                   )}
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge
-                      variant={
-                        displayOrder.status === "ORDER_COMPLETE"
-                          ? "default"
-                          : "secondary"
-                      }
+                      variant={displayOrder.status === 'ORDER_COMPLETE' ? 'default' : 'secondary'}
                     >
                       {displayOrder.status}
                     </Badge>
                     <Badge
-                      variant={
-                        displayOrder.paymentStatus === "PAID"
-                          ? "default"
-                          : "secondary"
-                      }
+                      variant={displayOrder.paymentStatus === 'PAID' ? 'default' : 'secondary'}
                       className={
-                        displayOrder.paymentStatus === "PAID"
-                          ? "bg-green-100 text-green-700"
-                          : ""
+                        displayOrder.paymentStatus === 'PAID' ? 'bg-green-100 text-green-700' : ''
                       }
                     >
                       {displayOrder.paymentStatus}
                     </Badge>
                   </div>
 
-                  <div className="border rounded-lg overflow-x-auto min-w-0">
+                  <div className="min-w-0 overflow-x-auto rounded-lg border">
                     <Table className="min-w-[280px]">
                       <TableHeader>
                         <TableRow>
                           <TableHead className="text-xs">Item</TableHead>
-                          <TableHead className="text-xs text-right">
-                            Qty
-                          </TableHead>
-                          <TableHead className="text-xs text-right">
-                            Price
-                          </TableHead>
-                          <TableHead className="text-xs text-right">
-                            Total
-                          </TableHead>
+                          <TableHead className="text-right text-xs">Qty</TableHead>
+                          <TableHead className="text-right text-xs">Price</TableHead>
+                          <TableHead className="text-right text-xs">Total</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {items.filter((i: OrderItem) => !i.isRemoved).map((item: OrderItem) => (
-                          <TableRow key={item.id}>
-                            <TableCell className="text-sm">
-                              {formatItemDisplayName(item.name, item.variant)}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {item.quantity}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {formatINR(item.price)}
-                            </TableCell>
-                            <TableCell className="text-right font-medium">
-                              {formatINR(item.price * item.quantity)}
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                        {items
+                          .filter((i: OrderItem) => !i.isRemoved)
+                          .map((item: OrderItem) => (
+                            <TableRow key={item.id}>
+                              <TableCell className="text-sm">
+                                {formatItemDisplayName(item.name, item.variant)}
+                              </TableCell>
+                              <TableCell className="text-right">{item.quantity}</TableCell>
+                              <TableCell className="text-right">{formatINR(item.price)}</TableCell>
+                              <TableCell className="text-right font-medium">
+                                {formatINR(item.price * item.quantity)}
+                              </TableCell>
+                            </TableRow>
+                          ))}
                       </TableBody>
                     </Table>
                   </div>
 
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pt-4 border-t">
+                  <div className="flex flex-col gap-2 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-lg font-bold">Total Amount</p>
                     <p className="text-xl font-bold text-emerald-600">
                       {formatINR(displayOrder.totalAmount)}
@@ -10656,12 +9714,16 @@ const AdminDashboard = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="gap-2 text-emerald-700 border-emerald-200 hover:bg-emerald-50"
+                      className="gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
                       onClick={() => {
                         const url = `${apiBase}/orders/${displayOrder.id}/invoice-pdf`;
-                        const a = document.createElement("a");
-                        a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer";
-                        document.body.appendChild(a); a.click(); a.remove();
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.target = '_blank';
+                        a.rel = 'noopener noreferrer';
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
                       }}
                     >
                       <Download className="h-4 w-4" />
@@ -10669,33 +9731,27 @@ const AdminDashboard = () => {
                     </Button>
                   </div>
 
-                  {displayOrder.status !== "ORDER_COMPLETE" &&
-                    selectedOrder && (
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          disabled={completingOrderId === selectedOrder?.id}
-                          onClick={() =>
-                            handleUpdateOrderStatus(
-                              selectedOrder.id,
-                              "ORDER_COMPLETE",
-                            )
-                          }
-                        >
-                          {completingOrderId === selectedOrder?.id ? (
-                            <>
-                              <span className="inline-block h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                              Completing...
-                            </>
-                          ) : (
-                            <>
-                              <CheckCircle2 className="h-4 w-4 mr-1" />
-                              Mark Complete
-                            </>
-                          )}
-                        </Button>
-                      </div>
-                    )}
+                  {displayOrder.status !== 'ORDER_COMPLETE' && selectedOrder && (
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        disabled={completingOrderId === selectedOrder?.id}
+                        onClick={() => handleUpdateOrderStatus(selectedOrder.id, 'ORDER_COMPLETE')}
+                      >
+                        {completingOrderId === selectedOrder?.id ? (
+                          <>
+                            <span className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                            Completing...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="mr-1 h-4 w-4" />
+                            Mark Complete
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               );
             })()}
@@ -10705,17 +9761,17 @@ const AdminDashboard = () => {
       {/* Add/Edit Menu Item Dialog */}
       <Dialog
         open={isItemDialogOpen}
-        onOpenChange={(open) => {
+        onOpenChange={open => {
           if (!open) setEditingItem(null);
           setIsItemDialogOpen(open);
         }}
       >
         <DialogContent
-          className="w-[calc(100vw-1rem)] sm:w-[calc(100vw-2rem)] max-w-md max-h-[90vh] overflow-y-auto p-4 sm:p-6"
+          className="max-h-[90vh] w-[calc(100vw-1rem)] max-w-md overflow-y-auto p-4 sm:w-[calc(100vw-2rem)] sm:p-6"
           aria-describedby="menu-item-dialog-desc"
         >
           <DialogHeader>
-            <DialogTitle>{editingItem ? "Edit Item" : "Add Item"}</DialogTitle>
+            <DialogTitle>{editingItem ? 'Edit Item' : 'Add Item'}</DialogTitle>
             <DialogDescription id="menu-item-dialog-desc" className="sr-only">
               Enter item name, price, category, and optional description.
             </DialogDescription>
@@ -10726,9 +9782,7 @@ const AdminDashboard = () => {
               <Input
                 placeholder="Item name"
                 value={itemForm.name}
-                onChange={(e) =>
-                  setItemForm((f) => ({ ...f, name: e.target.value }))
-                }
+                onChange={e => setItemForm(f => ({ ...f, name: e.target.value }))}
               />
             </div>
             <div className="grid gap-2">
@@ -10736,9 +9790,7 @@ const AdminDashboard = () => {
               <Input
                 placeholder="Description"
                 value={itemForm.description}
-                onChange={(e) =>
-                  setItemForm((f) => ({ ...f, description: e.target.value }))
-                }
+                onChange={e => setItemForm(f => ({ ...f, description: e.target.value }))}
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -10748,9 +9800,9 @@ const AdminDashboard = () => {
                   type="number"
                   min={0}
                   step={1}
-                  value={itemForm.basePrice || ""}
-                  onChange={(e) =>
-                    setItemForm((f) => ({
+                  value={itemForm.basePrice || ''}
+                  onChange={e =>
+                    setItemForm(f => ({
                       ...f,
                       basePrice: Number(e.target.value) || 0,
                     }))
@@ -10763,9 +9815,9 @@ const AdminDashboard = () => {
                   type="number"
                   min={0}
                   step={1}
-                  value={itemForm.halfPrice || ""}
-                  onChange={(e) =>
-                    setItemForm((f) => ({
+                  value={itemForm.halfPrice || ''}
+                  onChange={e =>
+                    setItemForm(f => ({
                       ...f,
                       halfPrice: Number(e.target.value) || 0,
                     }))
@@ -10777,9 +9829,7 @@ const AdminDashboard = () => {
               <Checkbox
                 id="hasHalf"
                 checked={itemForm.hasHalf}
-                onCheckedChange={(c) =>
-                  setItemForm((f) => ({ ...f, hasHalf: !!c }))
-                }
+                onCheckedChange={c => setItemForm(f => ({ ...f, hasHalf: !!c }))}
               />
               <Label htmlFor="hasHalf">Has half portion</Label>
             </div>
@@ -10788,36 +9838,26 @@ const AdminDashboard = () => {
               <Input
                 placeholder="https://..."
                 value={itemForm.imageUrl}
-                onChange={(e) =>
-                  setItemForm((f) => ({ ...f, imageUrl: e.target.value }))
-                }
+                onChange={e => setItemForm(f => ({ ...f, imageUrl: e.target.value }))}
               />
             </div>
             <div className="flex items-center gap-2">
               <Checkbox
                 id="isActive"
                 checked={itemForm.isActive}
-                onCheckedChange={(c) =>
-                  setItemForm((f) => ({ ...f, isActive: !!c }))
-                }
+                onCheckedChange={c => setItemForm(f => ({ ...f, isActive: !!c }))}
               />
               <Label htmlFor="isActive">Active (visible on menu)</Label>
             </div>
             {!editingItem && (
-              <div className="flex items-center gap-2 rounded-lg border p-3 bg-amber-50/50">
+              <div className="flex items-center gap-2 rounded-lg border bg-amber-50/50 p-3">
                 <Checkbox
                   id="notifyCustomers"
                   checked={itemForm.notifyCustomers}
-                  onCheckedChange={(c) =>
-                    setItemForm((f) => ({ ...f, notifyCustomers: !!c }))
-                  }
+                  onCheckedChange={c => setItemForm(f => ({ ...f, notifyCustomers: !!c }))}
                 />
-                <Label
-                  htmlFor="notifyCustomers"
-                  className="text-sm font-medium"
-                >
-                  Notify customers about this new launch (broadcast to all saved
-                  mobiles)
+                <Label htmlFor="notifyCustomers" className="text-sm font-medium">
+                  Notify customers about this new launch (broadcast to all saved mobiles)
                 </Label>
               </div>
             )}
@@ -10849,7 +9889,7 @@ const AdminDashboard = () => {
       {/* Create Branch Dialog */}
       <Dialog open={createBranchOpen} onOpenChange={setCreateBranchOpen}>
         <DialogContent
-          className="w-[calc(100vw-1rem)] sm:w-[calc(100vw-2rem)] max-w-md max-h-[90vh] overflow-y-auto p-4 sm:p-6"
+          className="max-h-[90vh] w-[calc(100vw-1rem)] max-w-md overflow-y-auto p-4 sm:w-[calc(100vw-2rem)] sm:p-6"
           aria-describedby="create-branch-desc"
         >
           <DialogHeader>
@@ -10864,9 +9904,7 @@ const AdminDashboard = () => {
               <Input
                 placeholder="e.g. Patna Branch"
                 value={createBranchForm.name}
-                onChange={(e) =>
-                  setCreateBranchForm((f) => ({ ...f, name: e.target.value }))
-                }
+                onChange={e => setCreateBranchForm(f => ({ ...f, name: e.target.value }))}
               />
             </div>
             <div className="grid gap-2">
@@ -10874,8 +9912,8 @@ const AdminDashboard = () => {
               <Input
                 placeholder="Address"
                 value={createBranchForm.location}
-                onChange={(e) =>
-                  setCreateBranchForm((f) => ({
+                onChange={e =>
+                  setCreateBranchForm(f => ({
                     ...f,
                     location: e.target.value,
                   }))
@@ -10887,9 +9925,7 @@ const AdminDashboard = () => {
               <Input
                 placeholder="10-digit"
                 value={createBranchForm.phone}
-                onChange={(e) =>
-                  setCreateBranchForm((f) => ({ ...f, phone: e.target.value }))
-                }
+                onChange={e => setCreateBranchForm(f => ({ ...f, phone: e.target.value }))}
               />
             </div>
             <div className="grid gap-2">
@@ -10897,8 +9933,8 @@ const AdminDashboard = () => {
               <Input
                 placeholder="https://..."
                 value={createBranchForm.logoUrl}
-                onChange={(e) =>
-                  setCreateBranchForm((f) => ({
+                onChange={e =>
+                  setCreateBranchForm(f => ({
                     ...f,
                     logoUrl: e.target.value,
                   }))
@@ -10910,8 +9946,8 @@ const AdminDashboard = () => {
               <Input
                 placeholder="https://..."
                 value={createBranchForm.googleReviewUrl}
-                onChange={(e) =>
-                  setCreateBranchForm((f) => ({
+                onChange={e =>
+                  setCreateBranchForm(f => ({
                     ...f,
                     googleReviewUrl: e.target.value,
                   }))
@@ -10920,8 +9956,9 @@ const AdminDashboard = () => {
             </div>
             <div className="grid gap-2">
               <Label>Directors Email (optional)</Label>
-              <p className="text-xs text-muted-foreground">
-                Add multiple emails (comma/space separated). Directors will receive daily/monthly reports after verification.
+              <p className="text-muted-foreground text-xs">
+                Add multiple emails (comma/space separated). Directors will receive daily/monthly
+                reports after verification.
               </p>
               {createBranchForm.directorsEmail?.trim() ? (
                 <div className="flex flex-wrap gap-2">
@@ -10929,15 +9966,15 @@ const AdminDashboard = () => {
                     new Set(
                       createBranchForm.directorsEmail
                         .split(/[,\s]+/g)
-                        .map((e) => e.trim())
-                        .filter(Boolean),
-                    ),
-                  ).map((email) => (
+                        .map(e => e.trim())
+                        .filter(Boolean)
+                    )
+                  ).map(email => (
                     <span
                       key={email}
                       className="inline-flex items-center gap-2 rounded-full border bg-white px-3 py-1 text-xs"
                     >
-                      <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                      <Mail className="text-muted-foreground h-3.5 w-3.5" />
                       <span className="max-w-[220px] truncate">{email}</span>
                       <button
                         type="button"
@@ -10947,13 +9984,13 @@ const AdminDashboard = () => {
                             new Set(
                               createBranchForm.directorsEmail
                                 .split(/[,\s]+/g)
-                                .map((e) => e.trim())
-                                .filter(Boolean),
-                            ),
-                          ).filter((x) => x !== email);
-                          setCreateBranchForm((f) => ({
+                                .map(e => e.trim())
+                                .filter(Boolean)
+                            )
+                          ).filter(x => x !== email);
+                          setCreateBranchForm(f => ({
                             ...f,
-                            directorsEmail: next.join(", "),
+                            directorsEmail: next.join(', '),
                           }));
                         }}
                         aria-label={`Remove ${email}`}
@@ -10964,37 +10001,37 @@ const AdminDashboard = () => {
                   ))}
                 </div>
               ) : null}
-              <div className="flex flex-col sm:flex-row gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <Input
                   type="email"
                   placeholder="Type email(s) then tap + Add"
                   value={createBranchDirectorInput}
-                  onChange={(e) => setCreateBranchDirectorInput(e.target.value)}
-                  className="flex-1 min-w-0"
+                  onChange={e => setCreateBranchDirectorInput(e.target.value)}
+                  className="min-w-0 flex-1"
                 />
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-10 gap-1 text-emerald-600 border-emerald-200 hover:bg-emerald-50 shrink-0 min-w-[92px]"
+                  className="h-10 min-w-[92px] shrink-0 gap-1 border-emerald-200 text-emerald-600 hover:bg-emerald-50"
                   disabled={!createBranchDirectorInput.trim()}
                   onClick={() => {
                     const raw = createBranchDirectorInput.trim();
                     if (!raw) return;
                     const incoming = raw
                       .split(/[,\s]+/g)
-                      .map((e) => e.trim())
+                      .map(e => e.trim())
                       .filter(Boolean);
-                    const existing = (createBranchForm.directorsEmail || "")
+                    const existing = (createBranchForm.directorsEmail || '')
                       .split(/[,\s]+/g)
-                      .map((e) => e.trim())
+                      .map(e => e.trim())
                       .filter(Boolean);
                     const merged = Array.from(new Set([...existing, ...incoming]));
-                    setCreateBranchForm((f) => ({
+                    setCreateBranchForm(f => ({
                       ...f,
-                      directorsEmail: merged.join(", "),
+                      directorsEmail: merged.join(', '),
                     }));
-                    setCreateBranchDirectorInput("");
+                    setCreateBranchDirectorInput('');
                   }}
                 >
                   + Add
@@ -11019,19 +10056,16 @@ const AdminDashboard = () => {
                 !createBranchForm.logoUrl.trim()
               }
             >
-              {savingBranch ? "Creating..." : "Create"}
+              {savingBranch ? 'Creating...' : 'Create'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Verify Employee – send login credentials */}
-      <Dialog
-        open={!!employeeToVerify}
-        onOpenChange={(open) => !open && setEmployeeToVerify(null)}
-      >
+      <Dialog open={!!employeeToVerify} onOpenChange={open => !open && setEmployeeToVerify(null)}>
         <DialogContent
-          className="w-[calc(100vw-1rem)] sm:w-[calc(100vw-2rem)] max-w-md max-h-[90vh] overflow-y-auto p-4 sm:p-6"
+          className="max-h-[90vh] w-[calc(100vw-1rem)] max-w-md overflow-y-auto p-4 sm:w-[calc(100vw-2rem)] sm:p-6"
           aria-describedby="verify-employee-desc"
         >
           <DialogHeader>
@@ -11039,7 +10073,7 @@ const AdminDashboard = () => {
             <DialogDescription id="verify-employee-desc">
               {employeeToVerify
                 ? `${employeeToVerify.name} will receive login credentials (temporary password) via email. They can then log in and change their password.`
-                : ""}
+                : ''}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -11050,20 +10084,17 @@ const AdminDashboard = () => {
             >
               Cancel
             </Button>
-            <Button
-              onClick={handleVerifyAndSendInvite}
-              disabled={!!verifyingEmployeeId}
-            >
+            <Button onClick={handleVerifyAndSendInvite} disabled={!!verifyingEmployeeId}>
               {verifyingEmployeeId ? (
                 <>
                   <span
-                    className="inline-block h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"
+                    className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
                     aria-hidden
                   />
                   Sending invite…
                 </>
               ) : (
-                "Send Invite"
+                'Send Invite'
               )}
             </Button>
           </DialogFooter>
@@ -11074,7 +10105,7 @@ const AdminDashboard = () => {
       <ChangePasswordDialog
         open={!!employeeToChangePassword}
         employee={employeeToChangePassword}
-        onOpenChange={(open) => {
+        onOpenChange={open => {
           if (!open) {
             setEmployeeToChangePassword(null);
           }
@@ -11084,7 +10115,7 @@ const AdminDashboard = () => {
         }}
         token={token}
         loading={changingPasswordEmployeeId !== null}
-        setLoading={(id) => setChangingPasswordEmployeeId(id)}
+        setLoading={id => setChangingPasswordEmployeeId(id)}
       />
 
       {/* Dialogs - rendered at dashboard level so they do not remount when section re-renders (no flash on type) */}
@@ -11092,13 +10123,13 @@ const AdminDashboard = () => {
         open={isEmployeeDialogOpen}
         onOpenChange={setIsEmployeeDialogOpen}
         branches={branches}
-        onCreated={(emp) => {
-          setEmployees((prev) => [...prev, emp as Employee]);
+        onCreated={emp => {
+          setEmployees(prev => [...prev, emp as Employee]);
           setIsEmployeeDialogOpen(false);
         }}
         onGoToSettings={() => {
           setIsEmployeeDialogOpen(false);
-          setActiveSection("settings");
+          setActiveSection('settings');
           setCreateBranchOpen(true);
         }}
         token={token}
@@ -11106,21 +10137,17 @@ const AdminDashboard = () => {
       <EditEmployeeDialog
         open={!!editingEmployee}
         employee={editingEmployee}
-        onOpenChange={(open) => !open && setEditingEmployee(null)}
-        onSaved={(emp) => {
-          setEmployees((prev) =>
-            prev.map((e) => (e.id === emp.id ? { ...e, ...emp } : e)),
-          );
+        onOpenChange={open => !open && setEditingEmployee(null)}
+        onSaved={emp => {
+          setEmployees(prev => prev.map(e => (e.id === emp.id ? { ...e, ...emp } : e)));
           setEditingEmployee(null);
         }}
         token={token}
       />
       <SalarySlipDialogModule
-        key={
-          isSalarySlipDialogOpen ? "salary-dialog-open" : "salary-dialog-closed"
-        }
+        key={isSalarySlipDialogOpen ? 'salary-dialog-open' : 'salary-dialog-closed'}
         open={isSalarySlipDialogOpen}
-        onOpenChange={(open) => {
+        onOpenChange={open => {
           setIsSalarySlipDialogOpen(open);
           if (!open) setSalarySlipPrefill(null);
         }}

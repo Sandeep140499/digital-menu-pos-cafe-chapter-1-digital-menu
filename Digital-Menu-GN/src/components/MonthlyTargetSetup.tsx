@@ -1,6 +1,6 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 
 export type MonthlyTargetInfo = {
   yearMonth: string;
@@ -10,7 +10,7 @@ export type MonthlyTargetInfo = {
   achievedAmount?: number;
   achievedPct?: number;
   daysLeft?: number;
-  status?: "ON_TRACK" | "NEED_TO_PUSH" | "CRITICAL";
+  status?: 'ON_TRACK' | 'NEED_TO_PUSH' | 'CRITICAL';
 };
 
 type Props = {
@@ -31,78 +31,74 @@ export default function MonthlyTargetSetup({
   formatINR,
 }: Props) {
   const statusLabel =
-    info?.status === "ON_TRACK"
-      ? "✓ ON TRACK"
-      : info?.status === "NEED_TO_PUSH"
-        ? "⚠️ NEED TO PUSH"
-        : info?.status === "CRITICAL"
-          ? "🔴 CRITICAL"
+    info?.status === 'ON_TRACK'
+      ? '✓ ON TRACK'
+      : info?.status === 'NEED_TO_PUSH'
+        ? '⚠️ NEED TO PUSH'
+        : info?.status === 'CRITICAL'
+          ? '🔴 CRITICAL'
           : info?.targetSet
-            ? "—"
-            : "Target not set";
+            ? '—'
+            : 'Target not set';
 
   return (
     <Card className="w-full min-w-0 overflow-hidden rounded-xl border border-slate-200 shadow-sm">
-      <CardHeader className="px-3 sm:px-6 pb-2">
+      <CardHeader className="px-3 pb-2 sm:px-6">
         <CardTitle className="text-lg">Set Monthly Sales Target</CardTitle>
         <CardDescription>
           Define the target once and daily emails will track achievement automatically.
         </CardDescription>
       </CardHeader>
-      <CardContent className="px-3 sm:px-6 pb-6 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+      <CardContent className="space-y-4 px-3 pb-6 sm:px-6">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
           <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-            <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+            <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
               Month
             </p>
-            <p className="text-base font-semibold text-slate-900 mt-0.5">
-              {info?.monthLabel || info?.yearMonth || "Current month"}
+            <p className="mt-0.5 text-base font-semibold text-slate-900">
+              {info?.monthLabel || info?.yearMonth || 'Current month'}
             </p>
           </div>
           <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-            <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+            <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
               Current Target
             </p>
-            <p className="text-base font-semibold text-slate-900 mt-0.5">
-              {info?.targetSet ? formatINR(info.targetAmount || 0) : "Not set"}
+            <p className="mt-0.5 text-base font-semibold text-slate-900">
+              {info?.targetSet ? formatINR(info.targetAmount || 0) : 'Not set'}
             </p>
           </div>
           <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-            <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+            <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
               Achieved
             </p>
-            <p className="text-base font-semibold text-slate-900 mt-0.5">
+            <p className="mt-0.5 text-base font-semibold text-slate-900">
               {info?.targetSet
                 ? `${formatINR(info.achievedAmount || 0)} (${Math.round((info.achievedPct || 0) * 10) / 10}%)`
-                : "Target not set"}
+                : 'Target not set'}
             </p>
           </div>
           <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-            <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+            <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
               Status
             </p>
-            <p className="text-base font-semibold text-slate-900 mt-0.5">
-              {statusLabel}
-            </p>
+            <p className="mt-0.5 text-base font-semibold text-slate-900">{statusLabel}</p>
             {info?.targetSet ? (
-              <p className="text-xs text-muted-foreground mt-1">
-                {info.daysLeft ?? 0} day(s) left
-              </p>
+              <p className="text-muted-foreground mt-1 text-xs">{info.daysLeft ?? 0} day(s) left</p>
             ) : null}
           </div>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <Input
             type="number"
             min={0}
             step="1"
             placeholder="Target amount (e.g. 100000)"
             value={inputValue}
-            onChange={(e) => onInputChange(e.target.value)}
+            onChange={e => onInputChange(e.target.value)}
             className="sm:max-w-xs"
           />
           <Button onClick={onSave} disabled={!inputValue.trim() || saving}>
-            {saving ? "Saving..." : "Set Target"}
+            {saving ? 'Saving...' : 'Set Target'}
           </Button>
         </div>
       </CardContent>

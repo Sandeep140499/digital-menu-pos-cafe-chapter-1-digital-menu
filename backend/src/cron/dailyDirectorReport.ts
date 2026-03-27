@@ -1,30 +1,30 @@
 /**
  * At 04:05 AM (after shifts auto-close at 04:00) send Daily Business Report email to director(s).
  */
-import { prisma } from "../config/prisma.js";
-import { isMailConfigured, sendEmail } from "../config/mailer.js";
-import { upsertDailyRevenueEntry } from "../services/monthlyTargetService.js";
+import { prisma } from '../config/prisma.js';
+import { isMailConfigured, sendEmail } from '../config/mailer.js';
+import { upsertDailyRevenueEntry } from '../services/monthlyTargetService.js';
 
-const TIMEZONE = process.env.TZ || "Asia/Kolkata";
+const TIMEZONE = process.env.TZ || 'Asia/Kolkata';
 const REPORT_HOUR = 4;
 const REPORT_MINUTE = 5;
 
 function is405AMInTimezone(): boolean {
   const now = new Date();
-  const formatter = new Intl.DateTimeFormat("en-IN", {
+  const formatter = new Intl.DateTimeFormat('en-IN', {
     timeZone: TIMEZONE,
-    hour: "numeric",
-    minute: "numeric",
+    hour: 'numeric',
+    minute: 'numeric',
     hour12: false,
   });
   const parts = formatter.formatToParts(now);
-  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? 0);
-  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? 0);
+  const hour = Number(parts.find(p => p.type === 'hour')?.value ?? 0);
+  const minute = Number(parts.find(p => p.type === 'minute')?.value ?? 0);
   return hour === REPORT_HOUR && minute === REPORT_MINUTE;
 }
 
 function formatINR(n: number): string {
-  return "₹" + Math.round(n).toLocaleString("en-IN");
+  return '₹' + Math.round(n).toLocaleString('en-IN');
 }
 
 function formatPct(n: number): string {
@@ -34,7 +34,7 @@ function formatPct(n: number): string {
 /** Report date = "yesterday" in TIMEZONE (the day that just ended when job runs at 4:05 AM). */
 function getReportDate(): { start: Date; end: Date; dateStr: string } {
   const now = new Date();
-  const istOffsetMs = (TIMEZONE === "Asia/Kolkata" ? 5.5 : 0) * 60 * 60 * 1000;
+  const istOffsetMs = (TIMEZONE === 'Asia/Kolkata' ? 5.5 : 0) * 60 * 60 * 1000;
   const todayInTz = new Date(now.getTime() + istOffsetMs);
   const y = todayInTz.getUTCFullYear();
   const m = todayInTz.getUTCMonth();
@@ -44,13 +44,18 @@ function getReportDate(): { start: Date; end: Date; dateStr: string } {
   const start = new Date(yesterdayStartUTC);
   const end = new Date(yesterdayEndUTC);
   const yesterday = new Date(yesterdayStartUTC + istOffsetMs);
-  const dateStr = yesterday.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const dateStr = yesterday.toLocaleDateString('en-IN', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
   return { start, end, dateStr };
 }
 
 export async function runDailyDirectorReport(): Promise<boolean> {
   if (!isMailConfigured()) {
-    console.log("[DailyDirectorReport] Mail not configured, skip");
+    console.log('[DailyDirectorReport] Mail not configured, skip');
     return false;
   }
 
@@ -59,16 +64,16 @@ export async function runDailyDirectorReport(): Promise<boolean> {
   });
   const directorEmails = [
     ...new Set(
-      branches.flatMap((b) =>
-        (b.directorsEmail || "")
+      branches.flatMap(b =>
+        (b.directorsEmail || '')
           .split(/[,\s]+/)
-          .map((e) => e.trim())
-          .filter((e) => e.length > 0 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)),
-      ),
+          .map(e => e.trim())
+          .filter(e => e.length > 0 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))
+      )
     ),
   ];
   if (directorEmails.length === 0) {
-    console.log("[DailyDirectorReport] No director emails configured");
+    console.log('[DailyDirectorReport] No director emails configured');
     return false;
   }
 
@@ -95,16 +100,16 @@ export async function runDailyDirectorReport(): Promise<boolean> {
     select: { paymentStatus: true, totalAmount: true },
   });
 
-  const paidOrders = orders.filter((o) => o.paymentStatus === "PAID");
+  const paidOrders = orders.filter(o => o.paymentStatus === 'PAID');
   const totalSales = paidOrders.reduce((s, o) => s + (o.totalAmount ?? 0), 0);
   const totalOrders = orders.length;
   const completedCount = paidOrders.length;
-  const partiallyPaidCount = orders.filter((o) => o.paymentStatus === "PARTIAL").length;
-  const pendingOrders = orders.filter((o) => o.paymentStatus !== "PAID");
+  const partiallyPaidCount = orders.filter(o => o.paymentStatus === 'PARTIAL').length;
+  const pendingOrders = orders.filter(o => o.paymentStatus !== 'PAID');
   const pendingCount = pendingOrders.length;
   const totalPending = pendingOrders.reduce((s, o) => s + (o.totalAmount ?? 0), 0);
   const avgOrder = completedCount > 0 ? totalSales / completedCount : 0;
-  const cancelledOrRejectedCount = orders.filter((o) => o.status === "REJECTED").length;
+  const cancelledOrRejectedCount = orders.filter(o => o.status === 'REJECTED').length;
 
   // Persist daily revenue snapshot for historical tracking/reporting.
   await upsertDailyRevenueEntry({
@@ -116,13 +121,11 @@ export async function runDailyDirectorReport(): Promise<boolean> {
 
   const dailySalesTarget = Number(process.env.DAILY_SALES_TARGET_INR || 0);
   const manualDailyExpenses = Number(process.env.DAILY_EXPENSES_INR || 0);
-  const targetAchievedPct =
-    dailySalesTarget > 0 ? (totalSales / dailySalesTarget) * 100 : null;
-  const paymentCollectionRate =
-    totalOrders > 0 ? (completedCount / totalOrders) * 100 : 0;
+  const targetAchievedPct = dailySalesTarget > 0 ? (totalSales / dailySalesTarget) * 100 : null;
+  const paymentCollectionRate = totalOrders > 0 ? (completedCount / totalOrders) * 100 : 0;
 
   const prevPaidSales = prevOrders
-    .filter((o) => o.paymentStatus === "PAID")
+    .filter(o => o.paymentStatus === 'PAID')
     .reduce((s, o) => s + (o.totalAmount ?? 0), 0);
   const salesDeltaPct =
     prevPaidSales > 0
@@ -137,7 +140,7 @@ export async function runDailyDirectorReport(): Promise<boolean> {
         ? 100
         : 0;
   const lastWeekPaidSales = lastWeekOrders
-    .filter((o) => o.paymentStatus === "PAID")
+    .filter(o => o.paymentStatus === 'PAID')
     .reduce((s, o) => s + (o.totalAmount ?? 0), 0);
   const salesVsLastWeekPct =
     lastWeekPaidSales > 0
@@ -167,7 +170,7 @@ export async function runDailyDirectorReport(): Promise<boolean> {
   const monthSoFarPaid = await prisma.order.aggregate({
     where: {
       createdAt: { gte: monthStart, lte: end },
-      paymentStatus: "PAID",
+      paymentStatus: 'PAID',
     },
     _sum: { totalAmount: true },
   });
@@ -176,40 +179,39 @@ export async function runDailyDirectorReport(): Promise<boolean> {
   const daysInMonth = new Date(end.getFullYear(), end.getMonth() + 1, 0).getDate();
   const monthlyYear = end.getFullYear();
   const monthlyMonth = end.getMonth() + 1;
-  const monthlyYearMonth = `${monthlyYear}-${String(monthlyMonth).padStart(2, "0")}`;
+  const monthlyYearMonth = `${monthlyYear}-${String(monthlyMonth).padStart(2, '0')}`;
   const monthlyTargetRow = await prisma.monthlyTarget.findUnique({
     where: { yearMonth: monthlyYearMonth },
     select: { targetAmount: true },
   });
   const monthlySalesTarget = Number(monthlyTargetRow?.targetAmount ?? 0);
   const monthlyTargetSet = monthlySalesTarget > 0;
-  const monthlyAchievedPct = monthlyTargetSet
-    ? (monthSoFarSales / monthlySalesTarget) * 100
+  const monthlyAchievedPct = monthlyTargetSet ? (monthSoFarSales / monthlySalesTarget) * 100 : null;
+  const monthLabel = new Date(monthlyYear, monthlyMonth - 1, 1).toLocaleDateString('en-IN', {
+    month: 'long',
+  });
+  const monthPaceExpected = monthlyTargetSet
+    ? (monthlySalesTarget * dayOfMonth) / Math.max(1, daysInMonth)
+    : 0;
+  const monthPacePct = monthlyTargetSet
+    ? (monthSoFarSales / Math.max(1, monthPaceExpected)) * 100
     : null;
-  const monthLabel = new Date(monthlyYear, monthlyMonth - 1, 1).toLocaleDateString(
-    "en-IN",
-    { month: "long" },
-  );
-  const monthPaceExpected =
-    monthlyTargetSet ? (monthlySalesTarget * dayOfMonth) / Math.max(1, daysInMonth) : 0;
-  const monthPacePct =
-    monthlyTargetSet ? (monthSoFarSales / Math.max(1, monthPaceExpected)) * 100 : null;
   const daysLeftInMonth = Math.max(0, daysInMonth - dayOfMonth);
   const monthlyTargetStatus = !monthlyTargetSet
-    ? "TARGET_NOT_SET"
+    ? 'TARGET_NOT_SET'
     : (monthlyAchievedPct ?? 0) >= 100
-      ? "ON_TRACK"
+      ? 'ON_TRACK'
       : (monthlyAchievedPct ?? 0) >= 40
-        ? "NEED_TO_PUSH"
-        : "CRITICAL";
+        ? 'NEED_TO_PUSH'
+        : 'CRITICAL';
   const monthlyTargetStatusLabel =
-    monthlyTargetStatus === "ON_TRACK"
-      ? "✓ ON TRACK"
-      : monthlyTargetStatus === "NEED_TO_PUSH"
-        ? "⚠️ NEED TO PUSH"
-        : monthlyTargetStatus === "CRITICAL"
-          ? "🔴 CRITICAL"
-          : "Target not set";
+    monthlyTargetStatus === 'ON_TRACK'
+      ? '✓ ON TRACK'
+      : monthlyTargetStatus === 'NEED_TO_PUSH'
+        ? '⚠️ NEED TO PUSH'
+        : monthlyTargetStatus === 'CRITICAL'
+          ? '🔴 CRITICAL'
+          : 'Target not set';
 
   const itemSales = new Map<string, { qty: number; revenue: number }>();
   for (const order of paidOrders) {
@@ -238,7 +240,7 @@ export async function runDailyDirectorReport(): Promise<boolean> {
     .sort((a, b) => b[1].orders - a[1].orders || b[1].revenue - a[1].revenue)
     .slice(0, 3)
     .map(([hour, data]) => ({
-      hourLabel: `${hour.toString().padStart(2, "0")}:00-${((hour + 1) % 24).toString().padStart(2, "0")}:00`,
+      hourLabel: `${hour.toString().padStart(2, '0')}:00-${((hour + 1) % 24).toString().padStart(2, '0')}:00`,
       orders: data.orders,
       revenue: data.revenue,
     }));
@@ -255,7 +257,7 @@ export async function runDailyDirectorReport(): Promise<boolean> {
     where: { createdAt: { gte: start, lte: end } },
     select: { issueType: true, status: true },
   });
-  const feedbackOpenCount = customerFeedback.filter((q) => q.status !== "RESOLVED").length;
+  const feedbackOpenCount = customerFeedback.filter(q => q.status !== 'RESOLVED').length;
 
   const prepRows = await prisma.order.findMany({
     where: {
@@ -266,49 +268,47 @@ export async function runDailyDirectorReport(): Promise<boolean> {
     select: { acceptedAt: true, completedAt: true },
   });
   const prepMinutes = prepRows
-    .map((r) => {
-      const ms = new Date(r.completedAt as Date).getTime() - new Date(r.acceptedAt as Date).getTime();
+    .map(r => {
+      const ms =
+        new Date(r.completedAt as Date).getTime() - new Date(r.acceptedAt as Date).getTime();
       return ms >= 0 ? ms / 60000 : null;
     })
     .filter((v): v is number => Number.isFinite(v));
   const avgPrepMins =
-    prepMinutes.length > 0
-      ? prepMinutes.reduce((s, v) => s + v, 0) / prepMinutes.length
-      : 0;
+    prepMinutes.length > 0 ? prepMinutes.reduce((s, v) => s + v, 0) / prepMinutes.length : 0;
   const fastestPrepMins = prepMinutes.length > 0 ? Math.min(...prepMinutes) : 0;
   const slowestPrepMins = prepMinutes.length > 0 ? Math.max(...prepMinutes) : 0;
 
   const activeEmployees = await prisma.employee.count({
-    where: { status: "ACTIVE" },
+    where: { status: 'ACTIVE' },
   });
   const shiftsToday = await prisma.employeeShift.findMany({
     where: { shiftStart: { gte: start, lte: end } },
     select: { employeeId: true },
   });
-  const presentCount = new Set(shiftsToday.map((s) => s.employeeId)).size;
+  const presentCount = new Set(shiftsToday.map(s => s.employeeId)).size;
   const absentCount = Math.max(0, activeEmployees - presentCount);
 
   const staffRows = await prisma.order.groupBy({
-    by: ["employeeId"],
+    by: ['employeeId'],
     where: {
       createdAt: { gte: start, lte: end },
-      paymentStatus: "PAID",
+      paymentStatus: 'PAID',
       employeeId: { not: null },
     },
     _count: { _all: true },
     _sum: { totalAmount: true },
   });
-  const topEmployeeId = staffRows
-    .sort((a, b) => (b._sum.totalAmount ?? 0) - (a._sum.totalAmount ?? 0))[0]?.employeeId;
+  const topEmployeeId = staffRows.sort(
+    (a, b) => (b._sum.totalAmount ?? 0) - (a._sum.totalAmount ?? 0)
+  )[0]?.employeeId;
   const topEmployee = topEmployeeId
     ? await prisma.employee.findUnique({
         where: { id: topEmployeeId },
         select: { name: true, employeeCode: true },
       })
     : null;
-  const topStaff = topEmployee
-    ? staffRows.find((r) => r.employeeId === topEmployeeId)
-    : null;
+  const topStaff = topEmployee ? staffRows.find(r => r.employeeId === topEmployeeId) : null;
 
   const alerts: string[] = [];
   if (dailySalesTarget > 0 && (targetAchievedPct ?? 0) < 70) {
@@ -318,7 +318,9 @@ export async function runDailyDirectorReport(): Promise<boolean> {
     alerts.push(`Payment collection is low at ${formatPct(paymentCollectionRate)}.`);
   }
   if (pendingCount >= 5 || (totalOrders > 0 && pendingCount / totalOrders >= 0.3)) {
-    alerts.push(`Pending orders high: ${pendingCount} (${formatPct((pendingCount / Math.max(1, totalOrders)) * 100)}).`);
+    alerts.push(
+      `Pending orders high: ${pendingCount} (${formatPct((pendingCount / Math.max(1, totalOrders)) * 100)}).`
+    );
   }
   if (avgPrepMins > 25 && prepMinutes.length >= 5) {
     alerts.push(`Average prep time elevated: ${Math.round(avgPrepMins)} mins.`);
@@ -333,11 +335,16 @@ export async function runDailyDirectorReport(): Promise<boolean> {
     alerts.push(`Monthly pace below target at ${formatPct(monthPacePct ?? 0)}.`);
   }
 
-  const fromName = process.env.EMAIL_FROM_NAME || "Cafe Chapter 1";
+  const fromName = process.env.EMAIL_FROM_NAME || 'Cafe Chapter 1';
   const subject = `📊 Daily Business Report – ${dateStr} – Store Performance Summary`;
 
   const rows = (arr: string[][]) =>
-    arr.map((r) => `<tr>${r.map((c) => `<td style="padding:6px 12px;border:1px solid #e2e8f0">${c}</td>`).join("")}</tr>`).join("");
+    arr
+      .map(
+        r =>
+          `<tr>${r.map(c => `<td style="padding:6px 12px;border:1px solid #e2e8f0">${c}</td>`).join('')}</tr>`
+      )
+      .join('');
 
   const html = `
 <!DOCTYPE html>
@@ -351,22 +358,24 @@ export async function runDailyDirectorReport(): Promise<boolean> {
     <thead><tr style="background:#f1f5f9"><th style="padding:8px 12px;text-align:left">Metric</th><th style="padding:8px 12px;text-align:right">Value</th></tr></thead>
     <tbody>
       ${rows([
-        ["Total Sales", formatINR(totalSales)],
-        ["Total Orders", String(totalOrders)],
-        ["Completed (Paid)", String(completedCount)],
-        ["Pending", String(pendingCount)],
-        ["Average Order Value", formatINR(avgOrder)],
-        ["Partial Payments", String(partiallyPaidCount)],
-        ["Payment Collection Rate", formatPct(paymentCollectionRate)],
+        ['Total Sales', formatINR(totalSales)],
+        ['Total Orders', String(totalOrders)],
+        ['Completed (Paid)', String(completedCount)],
+        ['Pending', String(pendingCount)],
+        ['Average Order Value', formatINR(avgOrder)],
+        ['Partial Payments', String(partiallyPaidCount)],
+        ['Payment Collection Rate', formatPct(paymentCollectionRate)],
         ...(dailySalesTarget > 0
           ? [
-              ["Sales Target", formatINR(dailySalesTarget)],
-              ["Target Achieved", formatPct(targetAchievedPct ?? 0)],
+              ['Sales Target', formatINR(dailySalesTarget)],
+              ['Target Achieved', formatPct(targetAchievedPct ?? 0)],
             ]
           : []),
-        ["Net (Revenue - Removed-item Loss)", formatINR(netAfterLoss)],
-        ["Removed-item Loss", formatINR(totalLoss)],
-        ...(manualDailyExpenses > 0 ? [["Manual Daily Expenses", formatINR(manualDailyExpenses)]] : []),
+        ['Net (Revenue - Removed-item Loss)', formatINR(netAfterLoss)],
+        ['Removed-item Loss', formatINR(totalLoss)],
+        ...(manualDailyExpenses > 0
+          ? [['Manual Daily Expenses', formatINR(manualDailyExpenses)]]
+          : []),
       ])}
     </tbody>
   </table>
@@ -376,12 +385,21 @@ export async function runDailyDirectorReport(): Promise<boolean> {
     <thead><tr style="background:#f1f5f9"><th style="padding:8px 12px;text-align:left">Metric</th><th style="padding:8px 12px;text-align:right">Value</th></tr></thead>
     <tbody>
       ${rows([
-        ["Sales Change", `${salesDeltaPct >= 0 ? "▲" : "▼"} ${formatPct(Math.abs(salesDeltaPct))}`],
-        ["Orders Change", `${ordersDeltaPct >= 0 ? "▲" : "▼"} ${formatPct(Math.abs(ordersDeltaPct))}`],
-        ["Sales vs Same Day Last Week", `${salesVsLastWeekPct >= 0 ? "▲" : "▼"} ${formatPct(Math.abs(salesVsLastWeekPct))}`],
-        ["Orders vs Same Day Last Week", `${ordersVsLastWeekPct >= 0 ? "▲" : "▼"} ${formatPct(Math.abs(ordersVsLastWeekPct))}`],
+        ['Sales Change', `${salesDeltaPct >= 0 ? '▲' : '▼'} ${formatPct(Math.abs(salesDeltaPct))}`],
+        [
+          'Orders Change',
+          `${ordersDeltaPct >= 0 ? '▲' : '▼'} ${formatPct(Math.abs(ordersDeltaPct))}`,
+        ],
+        [
+          'Sales vs Same Day Last Week',
+          `${salesVsLastWeekPct >= 0 ? '▲' : '▼'} ${formatPct(Math.abs(salesVsLastWeekPct))}`,
+        ],
+        [
+          'Orders vs Same Day Last Week',
+          `${ordersVsLastWeekPct >= 0 ? '▲' : '▼'} ${formatPct(Math.abs(ordersVsLastWeekPct))}`,
+        ],
         ...(monthlyTargetSet
-          ? [["Month pace", `${formatPct(monthPacePct ?? 0)} of expected-to-date`]]
+          ? [['Month pace', `${formatPct(monthPacePct ?? 0)} of expected-to-date`]]
           : []),
       ])}
     </tbody>
@@ -395,11 +413,11 @@ export async function runDailyDirectorReport(): Promise<boolean> {
     <thead><tr style="background:#f1f5f9"><th style="padding:8px 12px;text-align:left">Metric</th><th style="padding:8px 12px;text-align:right">Value</th></tr></thead>
     <tbody>
       ${rows([
-        ["Target", formatINR(monthlySalesTarget)],
-        ["Achieved Till Today", formatINR(monthSoFarSales)],
-        ["Complete", formatPct(monthlyAchievedPct ?? 0)],
-        ["Status", monthlyTargetStatusLabel],
-        ["Time Remaining", `${daysLeftInMonth} day(s) left in ${monthLabel}`],
+        ['Target', formatINR(monthlySalesTarget)],
+        ['Achieved Till Today', formatINR(monthSoFarSales)],
+        ['Complete', formatPct(monthlyAchievedPct ?? 0)],
+        ['Status', monthlyTargetStatusLabel],
+        ['Time Remaining', `${daysLeftInMonth} day(s) left in ${monthLabel}`],
       ])}
     </tbody>
   </table>
@@ -417,11 +435,11 @@ export async function runDailyDirectorReport(): Promise<boolean> {
   <table style="width:100%;border-collapse:collapse;margin-bottom:24px">
     <thead><tr style="background:#f1f5f9"><th style="padding:8px 12px;text-align:left">Item</th><th style="padding:8px 12px;text-align:right">Qty</th><th style="padding:8px 12px;text-align:right">Revenue</th></tr></thead>
     <tbody>
-      ${rows(topItems.map((i) => [i.name, String(i.quantity), formatINR(i.revenue)]))}
+      ${rows(topItems.map(i => [i.name, String(i.quantity), formatINR(i.revenue)]))}
     </tbody>
   </table>
   `
-      : ""
+      : ''
   }
 
   ${
@@ -431,11 +449,11 @@ export async function runDailyDirectorReport(): Promise<boolean> {
   <table style="width:100%;border-collapse:collapse;margin-bottom:24px">
     <thead><tr style="background:#f1f5f9"><th style="padding:8px 12px;text-align:left">Time Slot</th><th style="padding:8px 12px;text-align:right">Orders</th><th style="padding:8px 12px;text-align:right">Revenue</th></tr></thead>
     <tbody>
-      ${rows(peakHours.map((h) => [h.hourLabel, String(h.orders), formatINR(h.revenue)]))}
+      ${rows(peakHours.map(h => [h.hourLabel, String(h.orders), formatINR(h.revenue)]))}
     </tbody>
   </table>
   `
-      : ""
+      : ''
   }
 
   ${
@@ -446,15 +464,15 @@ export async function runDailyDirectorReport(): Promise<boolean> {
     <thead><tr style="background:#f1f5f9"><th style="padding:8px 12px">Metric</th><th style="padding:8px 12px">Value</th></tr></thead>
     <tbody>
       ${rows([
-        ["Employees Late", String(lateToday.length)],
-        ["Overtime Records", String(overtimeToday.length)],
-        ["Staff Present", `${presentCount}/${activeEmployees}`],
-        ["Staff Absent", String(absentCount)],
+        ['Employees Late', String(lateToday.length)],
+        ['Overtime Records', String(overtimeToday.length)],
+        ['Staff Present', `${presentCount}/${activeEmployees}`],
+        ['Staff Absent', String(absentCount)],
       ])}
     </tbody>
   </table>
   `
-      : ""
+      : ''
   }
 
   ${
@@ -465,17 +483,26 @@ export async function runDailyDirectorReport(): Promise<boolean> {
     <thead><tr style="background:#f1f5f9"><th style="padding:8px 12px">Metric</th><th style="padding:8px 12px">Value</th></tr></thead>
     <tbody>
       ${rows([
-        ["Customer feedback/issues raised", String(customerFeedback.length)],
-        ["Customer feedback open", String(feedbackOpenCount)],
-        ["Avg order preparation time", avgPrepMins > 0 ? `${Math.round(avgPrepMins * 10) / 10} mins` : "N/A"],
-        ["Fastest prep time", fastestPrepMins > 0 ? `${Math.round(fastestPrepMins * 10) / 10} mins` : "N/A"],
-        ["Slowest prep time", slowestPrepMins > 0 ? `${Math.round(slowestPrepMins * 10) / 10} mins` : "N/A"],
-        ["Cancelled/Rejected orders", String(cancelledOrRejectedCount)],
+        ['Customer feedback/issues raised', String(customerFeedback.length)],
+        ['Customer feedback open', String(feedbackOpenCount)],
+        [
+          'Avg order preparation time',
+          avgPrepMins > 0 ? `${Math.round(avgPrepMins * 10) / 10} mins` : 'N/A',
+        ],
+        [
+          'Fastest prep time',
+          fastestPrepMins > 0 ? `${Math.round(fastestPrepMins * 10) / 10} mins` : 'N/A',
+        ],
+        [
+          'Slowest prep time',
+          slowestPrepMins > 0 ? `${Math.round(slowestPrepMins * 10) / 10} mins` : 'N/A',
+        ],
+        ['Cancelled/Rejected orders', String(cancelledOrRejectedCount)],
       ])}
     </tbody>
   </table>
   `
-      : ""
+      : ''
   }
 
   ${
@@ -486,14 +513,17 @@ export async function runDailyDirectorReport(): Promise<boolean> {
     <thead><tr style="background:#f1f5f9"><th style="padding:8px 12px">Metric</th><th style="padding:8px 12px">Value</th></tr></thead>
     <tbody>
       ${rows([
-        ["Top performer (by paid sales)", `${topEmployee.name}${topEmployee.employeeCode ? ` (${topEmployee.employeeCode})` : ""}`],
-        ["Top performer paid orders", String(topStaff._count._all)],
-        ["Top performer sales", formatINR(topStaff._sum.totalAmount ?? 0)],
+        [
+          'Top performer (by paid sales)',
+          `${topEmployee.name}${topEmployee.employeeCode ? ` (${topEmployee.employeeCode})` : ''}`,
+        ],
+        ['Top performer paid orders', String(topStaff._count._all)],
+        ['Top performer sales', formatINR(topStaff._sum.totalAmount ?? 0)],
       ])}
     </tbody>
   </table>
   `
-      : ""
+      : ''
   }
 
   ${
@@ -501,10 +531,10 @@ export async function runDailyDirectorReport(): Promise<boolean> {
       ? `
   <h2 style="color:#b91c1c;font-size:1.1em;margin-top:24px">🚨 Critical Alerts</h2>
   <ul style="margin:0 0 24px 0;padding-left:20px;color:#7f1d1d">
-    ${alerts.map((a) => `<li style="margin:4px 0">${a}</li>`).join("")}
+    ${alerts.map(a => `<li style="margin:4px 0">${a}</li>`).join('')}
   </ul>
   `
-      : ""
+      : ''
   }
 
   ${
@@ -513,7 +543,7 @@ export async function runDailyDirectorReport(): Promise<boolean> {
   <h2 style="color:#b45309;font-size:1.1em;margin-top:24px">⚠ Pending Payment Summary</h2>
   <p>${pendingCount} order(s) still pending. Total: ${formatINR(totalPending)}</p>
   `
-      : ""
+      : ''
   }
 
   <p style="margin-top:32px;color:#64748b;font-size:12px">This report was generated automatically at 04:05 AM after shift auto-close.</p>
@@ -527,33 +557,37 @@ export async function runDailyDirectorReport(): Promise<boolean> {
     `Total Orders: ${totalOrders} | Completed: ${completedCount} | Pending: ${pendingCount}`,
     `Avg Order: ${formatINR(avgOrder)}`,
     `Payment collection: ${formatPct(paymentCollectionRate)}`,
-    dailySalesTarget > 0 ? `Target achieved: ${formatPct(targetAchievedPct ?? 0)} of ${formatINR(dailySalesTarget)}` : "",
-    `Net (cost proxy): ${formatINR(netAfterLoss)} (Removed-item loss: ${formatINR(totalLoss)}${manualDailyExpenses > 0 ? `, Manual expenses: ${formatINR(manualDailyExpenses)}` : ""})`,
-    `Vs yesterday - Sales: ${salesDeltaPct >= 0 ? "+" : ""}${formatPct(salesDeltaPct)}, Orders: ${ordersDeltaPct >= 0 ? "+" : ""}${formatPct(ordersDeltaPct)}`,
-    `Vs same day last week - Sales: ${salesVsLastWeekPct >= 0 ? "+" : ""}${formatPct(salesVsLastWeekPct)}, Orders: ${ordersVsLastWeekPct >= 0 ? "+" : ""}${formatPct(ordersVsLastWeekPct)}`,
+    dailySalesTarget > 0
+      ? `Target achieved: ${formatPct(targetAchievedPct ?? 0)} of ${formatINR(dailySalesTarget)}`
+      : '',
+    `Net (cost proxy): ${formatINR(netAfterLoss)} (Removed-item loss: ${formatINR(totalLoss)}${manualDailyExpenses > 0 ? `, Manual expenses: ${formatINR(manualDailyExpenses)}` : ''})`,
+    `Vs yesterday - Sales: ${salesDeltaPct >= 0 ? '+' : ''}${formatPct(salesDeltaPct)}, Orders: ${ordersDeltaPct >= 0 ? '+' : ''}${formatPct(ordersDeltaPct)}`,
+    `Vs same day last week - Sales: ${salesVsLastWeekPct >= 0 ? '+' : ''}${formatPct(salesVsLastWeekPct)}, Orders: ${ordersVsLastWeekPct >= 0 ? '+' : ''}${formatPct(ordersVsLastWeekPct)}`,
     monthlyTargetSet
       ? `${monthLabel} target progress: Target ${formatINR(monthlySalesTarget)}, Achieved ${formatINR(monthSoFarSales)} (${formatPct(monthlyAchievedPct ?? 0)}), ${monthlyTargetStatusLabel}, ${daysLeftInMonth} day(s) left in ${monthLabel}`
       : `Monthly target not set for ${monthLabel}. Admin can set it in Dashboard.`,
     `Staffing: Present ${presentCount}/${activeEmployees}, Absent ${absentCount}, Late ${lateToday.length}, Overtime ${overtimeToday.length}`,
-    `Customer issues: ${customerFeedback.length} (${feedbackOpenCount} open), Prep avg ${avgPrepMins > 0 ? `${Math.round(avgPrepMins * 10) / 10} mins` : "N/A"}, Fastest ${fastestPrepMins > 0 ? `${Math.round(fastestPrepMins * 10) / 10} mins` : "N/A"}, Rejected: ${cancelledOrRejectedCount}`,
+    `Customer issues: ${customerFeedback.length} (${feedbackOpenCount} open), Prep avg ${avgPrepMins > 0 ? `${Math.round(avgPrepMins * 10) / 10} mins` : 'N/A'}, Fastest ${fastestPrepMins > 0 ? `${Math.round(fastestPrepMins * 10) / 10} mins` : 'N/A'}, Rejected: ${cancelledOrRejectedCount}`,
     topEmployee && topStaff
       ? `Top staff: ${topEmployee.name} (${topStaff._count._all} paid orders, ${formatINR(topStaff._sum.totalAmount ?? 0)} sales)`
-      : "",
+      : '',
     peakHours.length > 0
-      ? `Peak hours: ${peakHours.map((h) => `${h.hourLabel} (${h.orders})`).join(", ")}`
-      : "",
-    alerts.length > 0 ? `Critical alerts: ${alerts.join(" | ")}` : "",
-    pendingCount > 0 ? `Pending amount: ${formatINR(totalPending)}` : "",
+      ? `Peak hours: ${peakHours.map(h => `${h.hourLabel} (${h.orders})`).join(', ')}`
+      : '',
+    alerts.length > 0 ? `Critical alerts: ${alerts.join(' | ')}` : '',
+    pendingCount > 0 ? `Pending amount: ${formatINR(totalPending)}` : '',
   ]
     .filter(Boolean)
-    .join("\n");
+    .join('\n');
 
   try {
     await sendEmail({ to: directorEmails, subject, text, html });
-    console.log(`[DailyDirectorReport] Sent to ${directorEmails.length} director(s) for ${dateStr}`);
+    console.log(
+      `[DailyDirectorReport] Sent to ${directorEmails.length} director(s) for ${dateStr}`
+    );
     return true;
   } catch (e: unknown) {
-    console.error("[DailyDirectorReport] Send failed:", (e as Error)?.message ?? e);
+    console.error('[DailyDirectorReport] Send failed:', (e as Error)?.message ?? e);
     return false;
   }
 }
@@ -567,6 +601,6 @@ export function startDailyDirectorReportCron(): void {
     if (minute === lastMinute) return;
     lastMinute = minute;
     if (!is405AMInTimezone()) return;
-    runDailyDirectorReport().catch((e) => console.error("Daily director report error:", e));
+    runDailyDirectorReport().catch(e => console.error('Daily director report error:', e));
   }, 60 * 1000);
 }

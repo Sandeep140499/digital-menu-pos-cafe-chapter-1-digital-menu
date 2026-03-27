@@ -3,11 +3,11 @@
  * Builds invoice, status, and payment messages. Use waMeLink to open WhatsApp with pre-filled text.
  */
 
-const RESTAURANT_NAME = process.env.RESTAURANT_NAME || "CAFE CHAPTER 1 RESTRO";
-const RESTAURANT_PHONE = process.env.RESTAURANT_PHONE || "";
-const DEFAULT_REVIEW_URL = process.env.GOOGLE_REVIEW_URL || "";
-const DEFAULT_ADDRESS = process.env.RESTAURANT_ADDRESS || "Green Park, Gautam Nagar, New Delhi";
-const MENU_BASE_URL = process.env.MENU_BASE_URL || "";
+const RESTAURANT_NAME = process.env.RESTAURANT_NAME || 'CAFE CHAPTER 1 RESTRO';
+const RESTAURANT_PHONE = process.env.RESTAURANT_PHONE || '';
+const DEFAULT_REVIEW_URL = process.env.GOOGLE_REVIEW_URL || '';
+const DEFAULT_ADDRESS = process.env.RESTAURANT_ADDRESS || 'Green Park, Gautam Nagar, New Delhi';
+const MENU_BASE_URL = process.env.MENU_BASE_URL || '';
 
 export type BranchInfo = {
   name?: string | null;
@@ -20,9 +20,9 @@ export type BranchInfo = {
 };
 
 function normalizeMobile(mobile: string): string {
-  const digits = mobile.replace(/\D/g, "");
+  const digits = mobile.replace(/\D/g, '');
   if (digits.length === 10) return `91${digits}`;
-  if (digits.length === 12 && digits.startsWith("91")) return digits;
+  if (digits.length === 12 && digits.startsWith('91')) return digits;
   return `91${digits.slice(-10)}`;
 }
 
@@ -35,26 +35,33 @@ export function getWaMeLink(mobile: string, text: string): string {
 export function buildOrderInvoice(params: {
   orderId: number;
   customerName: string;
-  items: Array<{ name: string; quantity: number; price: number; variant?: string | null; isRemoved?: boolean }>;
+  items: Array<{
+    name: string;
+    quantity: number;
+    price: number;
+    variant?: string | null;
+    isRemoved?: boolean;
+  }>;
   totalAmount: number;
   tableNumber: string;
   branch?: BranchInfo | null;
   invoicePdfUrl?: string | null;
   acceptedBy?: { name: string; role?: string | null } | null;
 }): string {
-  const { orderId, customerName, totalAmount, tableNumber, branch, invoicePdfUrl, acceptedBy } = params;
+  const { orderId, customerName, totalAmount, tableNumber, branch, invoicePdfUrl, acceptedBy } =
+    params;
   const name = branch?.name || RESTAURANT_NAME;
   const location = branch?.location || DEFAULT_ADDRESS;
   const phone = branch?.phone || RESTAURANT_PHONE;
   const menuUrl = MENU_BASE_URL;
-  const orderIdStr = `ORD${String(orderId).padStart(4, "0")}`;
+  const orderIdStr = `ORD${String(orderId).padStart(4, '0')}`;
 
   let msg = `Hello ${customerName} 👋\n\n`;
   msg += `Your order has been confirmed at\n${name}\n\n`;
   msg += `Order ID: ${orderIdStr}\n`;
   msg += `Branch: ${location}\n`;
   if (acceptedBy?.name) {
-    msg += `Order accepted by: ${acceptedBy.name}${acceptedBy.role ? ` (${acceptedBy.role})` : ""}\n`;
+    msg += `Order accepted by: ${acceptedBy.name}${acceptedBy.role ? ` (${acceptedBy.role})` : ''}\n`;
   }
   if (branch?.showTotalAmountToCustomers !== false) {
     msg += `Total Amount: ₹${totalAmount.toFixed(0)}\n`;
@@ -84,12 +91,12 @@ export function buildStatusMessage(params: {
   branch?: BranchInfo | null;
 }): string {
   const { orderId, customerName, status, tableNumber, totalAmount, branch } = params;
-  const orderIdStr = `ORD${String(orderId).padStart(4, "0")}`;
+  const orderIdStr = `ORD${String(orderId).padStart(4, '0')}`;
 
-  if (status === "Preparing" || status.toLowerCase().includes("preparing")) {
+  if (status === 'Preparing' || status.toLowerCase().includes('preparing')) {
     return `Order ${orderIdStr} is being prepared 👨‍🍳`;
   }
-  if (status === "Served" || status.toLowerCase().includes("ready")) {
+  if (status === 'Served' || status.toLowerCase().includes('ready')) {
     let msg = `Hello ${customerName} 🔔\n\n`;
     msg += `Your order ${orderIdStr} is READY.\n\n`;
     if (tableNumber) msg += `Please collect from Table ${tableNumber}.\n\n`;
@@ -98,7 +105,7 @@ export function buildStatusMessage(params: {
     msg += `Payment: Pending`;
     return msg;
   }
-  if (status === "Completed" || status.toLowerCase().includes("complete")) {
+  if (status === 'Completed' || status.toLowerCase().includes('complete')) {
     let msg = `Order Completed ✅\n\n`;
     if (branch?.showTotalAmountToCustomers !== false && totalAmount != null)
       msg += `Total Paid: ₹${totalAmount.toFixed(0)}\n\n`;
@@ -116,31 +123,38 @@ export function buildStatusMessage(params: {
 export function buildPaymentMessage(params: {
   orderId: number;
   customerName: string;
-  items?: Array<{ name: string; quantity: number; price: number; variant?: string | null; isRemoved?: boolean }>;
+  items?: Array<{
+    name: string;
+    quantity: number;
+    price: number;
+    variant?: string | null;
+    isRemoved?: boolean;
+  }>;
   totalAmount: number;
-  paymentStatus: "PAID" | "PARTIAL" | "UNPAID";
+  paymentStatus: 'PAID' | 'PARTIAL' | 'UNPAID';
   includeReviewLink: boolean;
   branch?: BranchInfo | null;
 }): string {
-  const { orderId, customerName, items, totalAmount, paymentStatus, includeReviewLink, branch } = params;
+  const { orderId, customerName, items, totalAmount, paymentStatus, includeReviewLink, branch } =
+    params;
   const name = branch?.name || RESTAURANT_NAME;
   const reviewUrl = branch?.googleReviewUrl || DEFAULT_REVIEW_URL;
-  const instagramUrl = branch?.instagramUrl || process.env.INSTAGRAM_URL || "";
-  const orderIdStr = `ORD${String(orderId).padStart(4, "0")}`;
+  const instagramUrl = branch?.instagramUrl || process.env.INSTAGRAM_URL || '';
+  const orderIdStr = `ORD${String(orderId).padStart(4, '0')}`;
   const menuUrl = MENU_BASE_URL;
 
-  const visibleItems = (items || []).filter((i) => !i.isRemoved);
+  const visibleItems = (items || []).filter(i => !i.isRemoved);
   const itemLines =
     visibleItems.length > 0
       ? visibleItems
-          .map((i) => {
-            const v = i.variant ? ` (${i.variant})` : "";
+          .map(i => {
+            const v = i.variant ? ` (${i.variant})` : '';
             return `- ${i.name}${v} x${i.quantity}`;
           })
-          .join("\n")
-      : "";
+          .join('\n')
+      : '';
 
-  if (paymentStatus === "PAID") {
+  if (paymentStatus === 'PAID') {
     let msg = `Payment Received 💳\n\n`;
     msg += `Order: ${orderIdStr}\n`;
     msg += `Restaurant: ${name}\n\n`;
@@ -172,7 +186,7 @@ export function buildQueryResolvedMessage(params: {
   orderId?: number | null;
 }): string {
   const { customerName, orderId } = params;
-  const orderIdStr = orderId != null ? `ORD${String(orderId).padStart(4, "0")}` : "your request";
+  const orderIdStr = orderId != null ? `ORD${String(orderId).padStart(4, '0')}` : 'your request';
   return `Hello ${customerName} 👋\n\nYour query regarding order ${orderIdStr} has been resolved.\n\nThank you for your patience ❤️\n\nContact us if needed.`;
 }
 
@@ -188,9 +202,9 @@ export function buildNewItemBroadcast(params: {
 
   let msg = `*${name}*\n\n`;
   msg += `*NEW LAUNCH* 🎉\n\n`;
-  msg += itemNames.join(", ");
+  msg += itemNames.join(', ');
   msg += `\n\n`;
   if (itemDetails) msg += `${itemDetails}\n\n`;
-  msg += `View full menu & order:\n${menuUrl || "Visit us at the restaurant"}\n`;
+  msg += `View full menu & order:\n${menuUrl || 'Visit us at the restaurant'}\n`;
   return msg;
 }

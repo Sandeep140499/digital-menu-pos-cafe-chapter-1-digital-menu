@@ -1,6 +1,6 @@
-﻿import { useEffect, useState, useMemo } from "react";
-import DashboardShell from "@/components/dashboard/DashboardShell";
-import { useToast } from "@/hooks/use-toast";
+﻿import { useEffect, useState, useMemo } from 'react';
+import DashboardShell from '@/components/dashboard/DashboardShell';
+import { useToast } from '@/hooks/use-toast';
 import {
   LayoutDashboard,
   Utensils,
@@ -35,18 +35,12 @@ import {
   ChevronLeft,
   Eye,
   FileText,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Dialog,
   DialogContent,
@@ -54,16 +48,16 @@ import {
   DialogTitle,
   DialogFooter,
   DialogTrigger,
-} from "@/components/ui/dialog";
+} from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+} from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import {
   Table,
   TableBody,
@@ -71,12 +65,11 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { Separator } from "@/components/ui/separator";
-import { ScrollArea } from "@/components/ui/scroll-area";
+} from '@/components/ui/table';
+import { Separator } from '@/components/ui/separator';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
-const apiBase =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api";
+const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000/api';
 
 // Types
 type MenuCategory = {
@@ -103,7 +96,7 @@ type Employee = {
   name: string;
   email: string;
   employeeCode: string;
-  status: "ACTIVE" | "INACTIVE" | "LEFT";
+  status: 'ACTIVE' | 'INACTIVE' | 'LEFT';
   branchId: number;
   createdAt: string;
   profileImageUrl?: string;
@@ -183,34 +176,34 @@ type DailyRemovalSummary = {
 
 // INR Currency formatter
 const formatINR = (amount: number) => {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(amount);
 };
 
 const sidebarItems: SidebarItem[] = [
-  { key: "overview", label: "Overview", icon: LayoutDashboard },
-  { key: "menu", label: "Menu", icon: ChefHat },
-  { key: "employees", label: "Employees", icon: Users },
-  { key: "orders", label: "Orders", icon: ShoppingCart },
-  { key: "removed-items", label: "Removed Items", icon: Trash2 },
-  { key: "hours", label: "Work Hours", icon: Clock },
-  { key: "salary-slips", label: "Salary Slips", icon: IndianRupee },
-  { key: "certificates", label: "Certificates", icon: Award },
-  { key: "settings", label: "Settings", icon: Settings },
+  { key: 'overview', label: 'Overview', icon: LayoutDashboard },
+  { key: 'menu', label: 'Menu', icon: ChefHat },
+  { key: 'employees', label: 'Employees', icon: Users },
+  { key: 'orders', label: 'Orders', icon: ShoppingCart },
+  { key: 'removed-items', label: 'Removed Items', icon: Trash2 },
+  { key: 'hours', label: 'Work Hours', icon: Clock },
+  { key: 'salary-slips', label: 'Salary Slips', icon: IndianRupee },
+  { key: 'certificates', label: 'Certificates', icon: Award },
+  { key: 'settings', label: 'Settings', icon: Settings },
 ];
 
 const AdminDashboard = () => {
   const { toast } = useToast();
   const [activeSection, setActiveSection] = useState<string>(() => {
     // Persist section state in localStorage
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("admin_active_section") || "overview";
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('admin_active_section') || 'overview';
     }
-    return "overview";
+    return 'overview';
   });
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
@@ -218,8 +211,8 @@ const AdminDashboard = () => {
 
   // Persist active section to localStorage
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("admin_active_section", activeSection);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('admin_active_section', activeSection);
     }
   }, [activeSection]);
   const [categories, setCategories] = useState<MenuCategory[]>([]);
@@ -232,24 +225,24 @@ const AdminDashboard = () => {
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
   const [isItemDialogOpen, setIsItemDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
-  const [categoryForm, setCategoryForm] = useState({ name: "", imageUrl: "" });
+  const [categoryForm, setCategoryForm] = useState({ name: '', imageUrl: '' });
   const [itemForm, setItemForm] = useState({
-    name: "",
-    description: "",
+    name: '',
+    description: '',
     basePrice: 0,
     hasHalf: false,
     halfPrice: 0,
     isActive: true,
     categoryId: 0,
-    imageUrl: "",
+    imageUrl: '',
   });
 
   const [isEmployeeDialogOpen, setIsEmployeeDialogOpen] = useState(false);
   const [employeeForm, setEmployeeForm] = useState({
-    name: "",
-    email: "",
-    employeeCode: "",
-    status: "ACTIVE" as const,
+    name: '',
+    email: '',
+    employeeCode: '',
+    status: 'ACTIVE' as const,
   });
 
   // Additional state for new features
@@ -258,15 +251,15 @@ const AdminDashboard = () => {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isOrderDialogOpen, setIsOrderDialogOpen] = useState(false);
   const [orderDateFilter, setOrderDateFilter] = useState<string>(
-    new Date().toISOString().slice(0, 10),
+    new Date().toISOString().slice(0, 10)
   );
-  const [orderTableFilter, setOrderTableFilter] = useState<string>("all");
+  const [orderTableFilter, setOrderTableFilter] = useState<string>('all');
 
   // Work hours state
   const [shifts, setShifts] = useState<any[]>([]);
-  const [hoursEmployeeFilter, setHoursEmployeeFilter] = useState<string>("all");
-  const [hoursStartDate, setHoursStartDate] = useState<string>("");
-  const [hoursEndDate, setHoursEndDate] = useState<string>("");
+  const [hoursEmployeeFilter, setHoursEmployeeFilter] = useState<string>('all');
+  const [hoursStartDate, setHoursStartDate] = useState<string>('');
+  const [hoursEndDate, setHoursEndDate] = useState<string>('');
   const [hoursSummary, setHoursSummary] = useState({
     totalShifts: 0,
     totalHours: 0,
@@ -278,26 +271,24 @@ const AdminDashboard = () => {
   const [branch, setBranch] = useState<any>(null);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [branchForm, setBranchForm] = useState({
-    name: "",
-    location: "",
-    timezone: "Asia/Kolkata",
+    name: '',
+    location: '',
+    timezone: 'Asia/Kolkata',
   });
 
   // Removed items state
   const [removedItems, setRemovedItems] = useState<RemovedItem[]>([]);
-  const [dailyRemovalSummaries, setDailyRemovalSummaries] = useState<
-    DailyRemovalSummary[]
-  >([]);
+  const [dailyRemovalSummaries, setDailyRemovalSummaries] = useState<DailyRemovalSummary[]>([]);
   const [removedItemsDateFilter, setRemovedItemsDateFilter] = useState<string>(
-    new Date().toISOString().slice(0, 10),
+    new Date().toISOString().slice(0, 10)
   );
   const [totalLoss, setTotalLoss] = useState<number>(0);
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
 
   // Menu management state
-  const [menuSearchQuery, setMenuSearchQuery] = useState("");
+  const [menuSearchQuery, setMenuSearchQuery] = useState('');
   const [viewingCategory, setViewingCategory] = useState<number | null>(null);
 
   // Salary slips state
@@ -305,7 +296,7 @@ const AdminDashboard = () => {
   const [isSalarySlipDialogOpen, setIsSalarySlipDialogOpen] = useState(false);
   const [salarySlipForm, setSalarySlipForm] = useState({
     employeeId: 0,
-    month: "",
+    month: '',
     year: new Date().getFullYear(),
     basicSalary: 0,
     allowances: 0,
@@ -318,10 +309,10 @@ const AdminDashboard = () => {
   const [isCertificateDialogOpen, setIsCertificateDialogOpen] = useState(false);
   const [certificateForm, setCertificateForm] = useState({
     employeeId: 0,
-    name: "",
-    issueDate: new Date().toISOString().split("T")[0],
-    expiryDate: "",
-    type: "",
+    name: '',
+    issueDate: new Date().toISOString().split('T')[0],
+    expiryDate: '',
+    type: '',
   });
 
   // Time updater
@@ -333,26 +324,24 @@ const AdminDashboard = () => {
   // Filtered categories for menu search
   const filteredCategories = useMemo(() => {
     if (!menuSearchQuery) return categories;
-    return categories.filter((cat) =>
-      cat.name.toLowerCase().includes(menuSearchQuery.toLowerCase()),
-    );
+    return categories.filter(cat => cat.name.toLowerCase().includes(menuSearchQuery.toLowerCase()));
   }, [categories, menuSearchQuery]);
 
   // Viewing category data
   const viewingCategoryData = useMemo(() => {
     if (!viewingCategory) return null;
-    return categories.find((c) => c.id === viewingCategory);
+    return categories.find(c => c.id === viewingCategory);
   }, [categories, viewingCategory]);
 
   // Active employees for salary slips and certificates
   const activeEmployees = useMemo(() => {
-    return employees.filter((e) => e.status === "ACTIVE");
+    return employees.filter(e => e.status === 'ACTIVE');
   }, [employees]);
 
   useEffect(() => {
-    const storedToken = window.localStorage.getItem("dm_auth_token");
+    const storedToken = window.localStorage.getItem('dm_auth_token');
     if (!storedToken) {
-      window.location.href = "/login";
+      window.location.href = '/login';
       return;
     }
     setToken(storedToken);
@@ -368,26 +357,20 @@ const AdminDashboard = () => {
   // Calculate today's stats
   const todayStats: TodayStats = useMemo(() => {
     const todayOrders = orders;
-    const paidOrders = todayOrders.filter((o) => o.paymentStatus === "PAID");
-    const pendingOrders = todayOrders.filter((o) => o.paymentStatus !== "PAID");
+    const paidOrders = todayOrders.filter(o => o.paymentStatus === 'PAID');
+    const pendingOrders = todayOrders.filter(o => o.paymentStatus !== 'PAID');
 
     const totalRevenue = paidOrders.reduce((sum, o) => sum + o.totalAmount, 0);
     const totalOrders = todayOrders.length;
     const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
-    const activeEmps = employees.filter((e) => e.status === "ACTIVE").length;
+    const activeEmps = employees.filter(e => e.status === 'ACTIVE').length;
 
-    const totalItemsSold = itemSales.reduce(
-      (sum, item) => sum + item.quantity,
-      0,
-    );
+    const totalItemsSold = itemSales.reduce((sum, item) => sum + item.quantity, 0);
 
     const topItem =
       itemSales.length > 0
-        ? itemSales.reduce(
-            (max, item) => (item.quantity > max.quantity ? item : max),
-            itemSales[0],
-          )
+        ? itemSales.reduce((max, item) => (item.quantity > max.quantity ? item : max), itemSales[0])
         : null;
 
     return {
@@ -398,9 +381,7 @@ const AdminDashboard = () => {
       activeEmployees: activeEmps,
       avgOrderValue,
       totalItemsSold,
-      topSellingItem: topItem
-        ? { name: topItem.itemName, quantity: topItem.quantity }
-        : null,
+      topSellingItem: topItem ? { name: topItem.itemName, quantity: topItem.quantity } : null,
     };
   }, [orders, employees, itemSales]);
 
@@ -446,9 +427,7 @@ const AdminDashboard = () => {
             });
           });
         }
-        setItemSales(
-          Array.from(itemMap.values()).sort((a, b) => b.quantity - a.quantity),
-        );
+        setItemSales(Array.from(itemMap.values()).sort((a, b) => b.quantity - a.quantity));
       }
 
       if (employeesRes.ok) {
@@ -474,17 +453,13 @@ const AdminDashboard = () => {
             if (order.employeeId && empSalesMap.has(order.employeeId)) {
               const empSale = empSalesMap.get(order.employeeId)!;
               empSale.orders += 1;
-              if (order.paymentStatus === "PAID") {
+              if (order.paymentStatus === 'PAID') {
                 empSale.revenue += order.totalAmount;
               }
             }
           });
 
-          setEmployeeSales(
-            Array.from(empSalesMap.values()).sort(
-              (a, b) => b.revenue - a.revenue,
-            ),
-          );
+          setEmployeeSales(Array.from(empSalesMap.values()).sort((a, b) => b.revenue - a.revenue));
         }
       }
 
@@ -493,11 +468,11 @@ const AdminDashboard = () => {
         setOrders(ordersData);
       }
     } catch (error) {
-      console.error("Error loading dashboard data:", error);
+      console.error('Error loading dashboard data:', error);
       toast({
-        title: "Error",
-        description: "Failed to load dashboard data",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to load dashboard data',
+        variant: 'destructive',
       });
     } finally {
       setLoading(false);
@@ -509,24 +484,24 @@ const AdminDashboard = () => {
     if (!token || !categoryForm.name.trim()) return;
     try {
       const res = await fetch(`${apiBase}/menu/categories`, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ name: categoryForm.name }),
       });
       if (res.ok) {
-        toast({ title: "Success", description: "Category created" });
-        setCategoryForm({ name: "" });
+        toast({ title: 'Success', description: 'Category created' });
+        setCategoryForm({ name: '' });
         setIsCategoryDialogOpen(false);
         loadDashboardData();
       }
     } catch (error) {
       toast({
-        title: "Error",
-        description: "Failed to create category",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to create category',
+        variant: 'destructive',
       });
     }
   };
@@ -535,18 +510,18 @@ const AdminDashboard = () => {
     if (!token) return;
     try {
       const res = await fetch(`${apiBase}/menu/categories/${id}`, {
-        method: "DELETE",
+        method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
-        toast({ title: "Success", description: "Category deleted" });
+        toast({ title: 'Success', description: 'Category deleted' });
         loadDashboardData();
       }
     } catch (error) {
       toast({
-        title: "Error",
-        description: "Failed to delete category",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to delete category',
+        variant: 'destructive',
       });
     }
   };
@@ -555,33 +530,33 @@ const AdminDashboard = () => {
     if (!token || !itemForm.name.trim() || itemForm.basePrice <= 0) return;
     try {
       const res = await fetch(`${apiBase}/menu/items`, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(itemForm),
       });
       if (res.ok) {
-        toast({ title: "Success", description: "Menu item created" });
+        toast({ title: 'Success', description: 'Menu item created' });
         setItemForm({
-          name: "",
-          description: "",
+          name: '',
+          description: '',
           basePrice: 0,
           hasHalf: false,
           halfPrice: 0,
           isActive: true,
           categoryId: 0,
-          imageUrl: "",
+          imageUrl: '',
         });
         setIsItemDialogOpen(false);
         loadDashboardData();
       }
     } catch (error) {
       toast({
-        title: "Error",
-        description: "Failed to create item",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to create item',
+        variant: 'destructive',
       });
     }
   };
@@ -590,24 +565,24 @@ const AdminDashboard = () => {
     if (!token || !editingItem) return;
     try {
       const res = await fetch(`${apiBase}/menu/items/${editingItem.id}`, {
-        method: "PATCH",
+        method: 'PATCH',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(itemForm),
       });
       if (res.ok) {
-        toast({ title: "Success", description: "Menu item updated" });
+        toast({ title: 'Success', description: 'Menu item updated' });
         setEditingItem(null);
         setIsItemDialogOpen(false);
         loadDashboardData();
       }
     } catch (error) {
       toast({
-        title: "Error",
-        description: "Failed to update item",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to update item',
+        variant: 'destructive',
       });
     }
   };
@@ -616,54 +591,53 @@ const AdminDashboard = () => {
     if (!token) return;
     try {
       const res = await fetch(`${apiBase}/menu/items/${id}`, {
-        method: "DELETE",
+        method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
-        toast({ title: "Success", description: "Menu item deleted" });
+        toast({ title: 'Success', description: 'Menu item deleted' });
         loadDashboardData();
       }
     } catch (error) {
       toast({
-        title: "Error",
-        description: "Failed to delete item",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to delete item',
+        variant: 'destructive',
       });
     }
   };
 
   const handleCreateEmployee = async () => {
-    if (!token || !employeeForm.name.trim() || !employeeForm.email.trim())
-      return;
+    if (!token || !employeeForm.name.trim() || !employeeForm.email.trim()) return;
     try {
       const res = await fetch(`${apiBase}/employees`, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           ...employeeForm,
           branchId: 1,
-          password: "password123",
+          password: 'password123',
         }),
       });
       if (res.ok) {
-        toast({ title: "Success", description: "Employee created" });
+        toast({ title: 'Success', description: 'Employee created' });
         setEmployeeForm({
-          name: "",
-          email: "",
-          employeeCode: "",
-          status: "ACTIVE",
+          name: '',
+          email: '',
+          employeeCode: '',
+          status: 'ACTIVE',
         });
         setIsEmployeeDialogOpen(false);
         loadDashboardData();
       }
     } catch (error) {
       toast({
-        title: "Error",
-        description: "Failed to create employee",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to create employee',
+        variant: 'destructive',
       });
     }
   };
@@ -672,23 +646,23 @@ const AdminDashboard = () => {
     if (!token) return;
     try {
       const res = await fetch(`${apiBase}/orders/${orderId}/status`, {
-        method: "PATCH",
+        method: 'PATCH',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ status }),
       });
       if (res.ok) {
-        toast({ title: "Success", description: `Order ${status}` });
+        toast({ title: 'Success', description: `Order ${status}` });
         loadDashboardData();
         loadAllOrders();
       }
     } catch (error) {
       toast({
-        title: "Error",
-        description: "Failed to update order",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to update order',
+        variant: 'destructive',
       });
     }
   };
@@ -698,9 +672,8 @@ const AdminDashboard = () => {
     if (!token) return;
     try {
       const params = new URLSearchParams();
-      if (orderDateFilter) params.append("date", orderDateFilter);
-      if (orderTableFilter !== "all")
-        params.append("tableId", orderTableFilter);
+      if (orderDateFilter) params.append('date', orderDateFilter);
+      if (orderTableFilter !== 'all') params.append('tableId', orderTableFilter);
 
       const res = await fetch(`${apiBase}/orders/all?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -711,7 +684,7 @@ const AdminDashboard = () => {
         setOrdersByTable(data.byTable);
       }
     } catch (error) {
-      console.error("Error loading orders:", error);
+      console.error('Error loading orders:', error);
     }
   };
 
@@ -720,10 +693,9 @@ const AdminDashboard = () => {
     if (!token) return;
     try {
       const params = new URLSearchParams();
-      if (hoursEmployeeFilter !== "all")
-        params.append("employeeId", hoursEmployeeFilter);
-      if (hoursStartDate) params.append("startDate", hoursStartDate);
-      if (hoursEndDate) params.append("endDate", hoursEndDate);
+      if (hoursEmployeeFilter !== 'all') params.append('employeeId', hoursEmployeeFilter);
+      if (hoursStartDate) params.append('startDate', hoursStartDate);
+      if (hoursEndDate) params.append('endDate', hoursEndDate);
 
       const res = await fetch(`${apiBase}/shift/history?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -735,7 +707,7 @@ const AdminDashboard = () => {
         setDailyStats(data.dailyStats);
       }
     } catch (error) {
-      console.error("Error loading shifts:", error);
+      console.error('Error loading shifts:', error);
     }
   };
 
@@ -756,9 +728,9 @@ const AdminDashboard = () => {
         const branchData = await branchRes.json();
         setBranch(branchData);
         setBranchForm({
-          name: branchData?.name || "",
-          location: branchData?.location || "",
-          timezone: branchData?.timezone || "Asia/Kolkata",
+          name: branchData?.name || '',
+          location: branchData?.location || '',
+          timezone: branchData?.timezone || 'Asia/Kolkata',
         });
       }
 
@@ -767,7 +739,7 @@ const AdminDashboard = () => {
         setNotifications(notifData);
       }
     } catch (error) {
-      console.error("Error loading settings:", error);
+      console.error('Error loading settings:', error);
     }
   };
 
@@ -776,22 +748,22 @@ const AdminDashboard = () => {
     if (!token || !branch) return;
     try {
       const res = await fetch(`${apiBase}/config/branch/${branch.id}`, {
-        method: "PATCH",
+        method: 'PATCH',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(branchForm),
       });
       if (res.ok) {
-        toast({ title: "Success", description: "Branch settings updated" });
+        toast({ title: 'Success', description: 'Branch settings updated' });
         loadSettings();
       }
     } catch (error) {
       toast({
-        title: "Error",
-        description: "Failed to update branch",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to update branch',
+        variant: 'destructive',
       });
     }
   };
@@ -802,15 +774,12 @@ const AdminDashboard = () => {
     try {
       const params = new URLSearchParams();
       if (removedItemsDateFilter) {
-        params.append("date", removedItemsDateFilter);
+        params.append('date', removedItemsDateFilter);
       }
 
-      const res = await fetch(
-        `${apiBase}/orders/reports/removed-items?${params}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
+      const res = await fetch(`${apiBase}/orders/reports/removed-items?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (res.ok) {
         const data = await res.json();
         setRemovedItems(data.removedItems);
@@ -818,38 +787,38 @@ const AdminDashboard = () => {
         setTotalLoss(data.totalLoss);
       }
     } catch (error) {
-      console.error("Error loading removed items:", error);
+      console.error('Error loading removed items:', error);
     }
   };
 
   // Effects for loading data when sections change
   useEffect(() => {
-    if (token && activeSection === "orders") {
+    if (token && activeSection === 'orders') {
       loadAllOrders();
     }
   }, [token, activeSection, orderDateFilter, orderTableFilter]);
 
   useEffect(() => {
-    if (token && activeSection === "removed-items") {
+    if (token && activeSection === 'removed-items') {
       loadRemovedItems();
     }
   }, [token, activeSection, removedItemsDateFilter]);
 
   useEffect(() => {
-    if (token && activeSection === "hours") {
+    if (token && activeSection === 'hours') {
       loadShiftHistory();
     }
   }, [token, activeSection, hoursEmployeeFilter, hoursStartDate, hoursEndDate]);
 
   useEffect(() => {
-    if (token && activeSection === "settings") {
+    if (token && activeSection === 'settings') {
       loadSettings();
     }
   }, [token, activeSection]);
 
   // Auto refresh orders every 10 seconds when on orders page
   useEffect(() => {
-    if (activeSection !== "orders") return;
+    if (activeSection !== 'orders') return;
     const interval = setInterval(() => {
       loadAllOrders();
     }, 10000);
@@ -860,66 +829,60 @@ const AdminDashboard = () => {
 
   // 1. COMPACT KPI CARDS - All INR
   const KPICards = () => (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
       {/* Row 1 */}
-      <Card className="bg-gradient-to-br from-emerald-50 to-white border-emerald-100">
+      <Card className="border-emerald-100 bg-gradient-to-br from-emerald-50 to-white">
         <CardContent className="p-3">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-muted-foreground">Total Revenue</p>
+              <p className="text-muted-foreground text-xs">Total Revenue</p>
               <p className="text-lg font-bold text-emerald-700">
                 {formatINR(todayStats.totalRevenue)}
               </p>
             </div>
-            <div className="p-1.5 bg-emerald-100 rounded-md">
+            <div className="rounded-md bg-emerald-100 p-1.5">
               <IndianRupee className="h-4 w-4 text-emerald-600" />
             </div>
           </div>
         </CardContent>
       </Card>
 
-      <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100">
+      <Card className="border-blue-100 bg-gradient-to-br from-blue-50 to-white">
         <CardContent className="p-3">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-muted-foreground">Total Orders</p>
-              <p className="text-lg font-bold text-blue-700">
-                {todayStats.totalOrders}
-              </p>
+              <p className="text-muted-foreground text-xs">Total Orders</p>
+              <p className="text-lg font-bold text-blue-700">{todayStats.totalOrders}</p>
             </div>
-            <div className="p-1.5 bg-blue-100 rounded-md">
+            <div className="rounded-md bg-blue-100 p-1.5">
               <ShoppingCart className="h-4 w-4 text-blue-600" />
             </div>
           </div>
         </CardContent>
       </Card>
 
-      <Card className="bg-gradient-to-br from-amber-50 to-white border-amber-100">
+      <Card className="border-amber-100 bg-gradient-to-br from-amber-50 to-white">
         <CardContent className="p-3">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-muted-foreground">Pending</p>
-              <p className="text-lg font-bold text-amber-700">
-                {todayStats.pendingPayments}
-              </p>
+              <p className="text-muted-foreground text-xs">Pending</p>
+              <p className="text-lg font-bold text-amber-700">{todayStats.pendingPayments}</p>
             </div>
-            <div className="p-1.5 bg-amber-100 rounded-md">
+            <div className="rounded-md bg-amber-100 p-1.5">
               <AlertCircle className="h-4 w-4 text-amber-600" />
             </div>
           </div>
         </CardContent>
       </Card>
 
-      <Card className="bg-gradient-to-br from-green-50 to-white border-green-100">
+      <Card className="border-green-100 bg-gradient-to-br from-green-50 to-white">
         <CardContent className="p-3">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-muted-foreground">Paid Orders</p>
-              <p className="text-lg font-bold text-green-700">
-                {todayStats.paidOrders}
-              </p>
+              <p className="text-muted-foreground text-xs">Paid Orders</p>
+              <p className="text-lg font-bold text-green-700">{todayStats.paidOrders}</p>
             </div>
-            <div className="p-1.5 bg-green-100 rounded-md">
+            <div className="rounded-md bg-green-100 p-1.5">
               <CheckCircle2 className="h-4 w-4 text-green-600" />
             </div>
           </div>
@@ -927,67 +890,63 @@ const AdminDashboard = () => {
       </Card>
 
       {/* Row 2 */}
-      <Card className="bg-gradient-to-br from-purple-50 to-white border-purple-100">
+      <Card className="border-purple-100 bg-gradient-to-br from-purple-50 to-white">
         <CardContent className="p-3">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-muted-foreground">Active Staff</p>
-              <p className="text-lg font-bold text-purple-700">
-                {todayStats.activeEmployees}
-              </p>
+              <p className="text-muted-foreground text-xs">Active Staff</p>
+              <p className="text-lg font-bold text-purple-700">{todayStats.activeEmployees}</p>
             </div>
-            <div className="p-1.5 bg-purple-100 rounded-md">
+            <div className="rounded-md bg-purple-100 p-1.5">
               <Users className="h-4 w-4 text-purple-600" />
             </div>
           </div>
         </CardContent>
       </Card>
 
-      <Card className="bg-gradient-to-br from-cyan-50 to-white border-cyan-100">
+      <Card className="border-cyan-100 bg-gradient-to-br from-cyan-50 to-white">
         <CardContent className="p-3">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-muted-foreground">Avg Order</p>
+              <p className="text-muted-foreground text-xs">Avg Order</p>
               <p className="text-lg font-bold text-cyan-700">
                 {formatINR(todayStats.avgOrderValue)}
               </p>
             </div>
-            <div className="p-1.5 bg-cyan-100 rounded-md">
+            <div className="rounded-md bg-cyan-100 p-1.5">
               <TrendingUp className="h-4 w-4 text-cyan-600" />
             </div>
           </div>
         </CardContent>
       </Card>
 
-      <Card className="bg-gradient-to-br from-pink-50 to-white border-pink-100">
+      <Card className="border-pink-100 bg-gradient-to-br from-pink-50 to-white">
         <CardContent className="p-3">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-muted-foreground">Items Sold</p>
-              <p className="text-lg font-bold text-pink-700">
-                {todayStats.totalItemsSold}
-              </p>
+              <p className="text-muted-foreground text-xs">Items Sold</p>
+              <p className="text-lg font-bold text-pink-700">{todayStats.totalItemsSold}</p>
             </div>
-            <div className="p-1.5 bg-pink-100 rounded-md">
+            <div className="rounded-md bg-pink-100 p-1.5">
               <Package className="h-4 w-4 text-pink-600" />
             </div>
           </div>
         </CardContent>
       </Card>
 
-      <Card className="bg-gradient-to-br from-orange-50 to-white border-orange-100">
+      <Card className="border-orange-100 bg-gradient-to-br from-orange-50 to-white">
         <CardContent className="p-3">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-muted-foreground">Top Item</p>
-              <p className="text-sm font-bold text-orange-700 truncate max-w-[80px]">
-                {todayStats.topSellingItem?.name || "â€”"}
+              <p className="text-muted-foreground text-xs">Top Item</p>
+              <p className="max-w-[80px] truncate text-sm font-bold text-orange-700">
+                {todayStats.topSellingItem?.name || 'â€”'}
               </p>
               <p className="text-xs text-orange-600">
                 ({todayStats.topSellingItem?.quantity || 0})
               </p>
             </div>
-            <div className="p-1.5 bg-orange-100 rounded-md">
+            <div className="rounded-md bg-orange-100 p-1.5">
               <Star className="h-4 w-4 text-orange-600" />
             </div>
           </div>
@@ -1006,7 +965,7 @@ const AdminDashboard = () => {
             <CardTitle className="text-lg">Active Employees</CardTitle>
           </div>
           <Badge variant="outline">
-            {employees.filter((e) => e.status === "ACTIVE").length} Active
+            {employees.filter(e => e.status === 'ACTIVE').length} Active
           </Badge>
         </div>
       </CardHeader>
@@ -1019,55 +978,45 @@ const AdminDashboard = () => {
                 <TableHead className="text-xs">Status</TableHead>
                 <TableHead className="text-xs">In Time</TableHead>
                 <TableHead className="text-xs">Hours</TableHead>
-                <TableHead className="text-xs text-right">Orders</TableHead>
-                <TableHead className="text-xs text-right">Sales</TableHead>
+                <TableHead className="text-right text-xs">Orders</TableHead>
+                <TableHead className="text-right text-xs">Sales</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {employees.map((emp) => {
-                const empSale = employeeSales.find(
-                  (es) => es.employeeId === emp.id,
-                );
+              {employees.map(emp => {
+                const empSale = employeeSales.find(es => es.employeeId === emp.id);
                 return (
                   <TableRow key={emp.id} className="text-sm">
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Avatar className="h-8 w-8">
-                          <AvatarFallback className="text-xs bg-emerald-100 text-emerald-700">
+                          <AvatarFallback className="bg-emerald-100 text-xs text-emerald-700">
                             {emp.name.charAt(0)}
                           </AvatarFallback>
                         </Avatar>
                         <div>
                           <p className="font-medium">{emp.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {emp.employeeCode}
-                          </p>
+                          <p className="text-muted-foreground text-xs">{emp.employeeCode}</p>
                         </div>
                       </div>
                     </TableCell>
                     <TableCell>
                       <Badge
-                        variant={
-                          emp.status === "ACTIVE" ? "default" : "secondary"
-                        }
+                        variant={emp.status === 'ACTIVE' ? 'default' : 'secondary'}
                         className={
-                          emp.status === "ACTIVE"
-                            ? "bg-green-100 text-green-700 hover:bg-green-100"
-                            : ""
+                          emp.status === 'ACTIVE'
+                            ? 'bg-green-100 text-green-700 hover:bg-green-100'
+                            : ''
                         }
                       >
-                        {emp.status === "ACTIVE" ? "ðŸŸ¢ Active" : emp.status}
+                        {emp.status === 'ACTIVE' ? 'ðŸŸ¢ Active' : emp.status}
                       </Badge>
                     </TableCell>
+                    <TableCell className="text-xs">{emp.shiftStartTime || 'â€”'}</TableCell>
                     <TableCell className="text-xs">
-                      {emp.shiftStartTime || "â€”"}
+                      {empSale?.hoursWorked ? `${empSale.hoursWorked}h` : 'â€”'}
                     </TableCell>
-                    <TableCell className="text-xs">
-                      {empSale?.hoursWorked ? `${empSale.hoursWorked}h` : "â€”"}
-                    </TableCell>
-                    <TableCell className="text-right font-medium">
-                      {empSale?.orders || 0}
-                    </TableCell>
+                    <TableCell className="text-right font-medium">{empSale?.orders || 0}</TableCell>
                     <TableCell className="text-right font-medium text-emerald-600">
                       {formatINR(empSale?.revenue || 0)}
                     </TableCell>
@@ -1090,9 +1039,7 @@ const AdminDashboard = () => {
             <Utensils className="h-5 w-5 text-emerald-600" />
             <CardTitle className="text-lg">Today's Item Sales</CardTitle>
           </div>
-          <Badge variant="outline">
-            {todayStats.totalItemsSold} items sold
-          </Badge>
+          <Badge variant="outline">{todayStats.totalItemsSold} items sold</Badge>
         </div>
       </CardHeader>
       <CardContent>
@@ -1101,37 +1048,29 @@ const AdminDashboard = () => {
             {itemSales.map((item, index) => (
               <div
                 key={item.itemName}
-                className="flex items-center justify-between p-2 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors"
+                className="flex items-center justify-between rounded-lg bg-slate-50 p-2 transition-colors hover:bg-slate-100"
               >
                 <div className="flex items-center gap-3">
                   <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                      index < 3
-                        ? "bg-amber-100 text-amber-700"
-                        : "bg-slate-200 text-slate-600"
+                    className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
+                      index < 3 ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-600'
                     }`}
                   >
                     {index + 1}
                   </div>
                   <div>
-                    <p className="font-medium text-sm">{item.itemName}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {item.quantity} sold
-                    </p>
+                    <p className="text-sm font-medium">{item.itemName}</p>
+                    <p className="text-muted-foreground text-xs">{item.quantity} sold</p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="font-medium text-sm text-emerald-600">
-                    {formatINR(item.revenue)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Revenue</p>
+                  <p className="text-sm font-medium text-emerald-600">{formatINR(item.revenue)}</p>
+                  <p className="text-muted-foreground text-xs">Revenue</p>
                 </div>
               </div>
             ))}
             {itemSales.length === 0 && (
-              <p className="text-center text-muted-foreground py-8">
-                No sales yet today
-              </p>
+              <p className="text-muted-foreground py-8 text-center">No sales yet today</p>
             )}
           </div>
         </ScrollArea>
@@ -1156,16 +1095,14 @@ const AdminDashboard = () => {
             <TableHeader>
               <TableRow className="bg-slate-50">
                 <TableHead className="text-xs">Employee</TableHead>
-                <TableHead className="text-xs text-right">Orders</TableHead>
-                <TableHead className="text-xs text-right">Revenue</TableHead>
+                <TableHead className="text-right text-xs">Orders</TableHead>
+                <TableHead className="text-right text-xs">Revenue</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {employeeSales.map((emp) => (
+              {employeeSales.map(emp => (
                 <TableRow key={emp.employeeId} className="text-sm">
-                  <TableCell className="font-medium">
-                    {emp.employeeName}
-                  </TableCell>
+                  <TableCell className="font-medium">{emp.employeeName}</TableCell>
                   <TableCell className="text-right">{emp.orders}</TableCell>
                   <TableCell className="text-right font-medium text-emerald-600">
                     {formatINR(emp.revenue)}
@@ -1185,54 +1122,45 @@ const AdminDashboard = () => {
       <CardHeader>
         <div className="flex items-center gap-2">
           <Calendar className="h-5 w-5 text-emerald-400" />
-          <CardTitle className="text-lg text-white">
-            End of Day Summary
-          </CardTitle>
+          <CardTitle className="text-lg text-white">End of Day Summary</CardTitle>
         </div>
         <CardDescription className="text-slate-400">
-          {currentTime.toLocaleDateString("en-IN", {
-            weekday: "long",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
+          {currentTime.toLocaleDateString('en-IN', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
           })}
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="text-center p-3 bg-slate-700/50 rounded-lg">
-            <p className="text-2xl font-bold text-emerald-400">
-              {todayStats.totalOrders}
-            </p>
+        <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
+          <div className="rounded-lg bg-slate-700/50 p-3 text-center">
+            <p className="text-2xl font-bold text-emerald-400">{todayStats.totalOrders}</p>
             <p className="text-xs text-slate-400">Total Orders</p>
           </div>
-          <div className="text-center p-3 bg-slate-700/50 rounded-lg">
+          <div className="rounded-lg bg-slate-700/50 p-3 text-center">
             <p className="text-2xl font-bold text-emerald-400">
               {formatINR(todayStats.totalRevenue)}
             </p>
             <p className="text-xs text-slate-400">Total Revenue</p>
           </div>
-          <div className="text-center p-3 bg-slate-700/50 rounded-lg">
-            <p className="text-2xl font-bold text-amber-400">
-              {todayStats.pendingPayments}
-            </p>
+          <div className="rounded-lg bg-slate-700/50 p-3 text-center">
+            <p className="text-2xl font-bold text-amber-400">{todayStats.pendingPayments}</p>
             <p className="text-xs text-slate-400">Pending</p>
           </div>
-          <div className="text-center p-3 bg-slate-700/50 rounded-lg">
-            <p className="text-2xl font-bold text-emerald-400">
-              {todayStats.totalItemsSold}
-            </p>
+          <div className="rounded-lg bg-slate-700/50 p-3 text-center">
+            <p className="text-2xl font-bold text-emerald-400">{todayStats.totalItemsSold}</p>
             <p className="text-xs text-slate-400">Items Sold</p>
           </div>
         </div>
 
         {todayStats.topSellingItem && (
           <div className="border-t border-slate-700 pt-4">
-            <p className="text-sm text-slate-400 mb-2">Top Selling Items</p>
+            <p className="mb-2 text-sm text-slate-400">Top Selling Items</p>
             <div className="flex items-center gap-2">
-              <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
-                {todayStats.topSellingItem.name} (
-                {todayStats.topSellingItem.quantity})
+              <Badge className="border-emerald-500/30 bg-emerald-500/20 text-emerald-400">
+                {todayStats.topSellingItem.name} ({todayStats.topSellingItem.quantity})
               </Badge>
               {itemSales.slice(1, 4).map((item, i) => (
                 <Badge
@@ -1257,24 +1185,22 @@ const AdminDashboard = () => {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold">Today's Dashboard</h2>
-          <p className="text-sm text-muted-foreground">
-            {currentTime.toLocaleDateString("en-IN", {
-              weekday: "long",
-              day: "numeric",
-              month: "long",
-              year: "numeric",
-            })}{" "}
-            â€¢{" "}
-            {currentTime.toLocaleTimeString("en-IN", {
-              hour: "2-digit",
-              minute: "2-digit",
+          <p className="text-muted-foreground text-sm">
+            {currentTime.toLocaleDateString('en-IN', {
+              weekday: 'long',
+              day: 'numeric',
+              month: 'long',
+              year: 'numeric',
+            })}{' '}
+            â€¢{' '}
+            {currentTime.toLocaleTimeString('en-IN', {
+              hour: '2-digit',
+              minute: '2-digit',
             })}
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={loadDashboardData}>
-          <RefreshCw
-            className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`}
-          />
+          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
       </div>
@@ -1286,7 +1212,7 @@ const AdminDashboard = () => {
       <ActiveEmployeesSection />
 
       {/* Two Column Layout for Item Sales & Employee Sales */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <ItemSalesSection />
         <EmployeeSalesSection />
       </div>
@@ -1302,19 +1228,13 @@ const AdminDashboard = () => {
         <>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setViewingCategory(null)}
-              >
-                <ChevronLeft className="h-4 w-4 mr-1" />
+              <Button variant="outline" size="sm" onClick={() => setViewingCategory(null)}>
+                <ChevronLeft className="mr-1 h-4 w-4" />
                 Back to Categories
               </Button>
               <div>
-                <h2 className="text-xl font-bold">
-                  {viewingCategoryData?.name}
-                </h2>
-                <p className="text-sm text-muted-foreground">
+                <h2 className="text-xl font-bold">{viewingCategoryData?.name}</h2>
+                <p className="text-muted-foreground text-sm">
                   {viewingCategoryData?.items?.length || 0} items
                 </p>
               </div>
@@ -1325,19 +1245,19 @@ const AdminDashboard = () => {
                 onClick={() => {
                   setEditingItem(null);
                   setItemForm({
-                    name: "",
-                    description: "",
+                    name: '',
+                    description: '',
                     basePrice: 0,
                     hasHalf: false,
                     halfPrice: 0,
                     isActive: true,
                     categoryId: viewingCategory,
-                    imageUrl: "",
+                    imageUrl: '',
                   });
                   setIsItemDialogOpen(true);
                 }}
               >
-                <Plus className="h-4 w-4 mr-1" />
+                <Plus className="mr-1 h-4 w-4" />
                 Add Item
               </Button>
             </div>
@@ -1358,10 +1278,7 @@ const AdminDashboard = () => {
                 <TableBody>
                   {viewingCategoryData?.items?.length === 0 && (
                     <TableRow>
-                      <TableCell
-                        colSpan={5}
-                        className="text-center py-8 text-muted-foreground"
-                      >
+                      <TableCell colSpan={5} className="text-muted-foreground py-8 text-center">
                         No items in this category
                       </TableCell>
                     </TableRow>
@@ -1370,14 +1287,10 @@ const AdminDashboard = () => {
                     <TableRow key={item.id}>
                       <TableCell className="font-medium">{item.name}</TableCell>
                       <TableCell>{formatINR(item.basePrice)}</TableCell>
+                      <TableCell>{item.hasHalf ? formatINR(item.halfPrice) : '-'}</TableCell>
                       <TableCell>
-                        {item.hasHalf ? formatINR(item.halfPrice) : "-"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={item.isActive ? "default" : "secondary"}
-                        >
-                          {item.isActive ? "Live" : "Hidden"}
+                        <Badge variant={item.isActive ? 'default' : 'secondary'}>
+                          {item.isActive ? 'Live' : 'Hidden'}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
@@ -1390,13 +1303,13 @@ const AdminDashboard = () => {
                               setEditingItem(item);
                               setItemForm({
                                 name: item.name,
-                                description: item.description || "",
+                                description: item.description || '',
                                 basePrice: item.basePrice,
                                 hasHalf: item.hasHalf,
                                 halfPrice: item.halfPrice || 0,
                                 isActive: item.isActive,
                                 categoryId: item.categoryId || viewingCategory,
-                                imageUrl: item.imageUrl || "",
+                                imageUrl: item.imageUrl || '',
                               });
                               setIsItemDialogOpen(true);
                             }}
@@ -1425,17 +1338,12 @@ const AdminDashboard = () => {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-xl font-bold">Menu Categories</h2>
-              <p className="text-sm text-muted-foreground">
-                Manage categories and their items
-              </p>
+              <p className="text-muted-foreground text-sm">Manage categories and their items</p>
             </div>
-            <Dialog
-              open={isCategoryDialogOpen}
-              onOpenChange={setIsCategoryDialogOpen}
-            >
+            <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
               <DialogTrigger asChild>
                 <Button size="sm">
-                  <Plus className="h-4 w-4 mr-1" />
+                  <Plus className="mr-1 h-4 w-4" />
                   Add Category
                 </Button>
               </DialogTrigger>
@@ -1449,17 +1357,15 @@ const AdminDashboard = () => {
                     <Input
                       placeholder="e.g., Cold Coffee, Momos"
                       value={categoryForm.name}
-                      onChange={(e) =>
-                        setCategoryForm({ name: e.target.value })
-                      }
+                      onChange={e => setCategoryForm({ name: e.target.value })}
                     />
                   </div>
                   <div className="grid gap-2">
                     <Label>Image URL</Label>
                     <Input
                       placeholder="https://example.com/image.jpg"
-                      value={categoryForm.imageUrl || ""}
-                      onChange={(e) =>
+                      value={categoryForm.imageUrl || ''}
+                      onChange={e =>
                         setCategoryForm({
                           ...categoryForm,
                           imageUrl: e.target.value,
@@ -1469,10 +1375,7 @@ const AdminDashboard = () => {
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button
-                    variant="outline"
-                    onClick={() => setIsCategoryDialogOpen(false)}
-                  >
+                  <Button variant="outline" onClick={() => setIsCategoryDialogOpen(false)}>
                     Cancel
                   </Button>
                   <Button onClick={handleCreateCategory}>Create</Button>
@@ -1483,12 +1386,12 @@ const AdminDashboard = () => {
 
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Search className="text-muted-foreground absolute top-2.5 left-2.5 h-4 w-4" />
               <Input
                 placeholder="Search categories..."
                 className="pl-8"
                 value={menuSearchQuery}
-                onChange={(e) => setMenuSearchQuery(e.target.value)}
+                onChange={e => setMenuSearchQuery(e.target.value)}
               />
             </div>
           </div>
@@ -1507,27 +1410,20 @@ const AdminDashboard = () => {
                 <TableBody>
                   {filteredCategories.length === 0 && (
                     <TableRow>
-                      <TableCell
-                        colSpan={4}
-                        className="text-center py-8 text-muted-foreground"
-                      >
+                      <TableCell colSpan={4} className="text-muted-foreground py-8 text-center">
                         {menuSearchQuery
-                          ? "No categories found matching your search"
-                          : "No categories yet. Create your first category!"}
+                          ? 'No categories found matching your search'
+                          : 'No categories yet. Create your first category!'}
                       </TableCell>
                     </TableRow>
                   )}
-                  {filteredCategories.map((category) => (
+                  {filteredCategories.map(category => (
                     <TableRow key={category.id}>
-                      <TableCell className="font-medium">
-                        {category.name}
-                      </TableCell>
+                      <TableCell className="font-medium">{category.name}</TableCell>
                       <TableCell>{category.items?.length || 0} items</TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-xs">
-                          {category.items?.filter((i: any) => i.isActive)
-                            .length || 0}{" "}
-                          live
+                          {category.items?.filter((i: any) => i.isActive).length || 0} live
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
@@ -1537,7 +1433,7 @@ const AdminDashboard = () => {
                             size="sm"
                             onClick={() => setViewingCategory(category.id)}
                           >
-                            <Eye className="h-4 w-4 mr-1" />
+                            <Eye className="mr-1 h-4 w-4" />
                             View Items
                           </Button>
                           <Button
@@ -1548,8 +1444,8 @@ const AdminDashboard = () => {
                             disabled={category.items?.length > 0}
                             title={
                               category.items?.length > 0
-                                ? "Delete all items first"
-                                : "Delete category"
+                                ? 'Delete all items first'
+                                : 'Delete category'
                             }
                           >
                             <Trash2 className="h-4 w-4" />
@@ -1573,15 +1469,12 @@ const AdminDashboard = () => {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold">Employees</h2>
-          <p className="text-sm text-muted-foreground">Manage staff</p>
+          <p className="text-muted-foreground text-sm">Manage staff</p>
         </div>
-        <Dialog
-          open={isEmployeeDialogOpen}
-          onOpenChange={setIsEmployeeDialogOpen}
-        >
+        <Dialog open={isEmployeeDialogOpen} onOpenChange={setIsEmployeeDialogOpen}>
           <DialogTrigger asChild>
             <Button size="sm">
-              <Plus className="h-4 w-4 mr-1" />
+              <Plus className="mr-1 h-4 w-4" />
               Add
             </Button>
           </DialogTrigger>
@@ -1593,22 +1486,18 @@ const AdminDashboard = () => {
               <Input
                 placeholder="Full Name"
                 value={employeeForm.name}
-                onChange={(e) =>
-                  setEmployeeForm({ ...employeeForm, name: e.target.value })
-                }
+                onChange={e => setEmployeeForm({ ...employeeForm, name: e.target.value })}
               />
               <Input
                 type="email"
                 placeholder="Email"
                 value={employeeForm.email}
-                onChange={(e) =>
-                  setEmployeeForm({ ...employeeForm, email: e.target.value })
-                }
+                onChange={e => setEmployeeForm({ ...employeeForm, email: e.target.value })}
               />
               <Input
                 placeholder="Employee Code"
                 value={employeeForm.employeeCode}
-                onChange={(e) =>
+                onChange={e =>
                   setEmployeeForm({
                     ...employeeForm,
                     employeeCode: e.target.value,
@@ -1617,10 +1506,7 @@ const AdminDashboard = () => {
               />
             </div>
             <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setIsEmployeeDialogOpen(false)}
-              >
+              <Button variant="outline" onClick={() => setIsEmployeeDialogOpen(false)}>
                 Cancel
               </Button>
               <Button onClick={handleCreateEmployee}>Create</Button>
@@ -1633,12 +1519,12 @@ const AdminDashboard = () => {
         <CardHeader className="pb-3">
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Search className="text-muted-foreground absolute top-2.5 left-2.5 h-4 w-4" />
               <Input
                 placeholder="Search..."
                 className="pl-8"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={e => setSearchQuery(e.target.value)}
               />
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -1656,18 +1542,17 @@ const AdminDashboard = () => {
         <CardContent>
           <div className="space-y-2">
             {employees
-              .filter((e) => {
+              .filter(e => {
                 const matchesSearch =
                   e.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                   e.email.toLowerCase().includes(searchQuery.toLowerCase());
-                const matchesStatus =
-                  statusFilter === "all" || e.status === statusFilter;
+                const matchesStatus = statusFilter === 'all' || e.status === statusFilter;
                 return matchesSearch && matchesStatus;
               })
-              .map((emp) => (
+              .map(emp => (
                 <div
                   key={emp.id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-slate-50 hover:bg-slate-100"
+                  className="flex items-center justify-between rounded-lg bg-slate-50 p-3 hover:bg-slate-100"
                 >
                   <div className="flex items-center gap-3">
                     <Avatar className="h-10 w-10">
@@ -1677,17 +1562,17 @@ const AdminDashboard = () => {
                     </Avatar>
                     <div>
                       <p className="font-medium">{emp.name}</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-muted-foreground text-xs">
                         {emp.employeeCode} â€¢ {emp.email}
                       </p>
                     </div>
                   </div>
                   <Badge
-                    variant={emp.status === "ACTIVE" ? "default" : "secondary"}
+                    variant={emp.status === 'ACTIVE' ? 'default' : 'secondary'}
                     className={
-                      emp.status === "ACTIVE"
-                        ? "bg-green-100 text-green-700 hover:bg-green-100"
-                        : ""
+                      emp.status === 'ACTIVE'
+                        ? 'bg-green-100 text-green-700 hover:bg-green-100'
+                        : ''
                     }
                   >
                     {emp.status}
@@ -1706,16 +1591,14 @@ const AdminDashboard = () => {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold">Orders by Table</h2>
-          <p className="text-sm text-muted-foreground">
-            View all orders grouped by table
-          </p>
+          <p className="text-muted-foreground text-sm">View all orders grouped by table</p>
         </div>
         <div className="flex items-center gap-2">
           <Input
             type="date"
             className="w-36"
             value={orderDateFilter}
-            onChange={(e) => setOrderDateFilter(e.target.value)}
+            onChange={e => setOrderDateFilter(e.target.value)}
           />
           <Select value={orderTableFilter} onValueChange={setOrderTableFilter}>
             <SelectTrigger className="w-36">
@@ -1723,7 +1606,7 @@ const AdminDashboard = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Tables</SelectItem>
-              {ordersByTable.map((t) => (
+              {ordersByTable.map(t => (
                 <SelectItem key={t.tableId} value={String(t.tableId)}>
                   Table {t.tableNumber}
                 </SelectItem>
@@ -1731,68 +1614,60 @@ const AdminDashboard = () => {
             </SelectContent>
           </Select>
           <Button size="sm" variant="outline" onClick={loadAllOrders}>
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card className="bg-blue-50 border-blue-100">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Card className="border-blue-100 bg-blue-50">
           <CardContent className="p-3">
-            <p className="text-xs text-muted-foreground">Total Orders</p>
-            <p className="text-xl font-bold text-blue-700">
-              {allOrders.length}
-            </p>
+            <p className="text-muted-foreground text-xs">Total Orders</p>
+            <p className="text-xl font-bold text-blue-700">{allOrders.length}</p>
           </CardContent>
         </Card>
-        <Card className="bg-emerald-50 border-emerald-100">
+        <Card className="border-emerald-100 bg-emerald-50">
           <CardContent className="p-3">
-            <p className="text-xs text-muted-foreground">Total Revenue</p>
+            <p className="text-muted-foreground text-xs">Total Revenue</p>
             <p className="text-xl font-bold text-emerald-700">
               {formatINR(
                 allOrders
-                  .filter((o) => o.paymentStatus === "PAID")
-                  .reduce((sum, o) => sum + o.totalAmount, 0),
+                  .filter(o => o.paymentStatus === 'PAID')
+                  .reduce((sum, o) => sum + o.totalAmount, 0)
               )}
             </p>
           </CardContent>
         </Card>
-        <Card className="bg-amber-50 border-amber-100">
+        <Card className="border-amber-100 bg-amber-50">
           <CardContent className="p-3">
-            <p className="text-xs text-muted-foreground">Tables Active</p>
-            <p className="text-xl font-bold text-amber-700">
-              {ordersByTable.length}
-            </p>
+            <p className="text-muted-foreground text-xs">Tables Active</p>
+            <p className="text-xl font-bold text-amber-700">{ordersByTable.length}</p>
           </CardContent>
         </Card>
-        <Card className="bg-purple-50 border-purple-100">
+        <Card className="border-purple-100 bg-purple-50">
           <CardContent className="p-3">
-            <p className="text-xs text-muted-foreground">Pending Payment</p>
+            <p className="text-muted-foreground text-xs">Pending Payment</p>
             <p className="text-xl font-bold text-purple-700">
-              {allOrders.filter((o) => o.paymentStatus !== "PAID").length}
+              {allOrders.filter(o => o.paymentStatus !== 'PAID').length}
             </p>
           </CardContent>
         </Card>
       </div>
 
       {/* Orders by Table */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {ordersByTable.map((table) => (
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {ordersByTable.map(table => (
           <Card key={table.tableId} className="overflow-hidden">
-            <CardHeader className="pb-2 bg-slate-50">
+            <CardHeader className="bg-slate-50 pb-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="p-1.5 bg-emerald-100 rounded-md">
+                  <div className="rounded-md bg-emerald-100 p-1.5">
                     <Utensils className="h-4 w-4 text-emerald-600" />
                   </div>
                   <div>
-                    <CardTitle className="text-base">
-                      Table {table.tableNumber}
-                    </CardTitle>
-                    <p className="text-xs text-muted-foreground">
-                      {table.orders.length} orders
-                    </p>
+                    <CardTitle className="text-base">Table {table.tableNumber}</CardTitle>
+                    <p className="text-muted-foreground text-xs">{table.orders.length} orders</p>
                   </div>
                 </div>
                 <Badge variant="outline" className="text-emerald-600">
@@ -1806,7 +1681,7 @@ const AdminDashboard = () => {
                   {table.orders.map((order: Order) => (
                     <div
                       key={order.id}
-                      className="p-3 hover:bg-slate-50 cursor-pointer transition-colors"
+                      className="cursor-pointer p-3 transition-colors hover:bg-slate-50"
                       onClick={() => {
                         setSelectedOrder(order);
                         setIsOrderDialogOpen(true);
@@ -1814,27 +1689,19 @@ const AdminDashboard = () => {
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="font-medium text-sm">
-                            Order #{order.id}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-sm font-medium">Order #{order.id}</p>
+                          <p className="text-muted-foreground text-xs">
                             {new Date(order.createdAt).toLocaleTimeString()}
                           </p>
                         </div>
                         <div className="text-right">
                           <Badge
-                            variant={
-                              order.status === "ORDER_COMPLETE"
-                                ? "default"
-                                : "secondary"
-                            }
-                            className="text-xs mb-1"
+                            variant={order.status === 'ORDER_COMPLETE' ? 'default' : 'secondary'}
+                            className="mb-1 text-xs"
                           >
                             {order.status}
                           </Badge>
-                          <p className="text-sm font-medium">
-                            {formatINR(order.totalAmount)}
-                          </p>
+                          <p className="text-sm font-medium">{formatINR(order.totalAmount)}</p>
                         </div>
                       </div>
                     </div>
@@ -1847,10 +1714,8 @@ const AdminDashboard = () => {
         {ordersByTable.length === 0 && (
           <Card className="col-span-full">
             <CardContent className="p-8 text-center">
-              <ShoppingCart className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-20" />
-              <p className="text-muted-foreground">
-                No orders found for the selected date
-              </p>
+              <ShoppingCart className="text-muted-foreground mx-auto mb-3 h-12 w-12 opacity-20" />
+              <p className="text-muted-foreground">No orders found for the selected date</p>
             </CardContent>
           </Card>
         )}
@@ -1866,13 +1731,13 @@ const AdminDashboard = () => {
             <div className="space-y-4 py-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Table</p>
+                  <p className="text-muted-foreground text-sm">Table</p>
                   <p className="font-medium">
                     Table {selectedOrder.tableNumber || selectedOrder.tableId}
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm text-muted-foreground">Time</p>
+                  <p className="text-muted-foreground text-sm">Time</p>
                   <p className="font-medium">
                     {new Date(selectedOrder.createdAt).toLocaleString()}
                   </p>
@@ -1881,54 +1746,36 @@ const AdminDashboard = () => {
 
               <div className="flex items-center gap-2">
                 <Badge
-                  variant={
-                    selectedOrder.status === "ORDER_COMPLETE"
-                      ? "default"
-                      : "secondary"
-                  }
+                  variant={selectedOrder.status === 'ORDER_COMPLETE' ? 'default' : 'secondary'}
                 >
                   {selectedOrder.status}
                 </Badge>
                 <Badge
-                  variant={
-                    selectedOrder.paymentStatus === "PAID"
-                      ? "default"
-                      : "secondary"
-                  }
+                  variant={selectedOrder.paymentStatus === 'PAID' ? 'default' : 'secondary'}
                   className={
-                    selectedOrder.paymentStatus === "PAID"
-                      ? "bg-green-100 text-green-700"
-                      : ""
+                    selectedOrder.paymentStatus === 'PAID' ? 'bg-green-100 text-green-700' : ''
                   }
                 >
                   {selectedOrder.paymentStatus}
                 </Badge>
               </div>
 
-              <div className="border rounded-lg">
+              <div className="rounded-lg border">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead className="text-xs">Item</TableHead>
-                      <TableHead className="text-xs text-right">Qty</TableHead>
-                      <TableHead className="text-xs text-right">
-                        Price
-                      </TableHead>
-                      <TableHead className="text-xs text-right">
-                        Total
-                      </TableHead>
+                      <TableHead className="text-right text-xs">Qty</TableHead>
+                      <TableHead className="text-right text-xs">Price</TableHead>
+                      <TableHead className="text-right text-xs">Total</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {selectedOrder.items.map((item) => (
+                    {selectedOrder.items.map(item => (
                       <TableRow key={item.id}>
                         <TableCell className="text-sm">{item.name}</TableCell>
-                        <TableCell className="text-right">
-                          {item.quantity}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatINR(item.price)}
-                        </TableCell>
+                        <TableCell className="text-right">{item.quantity}</TableCell>
+                        <TableCell className="text-right">{formatINR(item.price)}</TableCell>
                         <TableCell className="text-right font-medium">
                           {formatINR(item.price * item.quantity)}
                         </TableCell>
@@ -1938,26 +1785,23 @@ const AdminDashboard = () => {
                 </Table>
               </div>
 
-              <div className="flex items-center justify-between pt-4 border-t">
+              <div className="flex items-center justify-between border-t pt-4">
                 <p className="text-lg font-bold">Total Amount</p>
                 <p className="text-xl font-bold text-emerald-600">
                   {formatINR(selectedOrder.totalAmount)}
                 </p>
               </div>
 
-              {selectedOrder.status !== "ORDER_COMPLETE" && (
+              {selectedOrder.status !== 'ORDER_COMPLETE' && (
                 <div className="flex gap-2">
                   <Button
                     size="sm"
                     onClick={() => {
-                      handleUpdateOrderStatus(
-                        selectedOrder.id,
-                        "ORDER_COMPLETE",
-                      );
+                      handleUpdateOrderStatus(selectedOrder.id, 'ORDER_COMPLETE');
                       setIsOrderDialogOpen(false);
                     }}
                   >
-                    <CheckCircle2 className="h-4 w-4 mr-1" />
+                    <CheckCircle2 className="mr-1 h-4 w-4" />
                     Mark Complete
                   </Button>
                 </div>
@@ -1972,39 +1816,34 @@ const AdminDashboard = () => {
   // WORK HOURS SECTION - Updated with filters and daily stats
   const WorkHoursSection = () => (
     <div className="space-y-4">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
         <div>
           <h2 className="text-xl font-bold">Employee Work Hours</h2>
-          <p className="text-sm text-muted-foreground">
-            Track attendance, hours and sales
-          </p>
+          <p className="text-muted-foreground text-sm">Track attendance, hours and sales</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Select
-            value={hoursEmployeeFilter}
-            onValueChange={setHoursEmployeeFilter}
-          >
+          <Select value={hoursEmployeeFilter} onValueChange={setHoursEmployeeFilter}>
             <SelectTrigger className="w-40">
               <SelectValue placeholder="All Employees" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Employees</SelectItem>
               {employees
-                .filter((e) => e.status === "ACTIVE")
-                .map((emp) => (
+                .filter(e => e.status === 'ACTIVE')
+                .map(emp => (
                   <SelectItem key={emp.id} value={String(emp.id)}>
                     {emp.name}
                   </SelectItem>
                 ))}
             </SelectContent>
           </Select>
-          <div className="flex items-center gap-1 bg-slate-100 rounded-md p-1">
+          <div className="flex items-center gap-1 rounded-md bg-slate-100 p-1">
             <Input
               type="date"
               className="w-32 border-0 bg-transparent"
               placeholder="Start Date"
               value={hoursStartDate}
-              onChange={(e) => setHoursStartDate(e.target.value)}
+              onChange={e => setHoursStartDate(e.target.value)}
             />
             <span className="text-muted-foreground">-</span>
             <Input
@@ -2012,7 +1851,7 @@ const AdminDashboard = () => {
               className="w-32 border-0 bg-transparent"
               placeholder="End Date"
               value={hoursEndDate}
-              onChange={(e) => setHoursEndDate(e.target.value)}
+              onChange={e => setHoursEndDate(e.target.value)}
             />
           </div>
           <Button size="sm" variant="outline" onClick={loadShiftHistory}>
@@ -2022,39 +1861,35 @@ const AdminDashboard = () => {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card className="bg-blue-50 border-blue-100">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Card className="border-blue-100 bg-blue-50">
           <CardContent className="p-3">
-            <p className="text-xs text-muted-foreground">Total Shifts</p>
-            <p className="text-xl font-bold text-blue-700">
-              {hoursSummary.totalShifts}
-            </p>
+            <p className="text-muted-foreground text-xs">Total Shifts</p>
+            <p className="text-xl font-bold text-blue-700">{hoursSummary.totalShifts}</p>
           </CardContent>
         </Card>
-        <Card className="bg-emerald-50 border-emerald-100">
+        <Card className="border-emerald-100 bg-emerald-50">
           <CardContent className="p-3">
-            <p className="text-xs text-muted-foreground">Total Hours</p>
+            <p className="text-muted-foreground text-xs">Total Hours</p>
             <p className="text-xl font-bold text-emerald-700">
               {hoursSummary.totalHours.toFixed(1)}h
             </p>
           </CardContent>
         </Card>
-        <Card className="bg-purple-50 border-purple-100">
+        <Card className="border-purple-100 bg-purple-50">
           <CardContent className="p-3">
-            <p className="text-xs text-muted-foreground">Total Sales</p>
+            <p className="text-muted-foreground text-xs">Total Sales</p>
             <p className="text-xl font-bold text-purple-700">
               {formatINR(hoursSummary.totalSales)}
             </p>
           </CardContent>
         </Card>
-        <Card className="bg-amber-50 border-amber-100">
+        <Card className="border-amber-100 bg-amber-50">
           <CardContent className="p-3">
-            <p className="text-xs text-muted-foreground">Avg Hours/Shift</p>
+            <p className="text-muted-foreground text-xs">Avg Hours/Shift</p>
             <p className="text-xl font-bold text-amber-700">
               {hoursSummary.totalShifts > 0
-                ? (hoursSummary.totalHours / hoursSummary.totalShifts).toFixed(
-                    1,
-                  )
+                ? (hoursSummary.totalHours / hoursSummary.totalShifts).toFixed(1)
                 : 0}
               h
             </p>
@@ -2074,23 +1909,17 @@ const AdminDashboard = () => {
                 <TableHeader>
                   <TableRow className="bg-slate-50">
                     <TableHead className="text-xs">Date</TableHead>
-                    <TableHead className="text-xs text-right">Shifts</TableHead>
-                    <TableHead className="text-xs text-right">Hours</TableHead>
-                    <TableHead className="text-xs text-right">Sales</TableHead>
+                    <TableHead className="text-right text-xs">Shifts</TableHead>
+                    <TableHead className="text-right text-xs">Hours</TableHead>
+                    <TableHead className="text-right text-xs">Sales</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {dailyStats.map((stat) => (
+                  {dailyStats.map(stat => (
                     <TableRow key={stat.date} className="text-sm">
-                      <TableCell>
-                        {new Date(stat.date).toLocaleDateString("en-IN")}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {stat.shifts}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {stat.totalHours.toFixed(1)}h
-                      </TableCell>
+                      <TableCell>{new Date(stat.date).toLocaleDateString('en-IN')}</TableCell>
+                      <TableCell className="text-right">{stat.shifts}</TableCell>
+                      <TableCell className="text-right">{stat.totalHours.toFixed(1)}h</TableCell>
                       <TableCell className="text-right font-medium text-emerald-600">
                         {formatINR(stat.totalSales)}
                       </TableCell>
@@ -2117,34 +1946,24 @@ const AdminDashboard = () => {
                   <TableHead className="text-xs">Date</TableHead>
                   <TableHead className="text-xs">In Time</TableHead>
                   <TableHead className="text-xs">Out Time</TableHead>
-                  <TableHead className="text-xs text-right">Hours</TableHead>
-                  <TableHead className="text-xs text-right">Orders</TableHead>
-                  <TableHead className="text-xs text-right">Sales</TableHead>
+                  <TableHead className="text-right text-xs">Hours</TableHead>
+                  <TableHead className="text-right text-xs">Orders</TableHead>
+                  <TableHead className="text-right text-xs">Sales</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {shifts.map((shift) => (
+                {shifts.map(shift => (
                   <TableRow key={shift.id} className="text-sm">
-                    <TableCell className="font-medium">
-                      {shift.employee?.name}
-                    </TableCell>
+                    <TableCell className="font-medium">{shift.employee?.name}</TableCell>
+                    <TableCell>{new Date(shift.shiftStart).toLocaleDateString('en-IN')}</TableCell>
+                    <TableCell>{new Date(shift.shiftStart).toLocaleTimeString()}</TableCell>
                     <TableCell>
-                      {new Date(shift.shiftStart).toLocaleDateString("en-IN")}
-                    </TableCell>
-                    <TableCell>
-                      {new Date(shift.shiftStart).toLocaleTimeString()}
-                    </TableCell>
-                    <TableCell>
-                      {shift.shiftEnd
-                        ? new Date(shift.shiftEnd).toLocaleTimeString()
-                        : "Active"}
+                      {shift.shiftEnd ? new Date(shift.shiftEnd).toLocaleTimeString() : 'Active'}
                     </TableCell>
                     <TableCell className="text-right">
                       {(shift.totalHours || 0).toFixed(1)}h
                     </TableCell>
-                    <TableCell className="text-right">
-                      {shift.orders?.length || 0}
-                    </TableCell>
+                    <TableCell className="text-right">{shift.orders?.length || 0}</TableCell>
                     <TableCell className="text-right font-medium text-emerald-600">
                       {formatINR(shift.totalSales || 0)}
                     </TableCell>
@@ -2152,10 +1971,7 @@ const AdminDashboard = () => {
                 ))}
                 {shifts.length === 0 && (
                   <TableRow>
-                    <TableCell
-                      colSpan={7}
-                      className="text-center py-8 text-muted-foreground"
-                    >
+                    <TableCell colSpan={7} className="text-muted-foreground py-8 text-center">
                       No shifts found for the selected filters
                     </TableCell>
                   </TableRow>
@@ -2174,22 +1990,18 @@ const AdminDashboard = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">
-            Removed Items Report
-          </h2>
-          <p className="text-muted-foreground">
-            Track items removed by employees from orders
-          </p>
+          <h2 className="text-2xl font-bold tracking-tight">Removed Items Report</h2>
+          <p className="text-muted-foreground">Track items removed by employees from orders</p>
         </div>
         <div className="flex items-center gap-2">
           <Input
             type="date"
             value={removedItemsDateFilter}
-            onChange={(e) => setRemovedItemsDateFilter(e.target.value)}
+            onChange={e => setRemovedItemsDateFilter(e.target.value)}
             className="w-40"
           />
           <Button variant="outline" onClick={loadRemovedItems}>
-            <RefreshCw className="h-4 w-4 mr-2" />
+            <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
           </Button>
         </div>
@@ -2200,13 +2012,11 @@ const AdminDashboard = () => {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-red-100 rounded-lg">
+              <div className="rounded-lg bg-red-100 p-2">
                 <AlertCircle className="h-5 w-5 text-red-600" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">
-                  Total Items Removed
-                </p>
+                <p className="text-muted-foreground text-sm">Total Items Removed</p>
                 <p className="text-2xl font-bold">{removedItems.length}</p>
               </div>
             </div>
@@ -2215,11 +2025,11 @@ const AdminDashboard = () => {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-amber-100 rounded-lg">
+              <div className="rounded-lg bg-amber-100 p-2">
                 <IndianRupee className="h-5 w-5 text-amber-600" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Total Loss</p>
+                <p className="text-muted-foreground text-sm">Total Loss</p>
                 <p className="text-2xl font-bold">{formatINR(totalLoss)}</p>
               </div>
             </div>
@@ -2228,16 +2038,14 @@ const AdminDashboard = () => {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
+              <div className="rounded-lg bg-blue-100 p-2">
                 <Calendar className="h-5 w-5 text-blue-600" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Daily Avg Loss</p>
+                <p className="text-muted-foreground text-sm">Daily Avg Loss</p>
                 <p className="text-2xl font-bold">
                   {formatINR(
-                    dailyRemovalSummaries.length > 0
-                      ? totalLoss / dailyRemovalSummaries.length
-                      : 0,
+                    dailyRemovalSummaries.length > 0 ? totalLoss / dailyRemovalSummaries.length : 0
                   )}
                 </p>
               </div>
@@ -2270,34 +2078,24 @@ const AdminDashboard = () => {
               <TableBody>
                 {removedItems.length === 0 && (
                   <TableRow>
-                    <TableCell
-                      colSpan={9}
-                      className="text-center text-muted-foreground py-8"
-                    >
+                    <TableCell colSpan={9} className="text-muted-foreground py-8 text-center">
                       No removed items found for the selected date
                     </TableCell>
                   </TableRow>
                 )}
-                {removedItems.map((item) => (
+                {removedItems.map(item => (
                   <TableRow key={item.id}>
-                    <TableCell>
-                      {new Date(item.removedAt).toLocaleDateString()}
-                    </TableCell>
+                    <TableCell>{new Date(item.removedAt).toLocaleDateString()}</TableCell>
                     <TableCell>#{item.orderId}</TableCell>
-                    <TableCell>{item.tableNumber || "N/A"}</TableCell>
-                    <TableCell className="font-medium">
-                      {item.itemName}
-                    </TableCell>
+                    <TableCell>{item.tableNumber || 'N/A'}</TableCell>
+                    <TableCell className="font-medium">{item.itemName}</TableCell>
                     <TableCell>{item.quantity}</TableCell>
                     <TableCell>{formatINR(item.itemPrice)}</TableCell>
-                    <TableCell className="text-red-600 font-medium">
+                    <TableCell className="font-medium text-red-600">
                       {formatINR(item.itemPrice * item.quantity)}
                     </TableCell>
                     <TableCell>{item.removedBy}</TableCell>
-                    <TableCell
-                      className="max-w-[150px] truncate"
-                      title={item.reason}
-                    >
+                    <TableCell className="max-w-[150px] truncate" title={item.reason}>
                       {item.reason}
                     </TableCell>
                   </TableRow>
@@ -2324,13 +2122,11 @@ const AdminDashboard = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {dailyRemovalSummaries.map((summary) => (
+                {dailyRemovalSummaries.map(summary => (
                   <TableRow key={summary.date}>
-                    <TableCell>
-                      {new Date(summary.date).toLocaleDateString()}
-                    </TableCell>
+                    <TableCell>{new Date(summary.date).toLocaleDateString()}</TableCell>
                     <TableCell>{summary.totalItems}</TableCell>
-                    <TableCell className="text-red-600 font-medium">
+                    <TableCell className="font-medium text-red-600">
                       {formatINR(summary.totalLoss)}
                     </TableCell>
                   </TableRow>
@@ -2353,7 +2149,7 @@ const AdminDashboard = () => {
             <CardTitle className="text-lg">Salary Slips</CardTitle>
           </div>
           <Button onClick={() => setIsSalarySlipDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus className="mr-2 h-4 w-4" />
             Generate Salary Slip
           </Button>
         </div>
@@ -2371,7 +2167,7 @@ const AdminDashboard = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {salarySlips.map((slip) => (
+            {salarySlips.map(slip => (
               <TableRow key={slip.id}>
                 <TableCell>{slip.employee?.name}</TableCell>
                 <TableCell>{slip.month}</TableCell>
@@ -2380,7 +2176,7 @@ const AdminDashboard = () => {
                 <TableCell>{formatINR(slip.netSalary)}</TableCell>
                 <TableCell>
                   <Button size="sm" variant="outline">
-                    <Download className="h-4 w-4 mr-2" />
+                    <Download className="mr-2 h-4 w-4" />
                     Download
                   </Button>
                 </TableCell>
@@ -2402,7 +2198,7 @@ const AdminDashboard = () => {
             <CardTitle className="text-lg">Employee Certificates</CardTitle>
           </div>
           <Button onClick={() => setIsCertificateDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus className="mr-2 h-4 w-4" />
             Generate Certificate
           </Button>
         </div>
@@ -2420,16 +2216,16 @@ const AdminDashboard = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {certificates.map((cert) => (
+            {certificates.map(cert => (
               <TableRow key={cert.id}>
                 <TableCell>{cert.employee?.name}</TableCell>
                 <TableCell>{cert.name}</TableCell>
                 <TableCell>{cert.type}</TableCell>
                 <TableCell>{cert.issueDate}</TableCell>
-                <TableCell>{cert.expiryDate || "N/A"}</TableCell>
+                <TableCell>{cert.expiryDate || 'N/A'}</TableCell>
                 <TableCell>
                   <Button size="sm" variant="outline">
-                    <Download className="h-4 w-4 mr-2" />
+                    <Download className="mr-2 h-4 w-4" />
                     Download
                   </Button>
                 </TableCell>
@@ -2449,15 +2245,15 @@ const AdminDashboard = () => {
       onSelect={setActiveSection}
     >
       <div className="space-y-4 pb-6">
-        {activeSection === "overview" && <OverviewSection />}
-        {activeSection === "menu" && <MenuSection />}
-        {activeSection === "employees" && <EmployeesSection />}
-        {activeSection === "orders" && <OrdersSection />}
-        {activeSection === "removed-items" && <RemovedItemsSection />}
-        {activeSection === "hours" && <WorkHoursSection />}
-        {activeSection === "salary-slips" && <SalarySlipsSection />}
-        {activeSection === "certificates" && <CertificatesSection />}
-        {activeSection === "settings" && <SettingsSection />}
+        {activeSection === 'overview' && <OverviewSection />}
+        {activeSection === 'menu' && <MenuSection />}
+        {activeSection === 'employees' && <EmployeesSection />}
+        {activeSection === 'orders' && <OrdersSection />}
+        {activeSection === 'removed-items' && <RemovedItemsSection />}
+        {activeSection === 'hours' && <WorkHoursSection />}
+        {activeSection === 'salary-slips' && <SalarySlipsSection />}
+        {activeSection === 'certificates' && <CertificatesSection />}
+        {activeSection === 'settings' && <SettingsSection />}
       </div>
     </DashboardShell>
   );

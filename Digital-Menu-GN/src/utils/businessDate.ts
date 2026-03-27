@@ -11,7 +11,7 @@
  * /orders/live) should treat the day as [date 04:00, date+1 03:59] in branch timezone (e.g. Asia/Kolkata).
  */
 
-const DEFAULT_TZ = "Asia/Kolkata";
+const DEFAULT_TZ = 'Asia/Kolkata';
 const BUSINESS_DAY_START_HOUR = 4;
 
 /**
@@ -20,24 +20,23 @@ const BUSINESS_DAY_START_HOUR = 4;
  */
 function getLocalPartsInTz(
   date: Date,
-  timeZone: string,
+  timeZone: string
 ): { year: number; month: number; day: number; hour: number } {
-  const formatter = new Intl.DateTimeFormat("en-CA", {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
     hour12: false,
   });
   const parts = formatter.formatToParts(date);
-  const get = (type: string) =>
-    parts.find((p) => p.type === type)?.value ?? "0";
+  const get = (type: string) => parts.find(p => p.type === type)?.value ?? '0';
   return {
-    year: parseInt(get("year"), 10),
-    month: parseInt(get("month"), 10),
-    day: parseInt(get("day"), 10),
-    hour: parseInt(get("hour"), 10),
+    year: parseInt(get('year'), 10),
+    month: parseInt(get('month'), 10),
+    day: parseInt(get('day'), 10),
+    hour: parseInt(get('hour'), 10),
   };
 }
 
@@ -53,24 +52,21 @@ export function getBusinessDateString(timeZone: string = DEFAULT_TZ): string {
   const d = new Date(year, month - 1, day);
   if (beforeCutoff) d.setDate(d.getDate() - 1);
   const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const dy = String(d.getDate()).padStart(2, "0");
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dy = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${dy}`;
 }
 
 /**
  * Same as getBusinessDateString but accepts an optional date (for tests or specific day).
  */
-export function getBusinessDateStringFor(
-  date: Date,
-  timeZone: string = DEFAULT_TZ,
-): string {
+export function getBusinessDateStringFor(date: Date, timeZone: string = DEFAULT_TZ): string {
   const { year, month, day, hour } = getLocalPartsInTz(date, timeZone);
   const beforeCutoff = hour < BUSINESS_DAY_START_HOUR;
   const d = new Date(year, month - 1, day);
   if (beforeCutoff) d.setDate(d.getDate() - 1);
   const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const dy = String(d.getDate()).padStart(2, "0");
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dy = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${dy}`;
 }

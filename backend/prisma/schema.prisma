@@ -98,6 +98,11 @@ model Employee {
   salarySlips           SalarySlip[]
   leaves                EmployeeLeave[]
   refreshTokens         RefreshToken[]
+
+  @@index([branchId, status]) // Optimized for branch employee listing
+  @@index([email]) // Already unique, but explicit for performance
+  @@index([employeeCode]) // Already unique, but explicit for performance
+  @@index([status, createdAt]) // Optimized for employee reports
 }
 
 model RefreshToken {
@@ -320,13 +325,14 @@ model Order {
   sessionToken    String?
   removedItems    RemovedItemsReport[]
   modifications   OrderModification[]
+  orderSource     OrderSource      @default(CUSTOMER) // Distinguish between customer and employee orders
+  priority        OrderPriority     @default(NORMAL) // For notification urgency
 
-  @@index([branchId])
-  @@index([status])
-  @@index([createdAt])
-  @@index([customerMobile])
-  @@index([branchId, status, createdAt])
-  @@index([branchId, updatedAt])
+  @@index([branchId, status, createdAt]) // Optimized for order listing
+  @@index([branchId, paymentStatus, createdAt]) // Optimized for payment tracking
+  @@index([customerMobile]) // Optimized for customer lookup
+  @@index([employeeId, shiftId, createdAt]) // Optimized for employee performance
+  @@index([tableId, status]) // Optimized for table status
 }
 
 model OrderItem {
@@ -416,6 +422,18 @@ enum PaymentStatus {
   PAID
   PARTIAL
   UNPAID
+}
+
+enum OrderSource {
+  CUSTOMER
+  EMPLOYEE
+}
+
+enum OrderPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
 }
 
 model AdminNotification {

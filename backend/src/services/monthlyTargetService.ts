@@ -1,29 +1,29 @@
-import { prisma } from "../config/prisma.js";
+import { prisma } from '../config/prisma.js';
 
-export type TargetStatus = "ON_TRACK" | "NEED_TO_PUSH" | "CRITICAL";
+export type TargetStatus = 'ON_TRACK' | 'NEED_TO_PUSH' | 'CRITICAL';
 
 export function monthKey(year: number, month: number): string {
-  return `${year}-${String(month).padStart(2, "0")}`;
+  return `${year}-${String(month).padStart(2, '0')}`;
 }
 
 export function monthLabel(year: number, month: number): string {
-  return new Date(year, month - 1, 1).toLocaleDateString("en-IN", {
-    month: "long",
-    year: "numeric",
+  return new Date(year, month - 1, 1).toLocaleDateString('en-IN', {
+    month: 'long',
+    year: 'numeric',
   });
 }
 
 export function evaluateTargetStatus(achievedPct: number): TargetStatus {
-  if (achievedPct >= 100) return "ON_TRACK";
-  if (achievedPct >= 40) return "NEED_TO_PUSH";
-  return "CRITICAL";
+  if (achievedPct >= 100) return 'ON_TRACK';
+  if (achievedPct >= 40) return 'NEED_TO_PUSH';
+  return 'CRITICAL';
 }
 
 export async function setMonthlyTarget(
   year: number,
   month: number,
   targetAmount: number,
-  createdBy?: number | null,
+  createdBy?: number | null
 ) {
   const yearMonth = monthKey(year, month);
   return prisma.monthlyTarget.upsert({
@@ -64,7 +64,7 @@ export async function getCurrentMonthTargetProgress(now = new Date()) {
   const agg = await prisma.order.aggregate({
     where: {
       createdAt: { gte: monthStart, lte: now },
-      paymentStatus: "PAID",
+      paymentStatus: 'PAID',
     },
     _sum: { totalAmount: true },
   });

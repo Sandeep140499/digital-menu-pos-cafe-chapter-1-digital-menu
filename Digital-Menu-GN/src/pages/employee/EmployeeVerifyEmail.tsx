@@ -1,6 +1,6 @@
-import { useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
-import { API_BASE_URL } from "@/constants";
+import { useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { API_BASE_URL } from '@/constants';
 
 /**
  * Employee verify-email handler. Invite link in email points to /employee/verify-email?token=...
@@ -8,14 +8,14 @@ import { API_BASE_URL } from "@/constants";
  */
 export default function EmployeeVerifyEmail() {
   const [searchParams] = useSearchParams();
-  const token = searchParams.get("token")?.trim() || "";
+  const token = searchParams.get('token')?.trim() || '';
 
   useEffect(() => {
     if (!token) {
-      window.location.href = "/login?error=missing-token";
+      window.location.href = '/login?error=missing-token';
       return;
     }
-    const backendUrl = `${API_BASE_URL.replace(/\/$/, "")}/employees/verify-email-link?token=${encodeURIComponent(token)}`;
+    const backendUrl = `${API_BASE_URL.replace(/\/$/, '')}/employees/verify-email-link?token=${encodeURIComponent(token)}`;
     window.location.href = backendUrl;
   }, [token]);
 

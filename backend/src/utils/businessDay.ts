@@ -3,17 +3,17 @@ export function getBusinessDayRange(params: {
   boundaryHour: number; // e.g. 4 => day is 04:00..03:59
   timeZone?: string;
 }): { start: Date; end: Date; dateKey: string } {
-  const { date, boundaryHour, timeZone = "Asia/Kolkata" } = params;
+  const { date, boundaryHour, timeZone = 'Asia/Kolkata' } = params;
   // Convert to timezone parts.
-  const dateStr = date.toLocaleDateString("en-CA", { timeZone }); // YYYY-MM-DD
-  const [y0, m0, d0] = dateStr.split("-").map(Number);
-  const timeParts = new Intl.DateTimeFormat("en-IN", {
+  const dateStr = date.toLocaleDateString('en-CA', { timeZone }); // YYYY-MM-DD
+  const [y0, m0, d0] = dateStr.split('-').map(Number);
+  const timeParts = new Intl.DateTimeFormat('en-IN', {
     timeZone,
-    hour: "numeric",
-    minute: "numeric",
+    hour: 'numeric',
+    minute: 'numeric',
     hour12: false,
   }).formatToParts(date);
-  const hh = Number(timeParts.find((p) => p.type === "hour")?.value ?? 0);
+  const hh = Number(timeParts.find(p => p.type === 'hour')?.value ?? 0);
 
   // Business day key: if local time is before boundaryHour (e.g. 02:00), it belongs to previous business day.
   const businessDate = new Date(Date.UTC(y0, m0 - 1, d0));
@@ -38,4 +38,3 @@ export function getBusinessDayRange(params: {
   const end = new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1);
   return { start, end, dateKey };
 }
-

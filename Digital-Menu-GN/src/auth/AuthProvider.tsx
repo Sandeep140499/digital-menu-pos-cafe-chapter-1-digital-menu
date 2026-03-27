@@ -6,10 +6,10 @@ import {
   useRef,
   useState,
   type ReactNode,
-} from "react";
-import { API_BASE_URL } from "@/constants";
+} from 'react';
+import { API_BASE_URL } from '@/constants';
 
-export type AuthRole = "ADMIN" | "EMPLOYEE";
+export type AuthRole = 'ADMIN' | 'EMPLOYEE';
 
 export type AuthContextValue = {
   token: string | null;
@@ -18,7 +18,11 @@ export type AuthContextValue = {
   isAuthenticated: boolean;
   isAdmin: boolean;
   isEmployee: boolean;
-  login: (args: { email: string; password: string; loginAs?: "admin" | "employee" }) => Promise<AuthRole>;
+  login: (args: {
+    email: string;
+    password: string;
+    loginAs?: 'admin' | 'employee';
+  }) => Promise<AuthRole>;
   logout: () => Promise<void>;
   refresh: () => Promise<string | null>;
   setSession: (token: string | null, role: AuthRole | null) => void;
@@ -26,36 +30,36 @@ export type AuthContextValue = {
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
 
-const TOKEN_KEY = "dm_auth_token";
-const ROLE_KEY = "dm_auth_role";
+const TOKEN_KEY = 'dm_auth_token';
+const ROLE_KEY = 'dm_auth_role';
 
 function readCookie(name: string) {
-  if (typeof document === "undefined") return null;
+  if (typeof document === 'undefined') return null;
   const match = document.cookie.match(
-    new RegExp(`(?:^|; )${name.replace(/[$()*+./?[\\\]^{|}-]/g, "\\$&")}=([^;]*)`),
+    new RegExp(`(?:^|; )${name.replace(/[$()*+./?[\\\]^{|}-]/g, '\\$&')}=([^;]*)`)
   );
   return match ? decodeURIComponent(match[1]) : null;
 }
 
 function extractMessage(payload: unknown): string | undefined {
-  if (!payload || typeof payload !== "object") return undefined;
+  if (!payload || typeof payload !== 'object') return undefined;
   const msg = (payload as Record<string, unknown>).message;
-  return typeof msg === "string" ? msg : undefined;
+  return typeof msg === 'string' ? msg : undefined;
 }
 
 async function authFetch(path: string, init: RequestInit = {}) {
-  const url = path.startsWith("http") ? path : `${API_BASE_URL}${path}`;
-  const csrf = readCookie("csrf") || "";
+  const url = path.startsWith('http') ? path : `${API_BASE_URL}${path}`;
+  const csrf = readCookie('csrf') || '';
   return fetch(url, {
     ...init,
-    credentials: "include",
+    credentials: 'include',
     headers: {
       ...(init.headers || {}),
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
       // Double-submit CSRF for auth cookie endpoints
-      ...(path.startsWith("/auth/") || path.startsWith("/api/auth/")
+      ...(path.startsWith('/auth/') || path.startsWith('/api/auth/')
         ? csrf
-          ? { "X-CSRF-Token": csrf }
+          ? { 'X-CSRF-Token': csrf }
           : {}
         : {}),
     },
@@ -64,11 +68,11 @@ async function authFetch(path: string, init: RequestInit = {}) {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
+    if (typeof window === 'undefined') return null;
     return window.sessionStorage.getItem(TOKEN_KEY);
   });
   const [role, setRole] = useState<AuthRole | null>(() => {
-    if (typeof window === "undefined") return null;
+    if (typeof window === 'undefined') return null;
     return (window.sessionStorage.getItem(ROLE_KEY) as AuthRole | null) ?? null;
   });
   const [ready, setReady] = useState(false);
@@ -76,7 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const bootstrapped = useRef(false);
 
   const setSession = useCallback((t: string | null, r: AuthRole | null) => {
-    if (typeof window !== "undefined") {
+    if (typeof window !== 'undefined') {
       if (t) {
         window.sessionStorage.setItem(TOKEN_KEY, t);
         if (r) window.sessionStorage.setItem(ROLE_KEY, r);
@@ -94,8 +98,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refreshing.current = (async () => {
       // If we don't have a readable CSRF cookie yet, don't even attempt refresh.
       // (Backend enforces double-submit CSRF and will return 403.)
-      if (!readCookie("csrf")) return null;
-      const res = await authFetch("/auth/refresh", { method: "POST" });
+      if (!readCookie('csrf')) return null;
+      const res = await authFetch('/auth/refresh', { method: 'POST' });
       if (!res.ok) {
         // Important: if refresh cookies aren't present (or CSRF fails),
         // do NOT wipe an existing access token. That would change legacy behavior.
@@ -112,10 +116,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [setSession]);
 
   const login = useCallback(
-    async (args: { email: string; password: string; loginAs?: "admin" | "employee" }) => {
+    async (args: { email: string; password: string; loginAs?: 'admin' | 'employee' }) => {
       const doLogin = async (payload: typeof args) => {
-        return authFetch("/auth/login", {
-          method: "POST",
+        return authFetch('/auth/login', {
+          method: 'POST',
           body: JSON.stringify(payload),
         });
       };
@@ -124,26 +128,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Some deployments still require explicitly specifying the role.
       // To keep the UI simple (no role picker), retry once as employee on 401.
       if (res.status === 401 && !args.loginAs) {
-        res = await doLogin({ ...args, loginAs: "employee" });
+        res = await doLogin({ ...args, loginAs: 'employee' });
       }
       if (!res.ok) {
         const data: unknown = await res.json().catch(() => ({}));
         const msg =
           res.status === 403
-            ? extractMessage(data) || "Please verify your email before logging in."
-            : extractMessage(data) || "Login failed";
+            ? extractMessage(data) || 'Please verify your email before logging in.'
+            : extractMessage(data) || 'Login failed';
         throw new Error(msg);
       }
       const data = (await res.json()) as { accessToken: string; role: AuthRole };
       setSession(data.accessToken, data.role);
       return data.role;
     },
-    [setSession],
+    [setSession]
   );
 
   const logout = useCallback(async () => {
     try {
-      await authFetch("/auth/logout", { method: "POST" });
+      await authFetch('/auth/logout', { method: 'POST' });
     } finally {
       setSession(null, null);
     }
@@ -160,8 +164,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refresh, token]);
 
   const value = useMemo<AuthContextValue>(() => {
-    const isAdmin = role === "ADMIN";
-    const isEmployee = role === "EMPLOYEE";
+    const isAdmin = role === 'ADMIN';
+    const isEmployee = role === 'EMPLOYEE';
     return {
       token,
       role,
@@ -178,4 +182,3 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
-

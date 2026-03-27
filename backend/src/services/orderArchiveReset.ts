@@ -1,4 +1,4 @@
-import { prisma } from "../config/prisma.js";
+import { prisma } from '../config/prisma.js';
 
 /**
  * Deletes orders whose `createdAt` falls in [from, to] (inclusive), plus dependent rows.
@@ -9,18 +9,18 @@ import { prisma } from "../config/prisma.js";
  */
 export async function purgeOrdersCreatedBetween(
   from: Date,
-  to: Date,
+  to: Date
 ): Promise<{ deletedOrders: number }> {
   const targets = await prisma.order.findMany({
     where: { createdAt: { gte: from, lte: to } },
     select: { id: true },
   });
-  const ids = targets.map((o) => o.id);
+  const ids = targets.map(o => o.id);
   if (ids.length === 0) {
     return { deletedOrders: 0 };
   }
 
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async tx => {
     await tx.paymentRecord.deleteMany({ where: { orderId: { in: ids } } });
     await tx.orderModification.deleteMany({ where: { orderId: { in: ids } } });
     await tx.removedItemsReport.deleteMany({ where: { orderId: { in: ids } } });

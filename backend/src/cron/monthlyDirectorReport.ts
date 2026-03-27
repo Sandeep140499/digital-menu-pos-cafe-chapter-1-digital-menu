@@ -2,29 +2,29 @@
  * At 04:10 AM on the 1st day of each month (TIMEZONE), send Monthly Business Report PDF to director(s).
  * Month range is calendar month: 01..last day (28/29/30/31).
  */
-import { prisma } from "../config/prisma.js";
-import { isMailConfigured, sendEmail } from "../config/mailer.js";
+import { prisma } from '../config/prisma.js';
+import { isMailConfigured, sendEmail } from '../config/mailer.js';
 import {
   generateMonthlyDirectorReportPdf,
   getMonthlyDirectorReportFileName,
-} from "../services/directorMonthlyReportPdf.js";
-import { getPreviousCalendarMonthBounds } from "../utils/calendarMonth.js";
+} from '../services/directorMonthlyReportPdf.js';
+import { getPreviousCalendarMonthBounds } from '../utils/calendarMonth.js';
 
-const TIMEZONE = process.env.TZ || "Asia/Kolkata";
+const TIMEZONE = process.env.TZ || 'Asia/Kolkata';
 const REPORT_HOUR = 4;
 const REPORT_MINUTE = 10;
 
 function nowPartsInTz(now: Date): { y: number; m0: number; d: number; hh: number; mm: number } {
-  const dateStr = now.toLocaleDateString("en-CA", { timeZone: TIMEZONE }); // YYYY-MM-DD
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const parts = new Intl.DateTimeFormat("en-IN", {
+  const dateStr = now.toLocaleDateString('en-CA', { timeZone: TIMEZONE }); // YYYY-MM-DD
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const parts = new Intl.DateTimeFormat('en-IN', {
     timeZone: TIMEZONE,
-    hour: "numeric",
-    minute: "numeric",
+    hour: 'numeric',
+    minute: 'numeric',
     hour12: false,
   }).formatToParts(now);
-  const hh = Number(parts.find((p) => p.type === "hour")?.value ?? 0);
-  const mm = Number(parts.find((p) => p.type === "minute")?.value ?? 0);
+  const hh = Number(parts.find(p => p.type === 'hour')?.value ?? 0);
+  const mm = Number(parts.find(p => p.type === 'minute')?.value ?? 0);
   return { y, m0: m - 1, d, hh, mm };
 }
 
@@ -34,14 +34,14 @@ function isMonthStartTime(now: Date): boolean {
 }
 
 function parseDirectorEmails(input: string | null | undefined): string[] {
-  return (input || "")
+  return (input || '')
     .split(/[,\s]+/)
-    .map((e) => e.trim())
-    .filter((e) => e.length > 0 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+    .map(e => e.trim())
+    .filter(e => e.length > 0 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
 }
 
 function formatINR(n: number): string {
-  return "₹" + Math.round(Number(n) || 0).toLocaleString("en-IN");
+  return '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN');
 }
 
 function formatPct(n: number): string {
@@ -52,7 +52,7 @@ export async function runMonthlyDirectorReport(): Promise<boolean> {
   const now = new Date();
   const { monthKey, monthLabel, from, to, fromLabel, toLabel, daysInMonth } =
     getPreviousCalendarMonthBounds(now);
-  const [snapYear, snapMonth] = monthKey.split("-").map(Number);
+  const [snapYear, snapMonth] = monthKey.split('-').map(Number);
   const prevMonthFrom = new Date(from);
   prevMonthFrom.setMonth(prevMonthFrom.getMonth() - 1);
   prevMonthFrom.setDate(1);
@@ -62,20 +62,19 @@ export async function runMonthlyDirectorReport(): Promise<boolean> {
   const prevMonthDays = new Date(
     prevMonthFrom.getFullYear(),
     prevMonthFrom.getMonth() + 1,
-    0,
+    0
   ).getDate();
 
   let snapshotSuccess = false;
-  const { computeMonthlyMetrics, upsertMonthlyRevenueSnapshot } = await import(
-    "../services/monthlyRevenueSnapshot.js"
-  );
+  const { computeMonthlyMetrics, upsertMonthlyRevenueSnapshot } =
+    await import('../services/monthlyRevenueSnapshot.js');
   let metrics: Awaited<ReturnType<typeof computeMonthlyMetrics>>;
   try {
     metrics = await computeMonthlyMetrics(from, to, daysInMonth);
   } catch (e: unknown) {
     console.error(
-      "[MonthlyDirectorReport] Metrics computation failed:",
-      (e as Error)?.message ?? e,
+      '[MonthlyDirectorReport] Metrics computation failed:',
+      (e as Error)?.message ?? e
     );
     return false;
   }
@@ -87,17 +86,14 @@ export async function runMonthlyDirectorReport(): Promise<boolean> {
       from,
       to,
       daysInMonth,
-      metrics,
+      metrics
     );
     snapshotSuccess = true;
     console.log(
-      `[MonthlyDirectorReport] Monthly revenue snapshot saved for ${monthKey} (persists after order purge).`,
+      `[MonthlyDirectorReport] Monthly revenue snapshot saved for ${monthKey} (persists after order purge).`
     );
   } catch (e: unknown) {
-    console.error(
-      "[MonthlyDirectorReport] Snapshot upsert failed:",
-      (e as Error)?.message ?? e,
-    );
+    console.error('[MonthlyDirectorReport] Snapshot upsert failed:', (e as Error)?.message ?? e);
   }
 
   const totalOrders = metrics.totalOrders;
@@ -109,16 +105,14 @@ export async function runMonthlyDirectorReport(): Promise<boolean> {
   const totalLosses = metrics.totalLoss;
   const avgDailySale = daysInMonth > 0 ? totalRevenue / daysInMonth : 0;
   const avgDailyOrders = daysInMonth > 0 ? totalOrders / daysInMonth : 0;
-  const paymentCollectionRate =
-    totalOrders > 0 ? (paidOrders / totalOrders) * 100 : 0;
+  const paymentCollectionRate = totalOrders > 0 ? (paidOrders / totalOrders) * 100 : 0;
   const monthlyTargetRow = await prisma.monthlyTarget.findUnique({
     where: { yearMonth: monthKey },
     select: { targetAmount: true },
   });
   const monthlyTarget = Number(monthlyTargetRow?.targetAmount ?? 0);
   const monthlyTargetSet = monthlyTarget > 0;
-  const targetAchievementPct =
-    monthlyTargetSet ? (totalRevenue / monthlyTarget) * 100 : null;
+  const targetAchievementPct = monthlyTargetSet ? (totalRevenue / monthlyTarget) * 100 : null;
   const monthlyExpenses = Number(process.env.MONTHLY_EXPENSES_INR || 0);
   const totalCostProxy = totalLosses + monthlyExpenses;
   const netProfit = totalRevenue - totalCostProxy;
@@ -127,17 +121,13 @@ export async function runMonthlyDirectorReport(): Promise<boolean> {
   let previousMonthRevenue = 0;
   let previousMonthOrders = 0;
   try {
-    const prevMetrics = await computeMonthlyMetrics(
-      prevMonthFrom,
-      prevMonthTo,
-      prevMonthDays,
-    );
+    const prevMetrics = await computeMonthlyMetrics(prevMonthFrom, prevMonthTo, prevMonthDays);
     previousMonthRevenue = prevMetrics.totalSales;
     previousMonthOrders = prevMetrics.totalOrders;
   } catch (e: unknown) {
     console.warn(
-      "[MonthlyDirectorReport] Previous-month metrics unavailable:",
-      (e as Error)?.message ?? e,
+      '[MonthlyDirectorReport] Previous-month metrics unavailable:',
+      (e as Error)?.message ?? e
     );
   }
   const revenueVsPreviousMonthPct =
@@ -156,7 +146,7 @@ export async function runMonthlyDirectorReport(): Promise<boolean> {
   const paidOrdersWithItems = await prisma.order.findMany({
     where: {
       createdAt: { gte: from, lte: to },
-      paymentStatus: "PAID",
+      paymentStatus: 'PAID',
     },
     select: {
       createdAt: true,
@@ -164,7 +154,10 @@ export async function runMonthlyDirectorReport(): Promise<boolean> {
       items: { select: { name: true, quantity: true } },
     },
   });
-  const byDay = new Map<string, { orders: number; revenue: number; itemQty: Map<string, number> }>();
+  const byDay = new Map<
+    string,
+    { orders: number; revenue: number; itemQty: Map<string, number> }
+  >();
   for (const order of paidOrdersWithItems) {
     const d = new Date(order.createdAt).toISOString().slice(0, 10);
     const cur = byDay.get(d) ?? { orders: 0, revenue: 0, itemQty: new Map<string, number>() };
@@ -175,12 +168,15 @@ export async function runMonthlyDirectorReport(): Promise<boolean> {
     }
     byDay.set(d, cur);
   }
-  let bestDay:
-    | { date: string; orders: number; revenue: number; topItem: string; topItemQty: number }
-    | null = null;
+  let bestDay: {
+    date: string;
+    orders: number;
+    revenue: number;
+    topItem: string;
+    topItemQty: number;
+  } | null = null;
   for (const [date, v] of byDay.entries()) {
-    const topItemEntry =
-      [...v.itemQty.entries()].sort((a, b) => b[1] - a[1])[0] ?? ["N/A", 0];
+    const topItemEntry = [...v.itemQty.entries()].sort((a, b) => b[1] - a[1])[0] ?? ['N/A', 0];
     if (!bestDay || v.revenue > bestDay.revenue) {
       bestDay = {
         date,
@@ -193,46 +189,42 @@ export async function runMonthlyDirectorReport(): Promise<boolean> {
   }
 
   const purgeEnabled =
-    String(process.env.ORDER_PURGE_AFTER_MONTHLY_REPORT || "")
+    String(process.env.ORDER_PURGE_AFTER_MONTHLY_REPORT || '')
       .trim()
-      .toLowerCase() === "true";
+      .toLowerCase() === 'true';
   const purgeWithoutEmail =
-    String(process.env.ORDER_PURGE_WITHOUT_EMAIL || "")
+    String(process.env.ORDER_PURGE_WITHOUT_EMAIL || '')
       .trim()
-      .toLowerCase() === "true";
+      .toLowerCase() === 'true';
 
   async function runOrderPurgeIfEligible(emailSent: boolean): Promise<void> {
     if (!purgeEnabled) return;
     if (!snapshotSuccess) {
-      console.log(
-        "[MonthlyDirectorReport] Order purge skipped (snapshot did not save).",
-      );
+      console.log('[MonthlyDirectorReport] Order purge skipped (snapshot did not save).');
       return;
     }
     if (!emailSent && !purgeWithoutEmail) {
       console.log(
-        "[MonthlyDirectorReport] Order purge skipped (email not sent). Set ORDER_PURGE_WITHOUT_EMAIL=true to purge after snapshot when mail/directors are missing.",
+        '[MonthlyDirectorReport] Order purge skipped (email not sent). Set ORDER_PURGE_WITHOUT_EMAIL=true to purge after snapshot when mail/directors are missing.'
       );
       return;
     }
     try {
-      const { purgeOrdersCreatedBetween } = await import(
-        "../services/orderArchiveReset.js"
-      );
+      const { purgeOrdersCreatedBetween } = await import('../services/orderArchiveReset.js');
       const { deletedOrders } = await purgeOrdersCreatedBetween(from, to);
       console.log(
-        `[MonthlyDirectorReport] Purged orders for reported month ${monthKey} only (${from.toISOString().slice(0, 10)}…${to.toISOString().slice(0, 10)}): ${deletedOrders} row(s); next Order id continues from sequence.`,
+        `[MonthlyDirectorReport] Purged orders for reported month ${monthKey} only (${from.toISOString().slice(0, 10)}…${to.toISOString().slice(0, 10)}): ${deletedOrders} row(s); next Order id continues from sequence.`
       );
     } catch (pErr: unknown) {
       console.error(
-        "[MonthlyDirectorReport] Order purge failed (orders NOT cleared):",
-        (pErr as Error)?.message ?? pErr,
+        '[MonthlyDirectorReport] Order purge failed (orders NOT cleared):',
+        (pErr as Error)?.message ?? pErr
       );
     }
   }
 
   if (!isMailConfigured()) {
-    console.log("[MonthlyDirectorReport] Mail not configured, skip email");
+    console.log('[MonthlyDirectorReport] Mail not configured, skip email');
     await runOrderPurgeIfEligible(false);
     return true;
   }
@@ -240,11 +232,9 @@ export async function runMonthlyDirectorReport(): Promise<boolean> {
   const branches = await prisma.branch.findMany({
     select: { id: true, name: true, directorsEmail: true },
   });
-  const directorEmails = [
-    ...new Set(branches.flatMap((b) => parseDirectorEmails(b.directorsEmail))),
-  ];
+  const directorEmails = [...new Set(branches.flatMap(b => parseDirectorEmails(b.directorsEmail)))];
   if (directorEmails.length === 0) {
-    console.log("[MonthlyDirectorReport] No director emails configured, skip email");
+    console.log('[MonthlyDirectorReport] No director emails configured, skip email');
     await runOrderPurgeIfEligible(false);
     return true;
   }
@@ -283,7 +273,7 @@ export async function runMonthlyDirectorReport(): Promise<boolean> {
     `Unique customers (month): ${uniqueCustomers}`,
     `New customers (first order in month): ${newCustomersCount}`,
     `Losses: ${formatINR(totalLosses)}`,
-    monthlyExpenses > 0 ? `Manual monthly expenses: ${formatINR(monthlyExpenses)}` : "",
+    monthlyExpenses > 0 ? `Manual monthly expenses: ${formatINR(monthlyExpenses)}` : '',
     `Net profit (proxy): ${formatINR(netProfit)}`,
     `Profit margin: ${formatPct(profitMarginPct)}`,
     `Avg daily sale: ${formatINR(avgDailySale)}`,
@@ -292,11 +282,11 @@ export async function runMonthlyDirectorReport(): Promise<boolean> {
     monthlyTargetSet
       ? `Target achievement: ${formatPct(targetAchievementPct ?? 0)} of ${formatINR(monthlyTarget)}`
       : `Target achievement: target not set`,
-    `Vs previous month - Revenue: ${revenueVsPreviousMonthPct >= 0 ? "+" : ""}${formatPct(revenueVsPreviousMonthPct)}, Orders: ${ordersVsPreviousMonthPct >= 0 ? "+" : ""}${formatPct(ordersVsPreviousMonthPct)}`,
+    `Vs previous month - Revenue: ${revenueVsPreviousMonthPct >= 0 ? '+' : ''}${formatPct(revenueVsPreviousMonthPct)}, Orders: ${ordersVsPreviousMonthPct >= 0 ? '+' : ''}${formatPct(ordersVsPreviousMonthPct)}`,
     bestDay
       ? `Best day: ${bestDay.date} (${bestDay.orders} paid orders, ${formatINR(bestDay.revenue)}) | Reason: top item ${bestDay.topItem} (${bestDay.topItemQty})`
-      : "",
-  ].join("\n");
+      : '',
+  ].join('\n');
 
   const html = `
 <!DOCTYPE html>
@@ -318,7 +308,7 @@ export async function runMonthlyDirectorReport(): Promise<boolean> {
       ${
         monthlyExpenses > 0
           ? `<tr><td style="padding:6px 12px;border:1px solid #e2e8f0">Manual monthly expenses</td><td style="padding:6px 12px;border:1px solid #e2e8f0;text-align:right">${formatINR(monthlyExpenses)}</td></tr>`
-          : ""
+          : ''
       }
       <tr><td style="padding:6px 12px;border:1px solid #e2e8f0">Net profit (proxy)</td><td style="padding:6px 12px;border:1px solid #e2e8f0;text-align:right">${formatINR(netProfit)}</td></tr>
       <tr><td style="padding:6px 12px;border:1px solid #e2e8f0">Profit margin</td><td style="padding:6px 12px;border:1px solid #e2e8f0;text-align:right">${formatPct(profitMarginPct)}</td></tr>
@@ -330,14 +320,14 @@ export async function runMonthlyDirectorReport(): Promise<boolean> {
           ? `<tr><td style="padding:6px 12px;border:1px solid #e2e8f0">Target achievement</td><td style="padding:6px 12px;border:1px solid #e2e8f0;text-align:right">${formatPct(targetAchievementPct ?? 0)} of ${formatINR(monthlyTarget)}</td></tr>`
           : `<tr><td style="padding:6px 12px;border:1px solid #e2e8f0">Target achievement</td><td style="padding:6px 12px;border:1px solid #e2e8f0;text-align:right">Target not set</td></tr>`
       }
-      <tr><td style="padding:6px 12px;border:1px solid #e2e8f0">Revenue vs previous month</td><td style="padding:6px 12px;border:1px solid #e2e8f0;text-align:right">${revenueVsPreviousMonthPct >= 0 ? "▲" : "▼"} ${formatPct(Math.abs(revenueVsPreviousMonthPct))}</td></tr>
-      <tr><td style="padding:6px 12px;border:1px solid #e2e8f0">Orders vs previous month</td><td style="padding:6px 12px;border:1px solid #e2e8f0;text-align:right">${ordersVsPreviousMonthPct >= 0 ? "▲" : "▼"} ${formatPct(Math.abs(ordersVsPreviousMonthPct))}</td></tr>
+      <tr><td style="padding:6px 12px;border:1px solid #e2e8f0">Revenue vs previous month</td><td style="padding:6px 12px;border:1px solid #e2e8f0;text-align:right">${revenueVsPreviousMonthPct >= 0 ? '▲' : '▼'} ${formatPct(Math.abs(revenueVsPreviousMonthPct))}</td></tr>
+      <tr><td style="padding:6px 12px;border:1px solid #e2e8f0">Orders vs previous month</td><td style="padding:6px 12px;border:1px solid #e2e8f0;text-align:right">${ordersVsPreviousMonthPct >= 0 ? '▲' : '▼'} ${formatPct(Math.abs(ordersVsPreviousMonthPct))}</td></tr>
     </tbody>
   </table>
   ${
     bestDay
       ? `<p style="margin:0 0 16px 0"><strong>Best performing day:</strong> ${bestDay.date} (${bestDay.orders} paid orders, ${formatINR(bestDay.revenue)}). <strong>Reason:</strong> highest paid revenue; top item was ${bestDay.topItem} (${bestDay.topItemQty} sold).</p>`
-      : ""
+      : ''
   }
   <p style="color:#64748b;font-size:12px">A detailed PDF report is attached.</p>
   <p style="color:#64748b;font-size:12px">Note: Net profit uses a proxy (paid revenue minus removed-item losses and optional manual monthly expenses). For full accounting profit, an expense ledger is required.</p>
@@ -353,16 +343,18 @@ export async function runMonthlyDirectorReport(): Promise<boolean> {
         {
           filename: getMonthlyDirectorReportFileName(monthKey),
           content: Buffer.from(pdfBytes),
-          contentType: "application/pdf",
+          contentType: 'application/pdf',
         },
       ],
     });
-    console.log(`[MonthlyDirectorReport] Sent to ${directorEmails.length} director(s) for ${monthKey}`);
+    console.log(
+      `[MonthlyDirectorReport] Sent to ${directorEmails.length} director(s) for ${monthKey}`
+    );
 
     await runOrderPurgeIfEligible(true);
     return true;
   } catch (e: unknown) {
-    console.error("[MonthlyDirectorReport] Send failed:", (e as Error)?.message ?? e);
+    console.error('[MonthlyDirectorReport] Send failed:', (e as Error)?.message ?? e);
     await runOrderPurgeIfEligible(false);
     return false;
   }
@@ -377,9 +369,6 @@ export function startMonthlyDirectorReportCron(): void {
     if (minute === lastMinute) return;
     lastMinute = minute;
     if (!isMonthStartTime(now)) return;
-    runMonthlyDirectorReport().catch((e) =>
-      console.error("Monthly director report error:", e),
-    );
+    runMonthlyDirectorReport().catch(e => console.error('Monthly director report error:', e));
   }, 60 * 1000);
 }
-

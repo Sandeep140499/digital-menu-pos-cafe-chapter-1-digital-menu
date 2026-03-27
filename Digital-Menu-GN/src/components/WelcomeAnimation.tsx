@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Heart, MapPin } from "lucide-react";
-import cafeLogo from "@/assets/logo.png";
+import { useEffect, useMemo, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Heart, MapPin } from 'lucide-react';
+import cafeLogo from '@/assets/logo.png';
 
 // Deterministic pseudo-random from index (pure, no Math.random during render)
 const sparkleStyle = (i: number) => {
@@ -34,24 +34,24 @@ const Sparkle = () => (
             delay,
           }}
         >
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-          <g filter="url(#sparkle-blur)">
-            <circle cx="9" cy="9" r="2.5" fill="#b9fbc0" fillOpacity="0.8" />
-            <circle cx="9" cy="9" r="1.5" fill="#16a34a" fillOpacity="0.7" />
-          </g>
-          <defs>
-            <filter
-              id="sparkle-blur"
-              x="0"
-              y="0"
-              width="18"
-              height="18"
-              filterUnits="userSpaceOnUse"
-            >
-              <feGaussianBlur stdDeviation="1.5" />
-            </filter>
-          </defs>
-        </svg>
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <g filter="url(#sparkle-blur)">
+              <circle cx="9" cy="9" r="2.5" fill="#b9fbc0" fillOpacity="0.8" />
+              <circle cx="9" cy="9" r="1.5" fill="#16a34a" fillOpacity="0.7" />
+            </g>
+            <defs>
+              <filter
+                id="sparkle-blur"
+                x="0"
+                y="0"
+                width="18"
+                height="18"
+                filterUnits="userSpaceOnUse"
+              >
+                <feGaussianBlur stdDeviation="1.5" />
+              </filter>
+            </defs>
+          </svg>
         </motion.div>
       );
     })}
@@ -60,35 +60,35 @@ const Sparkle = () => (
 
 // Quotes
 const dailyQuotes = [
-  "Savor the moment, one sip at a time.",
-  "Good food, good mood, great day!",
-  "Let your day begin with a perfect brew.",
-  "Every meal is a story. Make yours delicious.",
-  "A fresh start deserves a fresh cup.",
-  "Taste the joy in every bite.",
-  "Fuel your dreams with flavor.",
+  'Savor the moment, one sip at a time.',
+  'Good food, good mood, great day!',
+  'Let your day begin with a perfect brew.',
+  'Every meal is a story. Make yours delicious.',
+  'A fresh start deserves a fresh cup.',
+  'Taste the joy in every bite.',
+  'Fuel your dreams with flavor.',
 ];
 
 function getGreetingAndQuote() {
   const now = new Date();
   const hour = now.getHours();
-  let greeting = "Welcome";
-  let suggestion = "Enjoy your meal!";
+  let greeting = 'Welcome';
+  let suggestion = 'Enjoy your meal!';
   if (hour < 5) {
-    greeting = "Good Night";
-    suggestion = "Late cravings? We’re here for you!";
+    greeting = 'Good Night';
+    suggestion = 'Late cravings? We’re here for you!';
   } else if (hour < 12) {
-    greeting = "Good Morning";
-    suggestion = "Let’s start your day with a fresh breakfast!";
+    greeting = 'Good Morning';
+    suggestion = 'Let’s start your day with a fresh breakfast!';
   } else if (hour < 17) {
-    greeting = "Good Afternoon";
-    suggestion = "How about a tasty lunch or a cool drink?";
+    greeting = 'Good Afternoon';
+    suggestion = 'How about a tasty lunch or a cool drink?';
   } else if (hour < 21) {
-    greeting = "Good Evening";
-    suggestion = "Relax and enjoy a delicious dinner!";
+    greeting = 'Good Evening';
+    suggestion = 'Relax and enjoy a delicious dinner!';
   } else {
-    greeting = "Good Night";
-    suggestion = "End your day with a delightful treat!";
+    greeting = 'Good Night';
+    suggestion = 'End your day with a delightful treat!';
   }
   const quote = dailyQuotes[now.getDay()];
   return { greeting, suggestion, quote };
@@ -100,25 +100,25 @@ interface WelcomeAnimationProps {
 
 const partnerImages = [
   {
-    src: "https://upload.wikimedia.org/wikipedia/commons/7/75/Zomato_logo.png",
-    alt: "Zomato",
-    badge: "Popular",
-    badgeColor: "bg-red-500",
-    shadow: "shadow-md",
+    src: 'https://upload.wikimedia.org/wikipedia/commons/7/75/Zomato_logo.png',
+    alt: 'Zomato',
+    badge: 'Popular',
+    badgeColor: 'bg-red-500',
+    shadow: 'shadow-md',
   },
   {
-    src: "https://upload.wikimedia.org/wikipedia/commons/1/13/Swiggy_logo.png",
-    alt: "Swiggy",
-    badge: "Trending",
-    badgeColor: "bg-orange-500",
-    shadow: "shadow-md",
+    src: 'https://upload.wikimedia.org/wikipedia/commons/1/13/Swiggy_logo.png',
+    alt: 'Swiggy',
+    badge: 'Trending',
+    badgeColor: 'bg-orange-500',
+    shadow: 'shadow-md',
   },
   {
-    src: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTL3vawke4UFzJcg65Wy2KAKTmYwqHlbPf6HA&s",
-    alt: "Magicpin",
-    badge: "Cashback",
-    badgeColor: "bg-purple-600",
-    shadow: "shadow-md",
+    src: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTL3vawke4UFzJcg65Wy2KAKTmYwqHlbPf6HA&s',
+    alt: 'Magicpin',
+    badge: 'Cashback',
+    badgeColor: 'bg-purple-600',
+    shadow: 'shadow-md',
   },
 ];
 
@@ -128,8 +128,8 @@ const WelcomeAnimation = ({ onComplete }: WelcomeAnimationProps) => {
   useEffect(() => {
     const prevOverflow = document.body.style.overflow;
     const prevOverscroll = document.body.style.overscrollBehavior;
-    document.body.style.overflow = "hidden";
-    document.body.style.overscrollBehavior = "none";
+    document.body.style.overflow = 'hidden';
+    document.body.style.overscrollBehavior = 'none';
 
     const timer = setTimeout(() => {
       setShow(false);
@@ -152,39 +152,39 @@ const WelcomeAnimation = ({ onComplete }: WelcomeAnimationProps) => {
           initial={{ opacity: 0, scale: 0.97 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.97 }}
-          transition={{ duration: 0.7, type: "spring" }}
+          transition={{ duration: 0.7, type: 'spring' }}
         >
           {/* Green Gradient BG */}
           <div
-            className="absolute inset-0 bg-[#16a34a] bg-opacity-90 backdrop-blur-md"
+            className="bg-opacity-90 absolute inset-0 bg-[#16a34a] backdrop-blur-md"
             style={{
-              background: "linear-gradient(120deg, #16a34a 60%, #166534 100%)",
+              background: 'linear-gradient(120deg, #16a34a 60%, #166534 100%)',
             }}
           />
           <Sparkle />
           <motion.div
-            className="relative z-10 w-full max-w-2xl text-center text-white space-y-3 overflow-hidden px-2"
+            className="relative z-10 w-full max-w-2xl space-y-3 overflow-hidden px-2 text-center text-white"
             initial={{ y: 40, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 40, opacity: 0 }}
-            transition={{ duration: 0.7, type: "spring" }}
+            transition={{ duration: 0.7, type: 'spring' }}
           >
             {/* Logo */}
             <motion.div
               className="flex justify-center"
               initial={{ scale: 0.7, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: "spring", stiffness: 120, delay: 0.2 }}
+              transition={{ type: 'spring', stiffness: 120, delay: 0.2 }}
             >
               <img
                 src={cafeLogo}
                 alt="Cafe Chapter 1"
-                className="h-20 w-20 sm:h-24 sm:w-24 object-contain drop-shadow-lg rounded-lg bg-white p-2"
+                className="h-20 w-20 rounded-lg bg-white object-contain p-2 drop-shadow-lg sm:h-24 sm:w-24"
               />
             </motion.div>
 
             <motion.h1
-              className="text-xl sm:text-2xl md:text-3xl font-bold"
+              className="text-xl font-bold sm:text-2xl md:text-3xl"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
@@ -192,7 +192,7 @@ const WelcomeAnimation = ({ onComplete }: WelcomeAnimationProps) => {
               {greeting}, Welcome to
             </motion.h1>
             <motion.h2
-              className="text-2xl sm:text-3xl md:text-5xl font-bold leading-tight"
+              className="text-2xl leading-tight font-bold sm:text-3xl md:text-5xl"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5 }}
@@ -200,7 +200,7 @@ const WelcomeAnimation = ({ onComplete }: WelcomeAnimationProps) => {
               Cafe Chapter 1
             </motion.h2>
             <motion.p
-              className="text-sm sm:text-base md:text-lg text-white/90"
+              className="text-sm text-white/90 sm:text-base md:text-lg"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.6 }}
@@ -209,13 +209,13 @@ const WelcomeAnimation = ({ onComplete }: WelcomeAnimationProps) => {
             </motion.p>
 
             <motion.div
-              className="flex justify-center items-center gap-2 text-sm sm:text-base font-semibold"
+              className="flex items-center justify-center gap-2 text-sm font-semibold sm:text-base"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.7 }}
             >
               Green Park, New Delhi
-              <Heart className="w-4 h-4 sm:w-5 sm:h-5 text-green-200 animate-pulse" />
+              <Heart className="h-4 w-4 animate-pulse text-green-200 sm:h-5 sm:w-5" />
             </motion.div>
 
             {/* Online Partners Horizontal Scroll */}
@@ -225,38 +225,38 @@ const WelcomeAnimation = ({ onComplete }: WelcomeAnimationProps) => {
               transition={{ delay: 0.8 }}
               className="mt-4"
             >
-              <h3 className="text-base sm:text-lg md:text-xl font-semibold mb-2">
+              <h3 className="mb-2 text-base font-semibold sm:text-lg md:text-xl">
                 Our Online Partners
               </h3>
               <div className="flex justify-center gap-4 overflow-x-auto px-1 pb-2">
                 {partnerImages.map((partner, idx) => (
                   <motion.div
                     key={partner.alt}
-                    className={`relative bg-white/90 rounded-xl ${partner.shadow} px-3 py-2 flex flex-col items-center min-w-[80px] sm:min-w-[100px] group`}
+                    className={`relative rounded-xl bg-white/90 ${partner.shadow} group flex min-w-[80px] flex-col items-center px-3 py-2 sm:min-w-[100px]`}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 1 + idx * 0.1 }}
                   >
                     <span
-                      className={`absolute left-1 top-1 text-[10px] sm:text-xs text-white px-2 py-0.5 rounded-full shadow ${partner.badgeColor}`}
+                      className={`absolute top-1 left-1 rounded-full px-2 py-0.5 text-[10px] text-white shadow sm:text-xs ${partner.badgeColor}`}
                     >
                       {partner.badge}
                     </span>
                     <img
                       src={partner.src}
                       alt={partner.alt}
-                      className="w-10 h-10 sm:w-12 sm:h-12 object-contain rounded-md mb-1 group-hover:scale-110 transition"
+                      className="mb-1 h-10 w-10 rounded-md object-contain transition group-hover:scale-110 sm:h-12 sm:w-12"
                       draggable={false}
                     />
                     <span
-                      className="text-xs sm:text-sm font-bold"
+                      className="text-xs font-bold sm:text-sm"
                       style={{
                         color:
-                          partner.alt === "Zomato"
-                            ? "#E23744"
-                            : partner.alt === "Swiggy"
-                              ? "#FC8019"
-                              : "#6C47FF",
+                          partner.alt === 'Zomato'
+                            ? '#E23744'
+                            : partner.alt === 'Swiggy'
+                              ? '#FC8019'
+                              : '#6C47FF',
                       }}
                     >
                       {partner.alt}
@@ -268,34 +268,28 @@ const WelcomeAnimation = ({ onComplete }: WelcomeAnimationProps) => {
 
             {/* Instagram & Map */}
             <motion.div
-              className="mt-4 flex flex-col md:flex-row justify-center items-center gap-4"
+              className="mt-4 flex flex-col items-center justify-center gap-4 md:flex-row"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 1.2 }}
             >
-              <div className="bg-white/90 rounded-2xl px-4 py-3 shadow w-full max-w-xs text-sm text-gray-800">
+              <div className="w-full max-w-xs rounded-2xl bg-white/90 px-4 py-3 text-sm text-gray-800 shadow">
                 <img
                   src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Instagram_icon.png"
                   alt="Instagram"
-                  className="w-10 h-10 mx-auto mb-2"
+                  className="mx-auto mb-2 h-10 w-10"
                 />
-                <div className="font-bold text-center text-[#E1306C]">
-                  @cafe_chapter_1
-                </div>
-                <p className="text-xs mt-1 text-center">
+                <div className="text-center font-bold text-[#E1306C]">@cafe_chapter_1</div>
+                <p className="mt-1 text-center text-xs">
                   New items & offers announced first on Instagram!
                   <br />
-                  <span className="font-semibold text-green-700">
-                    Follow us for more!
-                  </span>
+                  <span className="font-semibold text-green-700">Follow us for more!</span>
                 </p>
               </div>
-              <div className="bg-white/90 rounded-2xl px-4 py-3 shadow w-full max-w-xs text-sm text-gray-800">
-                <MapPin className="w-6 h-6 mx-auto text-green-700 mb-1" />
-                <div className="font-bold text-center text-green-700">
-                  Find our other outlet
-                </div>
-                <p className="text-xs mt-1 text-center">
+              <div className="w-full max-w-xs rounded-2xl bg-white/90 px-4 py-3 text-sm text-gray-800 shadow">
+                <MapPin className="mx-auto mb-1 h-6 w-6 text-green-700" />
+                <div className="text-center font-bold text-green-700">Find our other outlet</div>
+                <p className="mt-1 text-center text-xs">
                   135/3, Gautam Nagar, Yusuf Sarai, New Delhi
                 </p>
               </div>
@@ -303,7 +297,7 @@ const WelcomeAnimation = ({ onComplete }: WelcomeAnimationProps) => {
 
             {/* Quote */}
             <motion.div
-              className="mt-4 text-xs sm:text-sm italic text-white/80"
+              className="mt-4 text-xs text-white/80 italic sm:text-sm"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 1.4 }}

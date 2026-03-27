@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 
 export type MonthlyDirectorReportData = {
   monthLabel: string; // e.g. "March 2026"
@@ -32,7 +32,7 @@ export type MonthlyDirectorReportData = {
 };
 
 function formatINR(n: number): string {
-  return "₹" + Math.round(Number(n) || 0).toLocaleString("en-IN");
+  return '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN');
 }
 
 function formatPct(n: number): string {
@@ -44,7 +44,7 @@ export function getMonthlyDirectorReportFileName(monthKey: string): string {
 }
 
 export async function generateMonthlyDirectorReportPdf(
-  data: MonthlyDirectorReportData,
+  data: MonthlyDirectorReportData
 ): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
@@ -92,73 +92,93 @@ export async function generateMonthlyDirectorReportPdf(
       borderWidth: 1,
     });
 
-    page.drawText(k, { x: x0 + 10, y: y0 - 13, size: 10, font: fontBold, color: rgb(0.2, 0.24, 0.3) });
-    page.drawText(v, { x: x0 + leftW + 10, y: y0 - 13, size: 10, font, color: rgb(0.1, 0.12, 0.16) });
+    page.drawText(k, {
+      x: x0 + 10,
+      y: y0 - 13,
+      size: 10,
+      font: fontBold,
+      color: rgb(0.2, 0.24, 0.3),
+    });
+    page.drawText(v, {
+      x: x0 + leftW + 10,
+      y: y0 - 13,
+      size: 10,
+      font,
+      color: rgb(0.1, 0.12, 0.16),
+    });
     y -= rowH;
   };
 
   // Header
-  drawText("Monthly Director Business Report", 18, true, rgb(0.02, 0.5, 0.34));
-  drawText(`${data.monthLabel}  •  ${data.fromDateLabel} – ${data.toDateLabel}`, 11, false, rgb(0.35, 0.4, 0.47));
+  drawText('Monthly Director Business Report', 18, true, rgb(0.02, 0.5, 0.34));
+  drawText(
+    `${data.monthLabel}  •  ${data.fromDateLabel} – ${data.toDateLabel}`,
+    11,
+    false,
+    rgb(0.35, 0.4, 0.47)
+  );
   y -= 10;
 
   // Summary cards
-  drawText("Executive Summary", 13, true);
+  drawText('Executive Summary', 13, true);
   y += 2;
-  drawKVRow("Total revenue (Paid)", formatINR(data.totalRevenue));
-  drawKVRow("Total orders", String(data.totalOrders));
-  drawKVRow("Paid orders", String(data.paidOrders));
-  drawKVRow("Pending orders", String(data.pendingOrders));
-  drawKVRow("Unique customers (orders this month)", String(data.uniqueCustomers));
-  drawKVRow("New customers (first order in month)", String(data.newCustomersCount));
-  drawKVRow("Losses (removed items)", formatINR(data.totalLosses));
+  drawKVRow('Total revenue (Paid)', formatINR(data.totalRevenue));
+  drawKVRow('Total orders', String(data.totalOrders));
+  drawKVRow('Paid orders', String(data.paidOrders));
+  drawKVRow('Pending orders', String(data.pendingOrders));
+  drawKVRow('Unique customers (orders this month)', String(data.uniqueCustomers));
+  drawKVRow('New customers (first order in month)', String(data.newCustomersCount));
+  drawKVRow('Losses (removed items)', formatINR(data.totalLosses));
   if (data.monthlyExpenses > 0) {
-    drawKVRow("Manual monthly expenses", formatINR(data.monthlyExpenses));
+    drawKVRow('Manual monthly expenses', formatINR(data.monthlyExpenses));
   }
-  drawKVRow("Net profit (proxy)", formatINR(data.netProfit));
-  drawKVRow("Profit margin", formatPct(data.profitMarginPct));
-  drawKVRow("Average daily sale", formatINR(data.avgDailySale));
-  drawKVRow("Average daily orders", String(Math.round(data.avgDailyOrders * 10) / 10));
-  drawKVRow("Payment collection rate", formatPct(data.paymentCollectionRate));
+  drawKVRow('Net profit (proxy)', formatINR(data.netProfit));
+  drawKVRow('Profit margin', formatPct(data.profitMarginPct));
+  drawKVRow('Average daily sale', formatINR(data.avgDailySale));
+  drawKVRow('Average daily orders', String(Math.round(data.avgDailyOrders * 10) / 10));
+  drawKVRow('Payment collection rate', formatPct(data.paymentCollectionRate));
   if (data.monthlyTarget > 0) {
     drawKVRow(
-      "Target achievement",
-      `${formatPct(data.targetAchievementPct ?? 0)} of ${formatINR(data.monthlyTarget)}`,
+      'Target achievement',
+      `${formatPct(data.targetAchievementPct ?? 0)} of ${formatINR(data.monthlyTarget)}`
     );
   } else {
-    drawKVRow("Target achievement", "Target not set");
+    drawKVRow('Target achievement', 'Target not set');
   }
   drawKVRow(
-    "Revenue vs previous month",
-    `${data.revenueVsPreviousMonthPct >= 0 ? "▲" : "▼"} ${formatPct(Math.abs(data.revenueVsPreviousMonthPct))}`,
+    'Revenue vs previous month',
+    `${data.revenueVsPreviousMonthPct >= 0 ? '▲' : '▼'} ${formatPct(Math.abs(data.revenueVsPreviousMonthPct))}`
   );
   drawKVRow(
-    "Orders vs previous month",
-    `${data.ordersVsPreviousMonthPct >= 0 ? "▲" : "▼"} ${formatPct(Math.abs(data.ordersVsPreviousMonthPct))}`,
+    'Orders vs previous month',
+    `${data.ordersVsPreviousMonthPct >= 0 ? '▲' : '▼'} ${formatPct(Math.abs(data.ordersVsPreviousMonthPct))}`
   );
 
   y -= 18;
-  drawText("Best Performing Day", 13, true);
+  drawText('Best Performing Day', 13, true);
   if (data.bestDay) {
     drawText(
       `${data.bestDay.date}: ${data.bestDay.orders} paid orders, ${formatINR(data.bestDay.revenue)} revenue`,
-      10,
+      10
     );
     drawText(
       `Reason: highest paid revenue; top item ${data.bestDay.topItem} (${data.bestDay.topItemQty} sold).`,
-      10,
+      10
     );
   } else {
-    drawText("No paid orders data available for best-day analysis.", 10);
+    drawText('No paid orders data available for best-day analysis.', 10);
   }
 
   y -= 12;
-  drawText("Notes", 13, true);
-  drawText("- Revenue is calculated from orders marked PAID in the month.", 10);
-  drawText("- Losses are calculated from removed-items reports.", 10);
-  drawText("- Net profit is a proxy: paid revenue - removed-item loss - optional manual monthly expenses.", 10);
-  drawText("- Unique customers: distinct mobiles/sessions with any order in the month.", 10);
-  drawText("- New customers: first-ever order (by mobile or session) falls in this month.", 10);
+  drawText('Notes', 13, true);
+  drawText('- Revenue is calculated from orders marked PAID in the month.', 10);
+  drawText('- Losses are calculated from removed-items reports.', 10);
+  drawText(
+    '- Net profit is a proxy: paid revenue - removed-item loss - optional manual monthly expenses.',
+    10
+  );
+  drawText('- Unique customers: distinct mobiles/sessions with any order in the month.', 10);
+  drawText('- New customers: first-ever order (by mobile or session) falls in this month.', 10);
 
   // Footer
   page.drawText(`Generated automatically by POS • Month: ${data.monthKey}`, {
@@ -171,4 +191,3 @@ export async function generateMonthlyDirectorReportPdf(
 
   return await doc.save();
 }
-

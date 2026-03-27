@@ -2,13 +2,13 @@
  * Professional restaurant invoice PDF (INV-YYYY-NNNN.pdf).
  * Used for order confirmation and WhatsApp attachment.
  */
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 
-const RESTAURANT_NAME = process.env.RESTAURANT_NAME || "CAFE CHAPTER 1 RESTRO";
-const RESTAURANT_GSTIN = process.env.RESTAURANT_GSTIN || "";
-const DEFAULT_ADDRESS = process.env.RESTAURANT_ADDRESS || "Green Park, Gautam Nagar, New Delhi";
-const MENU_BASE_URL = process.env.MENU_BASE_URL || "";
-const GOOGLE_REVIEW_URL = process.env.GOOGLE_REVIEW_URL || "";
+const RESTAURANT_NAME = process.env.RESTAURANT_NAME || 'CAFE CHAPTER 1 RESTRO';
+const RESTAURANT_GSTIN = process.env.RESTAURANT_GSTIN || '';
+const DEFAULT_ADDRESS = process.env.RESTAURANT_ADDRESS || 'Green Park, Gautam Nagar, New Delhi';
+const MENU_BASE_URL = process.env.MENU_BASE_URL || '';
+const GOOGLE_REVIEW_URL = process.env.GOOGLE_REVIEW_URL || '';
 
 export type BranchInfo = {
   name?: string | null;
@@ -44,7 +44,7 @@ export type OrderForPdf = {
 /** Professional filename: INV-YYYY-NNNN.pdf */
 export function getInvoiceFileName(orderId: number): string {
   const year = new Date().getFullYear();
-  const padded = String(orderId).padStart(4, "0");
+  const padded = String(orderId).padStart(4, '0');
   return `INV-${year}-${padded}.pdf`;
 }
 
@@ -62,7 +62,7 @@ export async function generateOrderInvoicePdf(order: OrderForPdf): Promise<Uint8
 
   const name = order.branch?.name || RESTAURANT_NAME;
   const location = order.branch?.location || DEFAULT_ADDRESS;
-  const phone = order.branch?.phone || "";
+  const phone = order.branch?.phone || '';
   const gstin = RESTAURANT_GSTIN;
   const reviewUrl = order.branch?.googleReviewUrl || GOOGLE_REVIEW_URL;
 
@@ -97,16 +97,16 @@ export async function generateOrderInvoicePdf(order: OrderForPdf): Promise<Uint8
 
   // Header: logo if available (URL or data URL), then name/location
   const logoUrl = order.branch?.logoUrl;
-  if (logoUrl && typeof logoUrl === "string") {
+  if (logoUrl && typeof logoUrl === 'string') {
     try {
       let bytes: Uint8Array;
-      if (logoUrl.startsWith("data:")) {
-        const base64 = logoUrl.replace(/^data:image\/\w+;base64,/, "");
-        const raw = Buffer.from(base64, "base64");
+      if (logoUrl.startsWith('data:')) {
+        const base64 = logoUrl.replace(/^data:image\/\w+;base64,/, '');
+        const raw = Buffer.from(base64, 'base64');
         bytes = new Uint8Array(raw);
       } else {
         const resp = await fetch(logoUrl);
-        if (!resp.ok) throw new Error("Logo fetch failed");
+        if (!resp.ok) throw new Error('Logo fetch failed');
         const buf = await resp.arrayBuffer();
         bytes = new Uint8Array(buf);
       }
@@ -136,25 +136,34 @@ export async function generateOrderInvoicePdf(order: OrderForPdf): Promise<Uint8
   drawLine();
 
   // ORDER INVOICE
-  drawText("ORDER INVOICE", 12, true);
+  drawText('ORDER INVOICE', 12, true);
   y -= 4;
-  const orderIdStr = `ORD${String(order.id).padStart(4, "0")}`;
+  const orderIdStr = `ORD${String(order.id).padStart(4, '0')}`;
   page.drawText(`Order ID: ${orderIdStr}`, { x: margin, y, size: 10, font: font });
   y -= lineHeight;
-  const dateStr = order.createdAt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-  const timeStr = order.createdAt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+  const dateStr = order.createdAt.toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+  const timeStr = order.createdAt.toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
   page.drawText(`Date: ${dateStr}`, { x: margin, y, size: 10, font: font });
   page.drawText(`Time: ${timeStr}`, { x: width - margin - 60, y, size: 10, font: font });
   y -= lineHeight;
-  page.drawText(`Customer: ${order.customerName || "-"}`, { x: margin, y, size: 10, font: font });
+  page.drawText(`Customer: ${order.customerName || '-'}`, { x: margin, y, size: 10, font: font });
   y -= lineHeight;
-  page.drawText(`Mobile: ${order.customerMobile || "-"}`, { x: margin, y, size: 10, font: font });
+  page.drawText(`Mobile: ${order.customerMobile || '-'}`, { x: margin, y, size: 10, font: font });
   y -= lineHeight;
   page.drawText(`Order Type: ${order.orderType}`, { x: margin, y, size: 10, font: font });
   page.drawText(`Table: ${order.tableNumber}`, { x: width - margin - 80, y, size: 10, font: font });
   y -= lineHeight;
   if (order.acceptedBy?.name) {
-    const acceptedLabel = order.acceptedBy.role ? `Accepted by: ${order.acceptedBy.name} (${order.acceptedBy.role})` : `Accepted by: ${order.acceptedBy.name}`;
+    const acceptedLabel = order.acceptedBy.role
+      ? `Accepted by: ${order.acceptedBy.name} (${order.acceptedBy.role})`
+      : `Accepted by: ${order.acceptedBy.name}`;
     page.drawText(acceptedLabel, { x: margin, y, size: 9, font: fontSmall });
     y -= lineHeightSmall;
   }
@@ -162,36 +171,36 @@ export async function generateOrderInvoicePdf(order: OrderForPdf): Promise<Uint8
   drawLine();
 
   // ITEM DETAILS
-  drawText("ITEM DETAILS", 11, true);
+  drawText('ITEM DETAILS', 11, true);
   y -= 8;
   const colItem = margin;
   const colQty = width - margin - 120;
   const colPrice = width - margin - 80;
   const colTotal = width - margin - 35;
-  page.drawText("Item", { x: colItem, y, size: 9, font: fontBold });
-  page.drawText("Qty", { x: colQty, y, size: 9, font: fontBold });
-  page.drawText("Price", { x: colPrice, y, size: 9, font: fontBold });
-  page.drawText("Total", { x: colTotal, y, size: 9, font: fontBold });
+  page.drawText('Item', { x: colItem, y, size: 9, font: fontBold });
+  page.drawText('Qty', { x: colQty, y, size: 9, font: fontBold });
+  page.drawText('Price', { x: colPrice, y, size: 9, font: fontBold });
+  page.drawText('Total', { x: colTotal, y, size: 9, font: fontBold });
   y -= lineHeight;
 
-  const items = order.items.filter((i) => !i.isRemoved);
+  const items = order.items.filter(i => !i.isRemoved);
 
   const stripVariantMarkers = (name: string): string =>
-    (name || "")
-      .replace(/\s*\(5pc\s*\/\s*8pc\)\s*/gi, " ")
-      .replace(/\s*\(half\s*\/\s*full\)\s*/gi, " ")
-      .replace(/\s+/g, " ")
+    (name || '')
+      .replace(/\s*\(5pc\s*\/\s*8pc\)\s*/gi, ' ')
+      .replace(/\s*\(half\s*\/\s*full\)\s*/gi, ' ')
+      .replace(/\s+/g, ' ')
       .trim() || name;
 
   // We do not store category on order items. Use a conservative heuristic:
   // - Momos are the only items that should show 5pc/8pc labels.
-  const isPcItemName = (name: string): boolean => /\bmomos?\b/i.test(name || "");
+  const isPcItemName = (name: string): boolean => /\bmomos?\b/i.test(name || '');
 
   const variantLabel = (itemName: string, v: string | null | undefined) => {
-    if (!v) return "";
+    if (!v) return '';
     const pc = isPcItemName(itemName);
-    if (v === "HALF") return pc ? "5pc" : "Half";
-    if (v === "FULL") return pc ? "8pc" : "Full";
+    if (v === 'HALF') return pc ? '5pc' : 'Half';
+    if (v === 'FULL') return pc ? '8pc' : 'Full';
     return v;
   };
   for (const item of items) {
@@ -199,7 +208,7 @@ export async function generateOrderInvoicePdf(order: OrderForPdf): Promise<Uint8
     const suffix = variantLabel(baseName, item.variant);
     const label = suffix ? `${baseName} (${suffix})` : baseName;
     const total = item.price * item.quantity;
-    const labelShort = label.length > 32 ? label.slice(0, 29) + "..." : label;
+    const labelShort = label.length > 32 ? label.slice(0, 29) + '...' : label;
     page.drawText(labelShort, { x: colItem, y, size: 9, font: fontSmall });
     page.drawText(String(item.quantity), { x: colQty, y, size: 9, font: fontSmall });
     page.drawText(`₹${item.price.toFixed(0)}`, { x: colPrice, y, size: 9, font: fontSmall });
@@ -209,12 +218,12 @@ export async function generateOrderInvoicePdf(order: OrderForPdf): Promise<Uint8
   y -= 6;
   drawLine();
 
-  page.drawText("Subtotal:", { x: colPrice - 40, y, size: 10, font: font });
+  page.drawText('Subtotal:', { x: colPrice - 40, y, size: 10, font: font });
   page.drawText(`₹${order.totalAmount.toFixed(0)}`, { x: colTotal, y, size: 10, font: font });
   y -= lineHeight;
-  page.drawText("GST: Included", { x: colPrice - 40, y, size: 9, font: fontSmall });
+  page.drawText('GST: Included', { x: colPrice - 40, y, size: 9, font: fontSmall });
   y -= lineHeight;
-  page.drawText("Total Amount:", { x: margin, y, size: 11, font: fontBold });
+  page.drawText('Total Amount:', { x: margin, y, size: 11, font: fontBold });
   page.drawText(`₹${order.totalAmount.toFixed(0)}`, { x: colTotal, y, size: 11, font: fontBold });
   y -= lineHeight + 4;
   drawLine();
@@ -226,9 +235,9 @@ export async function generateOrderInvoicePdf(order: OrderForPdf): Promise<Uint8
   drawLine();
 
   // Footer
-  drawTextCenter("Thank you for visiting", 11);
+  drawTextCenter('Thank you for visiting', 11);
   drawTextCenter(`${name} ❤️`, 11, true);
-  drawTextCenter("Visit Again", 10);
+  drawTextCenter('Visit Again', 10);
   y -= 8;
   if (MENU_BASE_URL) {
     page.drawText(`Menu: ${MENU_BASE_URL}`, { x: margin, y, size: 8, font: fontSmall });
@@ -240,9 +249,9 @@ export async function generateOrderInvoicePdf(order: OrderForPdf): Promise<Uint8
   }
   y -= 8;
   drawLine();
-  drawTextCenter("(This is a system generated bill)", 8);
+  drawTextCenter('(This is a system generated bill)', 8);
   y -= 6;
-  drawTextCenter("Powered by Cafe Chapter 1 Smart Ordering System", 7);
+  drawTextCenter('Powered by Cafe Chapter 1 Smart Ordering System', 7);
 
   return doc.save();
 }

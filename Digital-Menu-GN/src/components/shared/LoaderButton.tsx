@@ -1,5 +1,5 @@
-import { Button, type ButtonProps } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { Button, type ButtonProps } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 export type LoaderButtonProps = ButtonProps & {
   loading?: boolean;
@@ -12,7 +12,7 @@ export type LoaderButtonProps = ButtonProps & {
  */
 export function LoaderButton({
   loading = false,
-  loadingLabel = "Please wait...",
+  loadingLabel = 'Please wait...',
   disabled,
   children,
   className,
@@ -23,7 +23,7 @@ export function LoaderButton({
       {loading ? (
         <>
           <span
-            className="inline-block h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2"
+            className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
             aria-hidden
           />
           {loadingLabel}

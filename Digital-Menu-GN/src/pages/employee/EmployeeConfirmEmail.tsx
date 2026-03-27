@@ -1,6 +1,6 @@
-import { useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
-import { API_BASE_URL } from "@/constants";
+import { useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { API_BASE_URL } from '@/constants';
 
 /**
  * Employee confirm-email handler (when account is created with temp password).
@@ -9,14 +9,14 @@ import { API_BASE_URL } from "@/constants";
  */
 export default function EmployeeConfirmEmail() {
   const [searchParams] = useSearchParams();
-  const token = searchParams.get("token")?.trim() || "";
+  const token = searchParams.get('token')?.trim() || '';
 
   useEffect(() => {
     if (!token) {
-      window.location.href = "/login?error=missing-token";
+      window.location.href = '/login?error=missing-token';
       return;
     }
-    const backendUrl = `${API_BASE_URL.replace(/\/$/, "")}/employees/confirm-email?token=${encodeURIComponent(token)}`;
+    const backendUrl = `${API_BASE_URL.replace(/\/$/, '')}/employees/confirm-email?token=${encodeURIComponent(token)}`;
     window.location.href = backendUrl;
   }, [token]);
 

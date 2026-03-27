@@ -1,17 +1,20 @@
-import nodemailer from "nodemailer";
-import fs from "node:fs/promises";
+import nodemailer from 'nodemailer';
+import fs from 'node:fs/promises';
 
 const port = Number(process.env.EMAIL_SMTP_PORT) || 587;
 const secure = port === 465;
 
 function normalizePassword(raw: string | undefined): string | undefined {
-  if (raw == null || raw === "") return undefined;
-  const trimmed = String(raw).trim().replace(/\s/g, "").replace(/^["']|["']$/g, "");
+  if (raw == null || raw === '') return undefined;
+  const trimmed = String(raw)
+    .trim()
+    .replace(/\s/g, '')
+    .replace(/^["']|["']$/g, '');
   return trimmed || undefined;
 }
 
 export const mailer = nodemailer.createTransport({
-  host: (process.env.EMAIL_SMTP_HOST || "").trim() || undefined,
+  host: (process.env.EMAIL_SMTP_HOST || '').trim() || undefined,
   port,
   secure,
   requireTLS: !secure, // enforce STARTTLS on 587
@@ -21,18 +24,18 @@ export const mailer = nodemailer.createTransport({
   socketTimeout: Number(process.env.EMAIL_SMTP_SOCKET_TIMEOUT_MS) || 20_000,
   tls: {
     // Brevo/Gmail require modern TLS; Windows/OpenSSL can default lower without this
-    minVersion: "TLSv1.2",
-    servername: (process.env.EMAIL_SMTP_HOST || "").trim() || undefined,
+    minVersion: 'TLSv1.2',
+    servername: (process.env.EMAIL_SMTP_HOST || '').trim() || undefined,
   },
   auth: {
-    user: (process.env.EMAIL_SMTP_USER || "").trim() || undefined,
+    user: (process.env.EMAIL_SMTP_USER || '').trim() || undefined,
     pass: normalizePassword(process.env.EMAIL_SMTP_PASS),
   },
 });
 
 /** From address: prefer EMAIL_FROM_ADDRESS, fallback to SMTP user (e.g. Gmail same as sender). Trimmed. */
 export function getFromAddress(): string {
-  const raw = process.env.EMAIL_FROM_ADDRESS || process.env.EMAIL_SMTP_USER || "";
+  const raw = process.env.EMAIL_FROM_ADDRESS || process.env.EMAIL_SMTP_USER || '';
   return raw.trim();
 }
 
@@ -41,9 +44,7 @@ export function isMailConfigured(): boolean {
   const from = getFromAddress();
   const hasBrevoKey = !!(process.env.BREVO_API_KEY && String(process.env.BREVO_API_KEY).trim());
   const hasSmtp =
-    !!process.env.EMAIL_SMTP_HOST &&
-    !!process.env.EMAIL_SMTP_USER &&
-    !!process.env.EMAIL_SMTP_PASS;
+    !!process.env.EMAIL_SMTP_HOST && !!process.env.EMAIL_SMTP_USER && !!process.env.EMAIL_SMTP_PASS;
   return !!(from && (hasBrevoKey || hasSmtp));
 }
 
@@ -52,15 +53,15 @@ export function verifyMailConnection(): Promise<void> {
   const hasBrevoKey = !!(process.env.BREVO_API_KEY && String(process.env.BREVO_API_KEY).trim());
   if (hasBrevoKey) {
     // Brevo API: validate the key by calling account endpoint
-    return fetch("https://api.brevo.com/v3/account", {
-      method: "GET",
+    return fetch('https://api.brevo.com/v3/account', {
+      method: 'GET',
       headers: {
-        accept: "application/json",
-        "api-key": String(process.env.BREVO_API_KEY).trim(),
+        accept: 'application/json',
+        'api-key': String(process.env.BREVO_API_KEY).trim(),
       },
-    }).then(async (res) => {
+    }).then(async res => {
       if (res.ok) return;
-      const body = await res.text().catch(() => "");
+      const body = await res.text().catch(() => '');
       throw new Error(`Brevo API verification failed (${res.status}): ${body || res.statusText}`);
     });
   }
@@ -82,33 +83,31 @@ export type SendEmailInput = {
 
 function parseRecipients(to: string | string[]): string[] {
   const list = Array.isArray(to) ? to : String(to).split(/[,\s]+/);
-  return list.map((x) => String(x).trim()).filter(Boolean);
+  return list.map(x => String(x).trim()).filter(Boolean);
 }
 
 async function sendViaBrevo(input: SendEmailInput): Promise<void> {
-  const apiKey = String(process.env.BREVO_API_KEY || "").trim();
-  if (!apiKey) throw new Error("BREVO_API_KEY is not set");
+  const apiKey = String(process.env.BREVO_API_KEY || '').trim();
+  if (!apiKey) throw new Error('BREVO_API_KEY is not set');
   const senderEmail = getFromAddress();
-  const senderName = (process.env.EMAIL_FROM_NAME || "").trim() || "Cafe Chapter 1";
-  const recipients = parseRecipients(input.to).map((email) => ({ email }));
-  if (!senderEmail) throw new Error("EMAIL_FROM_ADDRESS is not set");
-  if (!recipients.length) throw new Error("No recipients provided");
+  const senderName = (process.env.EMAIL_FROM_NAME || '').trim() || 'Cafe Chapter 1';
+  const recipients = parseRecipients(input.to).map(email => ({ email }));
+  if (!senderEmail) throw new Error('EMAIL_FROM_ADDRESS is not set');
+  if (!recipients.length) throw new Error('No recipients provided');
 
   const attachments =
     input.attachments && input.attachments.length
       ? await Promise.all(
-          input.attachments.map(async (a) => {
-            const bytes =
-              a.content ??
-              (a.path ? await fs.readFile(a.path) : Buffer.from(""));
+          input.attachments.map(async a => {
+            const bytes = a.content ?? (a.path ? await fs.readFile(a.path) : Buffer.from(''));
             if (!bytes || bytes.length === 0) {
               throw new Error(`Attachment is empty: ${a.filename}`);
             }
             return {
               name: a.filename,
-              content: Buffer.from(bytes).toString("base64"),
+              content: Buffer.from(bytes).toString('base64'),
             };
-          }),
+          })
         )
       : undefined;
 
@@ -121,17 +120,17 @@ async function sendViaBrevo(input: SendEmailInput): Promise<void> {
     ...(attachments ? { attachment: attachments } : {}),
   };
 
-  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
-    method: "POST",
+  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
     headers: {
-      accept: "application/json",
-      "content-type": "application/json",
-      "api-key": apiKey,
+      accept: 'application/json',
+      'content-type': 'application/json',
+      'api-key': apiKey,
     },
     body: JSON.stringify(payload),
   });
   if (res.ok) return;
-  const body = await res.text().catch(() => "");
+  const body = await res.text().catch(() => '');
   throw new Error(`Brevo send failed (${res.status}): ${body || res.statusText}`);
 }
 
@@ -145,7 +144,7 @@ export async function sendEmail(input: SendEmailInput): Promise<void> {
     await sendViaBrevo(input);
     return;
   }
-  const fromName = (process.env.EMAIL_FROM_NAME || "").trim() || "Cafe Chapter 1";
+  const fromName = (process.env.EMAIL_FROM_NAME || '').trim() || 'Cafe Chapter 1';
   await mailer.sendMail({
     to: Array.isArray(input.to) ? input.to : input.to,
     from: `"${fromName}" <${getFromAddress()}>`,
@@ -155,4 +154,3 @@ export async function sendEmail(input: SendEmailInput): Promise<void> {
     ...(input.attachments ? { attachments: input.attachments } : {}),
   });
 }
-

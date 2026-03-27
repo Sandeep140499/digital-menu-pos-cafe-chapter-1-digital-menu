@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import { Loader2, WifiOff, Wifi } from "lucide-react";
-import { toast, useToast } from "@/hooks/use-toast";
-import { ToastAction } from "@/components/ui/toast";
+import { useEffect, useRef, useState } from 'react';
+import { Loader2, WifiOff, Wifi } from 'lucide-react';
+import { toast, useToast } from '@/hooks/use-toast';
+import { ToastAction } from '@/components/ui/toast';
 
 export default function NetworkStatusToasts() {
   const { dismiss } = useToast();
@@ -9,7 +9,7 @@ export default function NetworkStatusToasts() {
   const lastOnlineToastAtRef = useRef<number>(0);
   const wasOfflineRef = useRef<boolean>(false);
   const [isBrowserOnline, setIsBrowserOnline] = useState<boolean>(() =>
-    typeof navigator === "undefined" ? true : navigator.onLine,
+    typeof navigator === 'undefined' ? true : navigator.onLine
   );
 
   const showOfflineToast = () => {
@@ -32,12 +32,13 @@ export default function NetworkStatusToasts() {
           </div>
         </div>
       ),
-      className:
-        "border-red-500/60 bg-red-50 text-red-900 [&_[toast-close]]:text-red-900/60",
+      className: 'border-red-500/60 bg-red-50 text-red-900 [&_[toast-close]]:text-red-900/60',
       action: (
         <ToastAction
           altText="Retry connection"
-          onClick={() => setIsBrowserOnline(typeof navigator === "undefined" ? true : navigator.onLine)}
+          onClick={() =>
+            setIsBrowserOnline(typeof navigator === 'undefined' ? true : navigator.onLine)
+          }
         >
           Retry
         </ToastAction>
@@ -69,19 +70,18 @@ export default function NetworkStatusToasts() {
         </div>
       ),
       description: "You're connected again",
-      className:
-        "border-emerald-500 bg-emerald-50 text-emerald-900 font-medium",
+      className: 'border-emerald-500 bg-emerald-50 text-emerald-900 font-medium',
     });
   };
 
   useEffect(() => {
     const onOffline = () => setIsBrowserOnline(false);
     const onOnline = () => setIsBrowserOnline(true);
-    window.addEventListener("offline", onOffline);
-    window.addEventListener("online", onOnline);
+    window.addEventListener('offline', onOffline);
+    window.addEventListener('online', onOnline);
     return () => {
-      window.removeEventListener("offline", onOffline);
-      window.removeEventListener("online", onOnline);
+      window.removeEventListener('offline', onOffline);
+      window.removeEventListener('online', onOnline);
     };
   }, []);
 
@@ -96,4 +96,3 @@ export default function NetworkStatusToasts() {
 
   return null;
 }
-

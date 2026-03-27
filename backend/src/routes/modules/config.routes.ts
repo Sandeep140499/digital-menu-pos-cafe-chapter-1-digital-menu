@@ -145,7 +145,7 @@ configRouter.get('/branch-contact', async (_req, res) => {
 
   let orderingOpen = false;
   if (branch?.id) {
-    // First check for active shifts (preferred)
+    // ONLY check for active shifts - customers can only order when employee has started shift
     const liveShift = await prisma.employeeShift.findFirst({
       where: {
         branchId: branch.id,
@@ -156,25 +156,13 @@ configRouter.get('/branch-contact', async (_req, res) => {
       select: { id: true },
     });
     
+    orderingOpen = !!liveShift;
+    
+    // Debug logging
     if (liveShift) {
-      orderingOpen = true;
+      console.log(`Ordering open for branch ${branch.id} - active shift found`);
     } else {
-      // If no active shifts, check if there are any active employees
-      // This allows employees to receive orders even if they haven't started a shift yet
-      const activeEmployees = await prisma.employee.findFirst({
-        where: {
-          branchId: branch.id,
-          status: 'ACTIVE',
-        },
-        select: { id: true },
-      });
-      
-      orderingOpen = !!activeEmployees;
-      
-      // Log this for debugging
-      if (activeEmployees) {
-        console.log(`Ordering open for branch ${branch.id} based on active employees (no active shift)`);
-      }
+      console.log(`Ordering CLOSED for branch ${branch.id} - no active shifts found`);
     }
   }
 
@@ -186,7 +174,7 @@ configRouter.get('/branch-contact', async (_req, res) => {
     googleReviewUrl: branch?.googleReviewUrl ?? process.env.GOOGLE_REVIEW_URL ?? null,
     logoUrl: branch?.logoUrl ?? null,
     showTotalAmountToCustomers: branch?.showTotalAmountToCustomers ?? true,
-    /** True when at least one employee has an active shift — matches POST /orders gate. */
+    /** True when at least one employee has an active shift - customers can only order when shift is started */
     orderingOpen,
   });
 });

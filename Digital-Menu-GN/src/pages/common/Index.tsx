@@ -134,7 +134,7 @@ function OrderCartDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange} key="order-cart-dialog">
       <DialogContent
-        className="flex max-h-[80dvh] flex-col overflow-hidden sm:max-w-lg"
+        className="flex max-h-[80dvh] w-[calc(100%-2rem)] max-w-full flex-col overflow-hidden rounded-xl sm:max-w-lg"
         aria-describedby={descriptionId}
       >
         <DialogHeader>
@@ -144,7 +144,7 @@ function OrderCartDialog({
             order.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex-1 space-y-3 overflow-y-auto pr-1">
+        <div className="flex-1 space-y-3 min-h-[100px] overflow-y-auto overscroll-contain pr-1">
           {cart.length === 0 ? (
             <p className="text-muted-foreground text-sm">
               Your order is empty. Tap any item to add it.
@@ -830,12 +830,24 @@ const Index = () => {
   const canPlaceOrderOnline =
     branchContactResolved && branchId != null && branchContact?.orderingOpen === true;
 
+  // Debug logging for ordering status
+  useEffect(() => {
+    if (branchContactResolved) {
+      console.log('[Menu] Ordering status:', {
+        canPlaceOrderOnline,
+        orderingOpen: branchContact?.orderingOpen,
+        branchId,
+        branchContactResolved,
+      });
+    }
+  }, [canPlaceOrderOnline, branchContact?.orderingOpen, branchId, branchContactResolved]);
+
   const checkoutDisabledReason = !branchContactResolved
     ? 'Checking whether online ordering is available…'
     : branchId == null
       ? 'Online ordering is not set up yet. Please order at the counter or call us.'
       : branchContact?.orderingOpen === false
-        ? 'Online ordering opens when staff are on shift. Browse the menu, call us, or order at the counter.'
+        ? 'Online ordering opens when staff start their shift. Please ask staff to start their shift to take orders.'
         : '';
 
   const menuCategoriesRef = useRef<unknown[]>([]);
@@ -1100,7 +1112,7 @@ const Index = () => {
   useEffect(() => {
     branchContactPollRef.current = window.setInterval(() => {
       void fetchBranchContact(true);
-    }, 90_000);
+    }, 30_000); // Poll every 30 seconds for faster status updates
     return () => {
       if (branchContactPollRef.current) window.clearInterval(branchContactPollRef.current);
     };
@@ -1129,11 +1141,17 @@ const Index = () => {
 
   const addToCart = useCallback(
     (itemName: string, price: number, variant?: 'HALF' | 'FULL', category?: string) => {
-      const id = `${itemName}-${variant ?? 'FULL'}-${category ?? ''}`;
+      // Generate a unique ID using timestamp + random to avoid collisions with special characters in item names
+      const id = `${itemName}-${variant ?? 'FULL'}-${category ?? ''}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
       setCart(prev => {
-        const existing = prev.find(i => i.id === id);
-        if (existing) {
-          return prev.map(i => (i.id === id ? { ...i, quantity: i.quantity + 1 } : i));
+        // Check for existing item with same name, variant, and category (not just ID)
+        const existingIndex = prev.findIndex(
+          i => i.name === itemName && i.variant === variant && i.category === category
+        );
+        if (existingIndex >= 0) {
+          return prev.map((i, idx) =>
+            idx === existingIndex ? { ...i, quantity: i.quantity + 1 } : i
+          );
         }
         return [
           ...prev,

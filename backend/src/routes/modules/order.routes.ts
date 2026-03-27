@@ -111,8 +111,7 @@ const modifyOrderV2Schema = z.object({
 export const orderRouter = Router();
 
 async function assignEmployeeToOrder(branchId: number) {
-  // For customer order placement we first try to find an employee with active shift
-  // If no active shift, fallback to any active employee
+  // ONLY assign to employees with active shifts - no fallback to active employees
   const shift = await prisma.employeeShift.findFirst({
     where: {
       branchId,
@@ -131,24 +130,8 @@ async function assignEmployeeToOrder(branchId: number) {
     };
   }
 
-  // Fallback: find any active employee without an active shift
-  const activeEmployee = await prisma.employee.findFirst({
-    where: {
-      branchId,
-      status: 'ACTIVE',
-    },
-    select: { id: true },
-    orderBy: { id: 'asc' },
-  });
-
-  if (activeEmployee) {
-    console.log(`Assigning order to active employee ${activeEmployee.id} (no active shift)`);
-    return {
-      employeeId: activeEmployee.id,
-      shiftId: null, // No active shift
-    };
-  }
-
+  // No active shift found - cannot assign order
+  console.log(`Cannot assign order for branch ${branchId} - no active shifts found`);
   return {
     employeeId: null,
     shiftId: null,
@@ -237,25 +220,25 @@ orderRouter.post('/', async (req, res) => {
     });
   }
 
-  // Require at least one active employee for the branch; order is not assigned until an employee accepts
-  const { employeeId: _anyEmployeeId } = await assignEmployeeToOrder(branchId);
-  if (_anyEmployeeId == null) {
+  // Assign order to employee with active shift
+  const { employeeId: assignedEmployeeId, shiftId: assignedShiftId } = await assignEmployeeToOrder(branchId);
+  if (assignedEmployeeId == null) {
     try {
       await prisma.errorLog.create({
         data: {
-          errorType: 'NO_ACTIVE_EMPLOYEE',
+          errorType: 'NO_ACTIVE_SHIFT',
           apiEndpoint: '/orders',
           errorMessage:
-            'A customer tried to place an order but no active employee found. Please activate an employee account.',
+            'A customer tried to place an order but no employee has started their shift. Please ask staff to start their shift.',
           branchId,
           status: 'UNRESOLVED',
         },
       });
     } catch (logErr) {
-      console.error('Failed to log no-active-employee notification:', logErr);
+      console.error('Failed to log no-active-shift notification:', logErr);
     }
     return res.status(503).json({
-      message: 'No active employee available. Please contact restaurant staff.',
+      message: 'No staff on shift. Please ask restaurant staff to start their shift to take orders.',
     });
   }
 
@@ -263,8 +246,8 @@ orderRouter.post('/', async (req, res) => {
     data: {
       tableId: resolvedTableId,
       branchId,
-      employeeId: undefined,
-      shiftId: undefined,
+      employeeId: assignedEmployeeId, // Assign to employee with active shift
+      shiftId: assignedShiftId, // Assign the active shift
       status: 'NEW_ORDER',
       orderType: orderType as any,
       totalAmount,

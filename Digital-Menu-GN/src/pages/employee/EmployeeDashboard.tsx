@@ -1720,8 +1720,7 @@ const EmployeeDashboard = () => {
       if (!o || typeof o.id !== 'number') return;
       // Only new orders should trigger device alerts.
       if (o.status !== 'NEW_ORDER') return;
-      // If already accepted by someone, don't ring.
-      if (o.employeeId != null) return;
+      // Show popup for all new orders - employees can see all branch orders
 
       setNewOrderPopupOrders(prev => {
         if (prev.some(p => p.id === o.id)) return prev;
@@ -1743,8 +1742,8 @@ const EmployeeDashboard = () => {
 
     s.on('order:updated', (o: Order) => {
       if (!o || typeof o.id !== 'number') return;
-      // If it is no longer NEW_ORDER or gets accepted, stop ringing for that order.
-      if (o.status !== 'NEW_ORDER' || o.employeeId != null) {
+      // If it is no longer NEW_ORDER, stop ringing for that order.
+      if (o.status !== 'NEW_ORDER') {
         removePopupOrder(o.id);
       }
       // Keep list fresh quickly without waiting for poll.
@@ -3021,41 +3020,7 @@ const EmployeeDashboard = () => {
                     Modify
                   </Button>
                 )}
-                {!order.employeeId && order.status === 'NEW_ORDER' && (
-                  <>
-                    <Button
-                      size="sm"
-                      className="bg-green-600 text-xs text-white hover:bg-green-700 sm:text-sm"
-                      disabled={isAcceptingThis || isActionThis}
-                      onClick={e => {
-                        e.stopPropagation();
-                        acceptOrder(order.id);
-                      }}
-                    >
-                      {isAcceptingThis ? (
-                        <>
-                          <span className="mr-1 inline-block h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent sm:h-4 sm:w-4" />
-                          Accepting...
-                        </>
-                      ) : (
-                        <>Accept</>
-                      )}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="border-red-300 text-xs text-red-600 hover:bg-red-50 sm:text-sm"
-                      disabled={isActionThis}
-                      onClick={e => {
-                        e.stopPropagation();
-                        markStatus(order.id, 'REJECTED');
-                      }}
-                    >
-                      <XCircle className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
-                      Reject
-                    </Button>
-                  </>
-                )}
+                {/* No Accept button needed - orders are assigned immediately to employees with active shifts */}
                 {order.employeeId && order.status !== 'ORDER_COMPLETE' && (
                   <>
                     <Button

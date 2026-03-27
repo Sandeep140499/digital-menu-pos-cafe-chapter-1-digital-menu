@@ -11,7 +11,6 @@ import {
   CheckCircle,
   CreditCard,
   User,
-  ChefHat,
   Bell,
   MoreHorizontal,
   ArrowUpRight,
@@ -19,7 +18,6 @@ import {
   RefreshCw,
   Play,
   Square,
-  Utensils,
   Eye,
   X,
   XCircle,
@@ -92,6 +90,35 @@ const apiBase = API_BASE_URL;
 /** Delay threshold for \"Delayed\" order (ms). Business requirement: 30 minutes from acceptance. */
 const DELAYED_ORDER_MINUTES = 30;
 const DELAYED_ORDER_MS = DELAYED_ORDER_MINUTES * 60 * 1000;
+
+/** Auto-reject NEW_ORDER if not accepted (queue hygiene). */
+const NEW_ORDER_AUTO_REJECT_MS = 120_000;
+
+function formatOrderChannel(source?: string | null): string {
+  if (source === 'EMPLOYEE') return 'Staff (POS)';
+  if (source === 'CUSTOMER') return 'QR menu';
+  return '—';
+}
+
+function formatPrepDuration(startIso: string, nowMs: number): string {
+  const sec = Math.max(0, Math.floor((nowMs - new Date(startIso).getTime()) / 1000));
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+/** Linear POS flow: only these mean “in kitchen” (no separate Preparing/Served in UI). */
+function isOrderInProgressStatus(status: string): boolean {
+  return status === 'ACCEPTED' || status === 'PREPARING' || status === 'SERVED';
+}
+
+function isPaymentPaid(order: { paymentStatus: string }): boolean {
+  return order.paymentStatus === 'PAID';
+}
+
+function paymentLabel(paymentStatus: string): 'Paid' | 'Pending' {
+  return paymentStatus === 'PAID' ? 'Paid' : 'Pending';
+}
 
 // INR Currency formatter
 const formatINR = (amount: number) => {
@@ -362,6 +389,7 @@ type Order = {
     role?: string | null;
   } | null;
   branch?: { id: number; name: string; location?: string | null } | null;
+  orderSource?: 'CUSTOMER' | 'EMPLOYEE' | null;
 };
 
 type LeaveRequest = {
@@ -425,10 +453,13 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
     React.SetStateAction<Record<number, number | undefined>>
   >;
   markStatus: (orderId: number, status: string) => void;
-  confirmPayment: (orderId: number) => void;
+  acceptOrder: (orderId: number) => void;
+  rejectOrder: (orderId: number) => void;
+  applyOrderPayment: (orderId: number, mode: 'PAID' | 'PENDING') => void;
   modifyOrder: () => void;
   isModifying: boolean;
   actionOrderId: number | null;
+  acceptingOrderId: number | null;
   selectedOrder: Order | null;
 }) {
   const {
@@ -455,10 +486,13 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
     pendingQtyByOrderItemId,
     setPendingQtyByOrderItemId,
     markStatus,
-    confirmPayment,
+    acceptOrder,
+    rejectOrder,
+    applyOrderPayment,
     modifyOrder,
     isModifying,
     actionOrderId,
+    acceptingOrderId,
     selectedOrder,
   } = props;
 
@@ -511,6 +545,9 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
               {displayOrder.branch?.name && <span>{displayOrder.branch.name}</span>}
               {displayOrder.branch?.name && ' · '}
               {formatPopupTime(displayOrder.createdAt)}
+            </p>
+            <p className="text-muted-foreground mt-1 text-xs">
+              Channel: {formatOrderChannel(displayOrder.orderSource)}
             </p>
           </div>
           <Button
@@ -584,95 +621,58 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
         </div>
 
         <div className="space-y-6">
-          {!isCompletedViewOnly && (
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                size="sm"
-                variant={displayOrder.status === 'ACCEPTED' ? 'default' : 'outline'}
-                className={
-                  ['PREPARING', 'SERVED', 'ORDER_COMPLETE'].includes(displayOrder.status)
-                    ? 'border-green-300 bg-green-100 text-green-800 hover:bg-green-100'
-                    : ''
-                }
-                onClick={() => selectedOrder && markStatus(selectedOrder.id, 'ACCEPTED')}
-                disabled={
-                  displayOrder.status === 'ORDER_COMPLETE' ||
-                  (selectedOrder && actionOrderId === selectedOrder.id)
-                }
-              >
-                {selectedOrder && actionOrderId === selectedOrder.id ? (
-                  <span className="mr-1 inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                ) : (
-                  <CheckCircle className="mr-1 h-4 w-4" />
-                )}
-                Accept
-              </Button>
-              <Button
-                size="sm"
-                variant={displayOrder.status === 'PREPARING' ? 'default' : 'outline'}
-                className={
-                  ['SERVED', 'ORDER_COMPLETE'].includes(displayOrder.status)
-                    ? 'border-green-300 bg-green-100 text-green-800 hover:bg-green-100'
-                    : ''
-                }
-                onClick={() => selectedOrder && markStatus(selectedOrder.id, 'PREPARING')}
-                disabled={
-                  displayOrder.status === 'ORDER_COMPLETE' ||
-                  displayOrder.status === 'NEW_ORDER' ||
-                  (selectedOrder && actionOrderId === selectedOrder.id)
-                }
-              >
-                <ChefHat className="mr-1 h-4 w-4" />
-                Preparing
-              </Button>
-              <Button
-                size="sm"
-                variant={displayOrder.status === 'SERVED' ? 'default' : 'outline'}
-                className={
-                  displayOrder.status === 'ORDER_COMPLETE'
-                    ? 'border-green-300 bg-green-100 text-green-800 hover:bg-green-100'
-                    : ''
-                }
-                onClick={() => selectedOrder && markStatus(selectedOrder.id, 'SERVED')}
-                disabled={
-                  displayOrder.status === 'ORDER_COMPLETE' ||
-                  displayOrder.status === 'NEW_ORDER' ||
-                  displayOrder.status === 'ACCEPTED' ||
-                  (selectedOrder && actionOrderId === selectedOrder.id)
-                }
-              >
-                <Utensils className="mr-1 h-4 w-4" />
-                Served
-              </Button>
-              <Button
-                size="sm"
-                variant={displayOrder.status === 'ORDER_COMPLETE' ? 'default' : 'outline'}
-                className={
-                  displayOrder.status === 'ORDER_COMPLETE'
-                    ? 'border-green-300 bg-green-100 text-green-800 hover:bg-green-100'
-                    : ''
-                }
-                onClick={() => selectedOrder && markStatus(selectedOrder.id, 'ORDER_COMPLETE')}
-                disabled={selectedOrder ? actionOrderId === selectedOrder.id : true}
-              >
-                <CheckCircle className="mr-1 h-4 w-4" />
-                Complete
-              </Button>
-              <div className="min-w-[60px] flex-1" />
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={() => selectedOrder && markStatus(selectedOrder.id, 'CANCELLED')}
-                disabled={
-                  displayOrder.status === 'ORDER_COMPLETE' ||
-                  (selectedOrder && actionOrderId === selectedOrder.id)
-                }
-              >
-                <X className="mr-1 h-4 w-4" />
-                Cancel
-              </Button>
+          {/* NEW → Accept / Reject (use POST accept; do not PATCH ACCEPTED from NEW) */}
+          {!isCompletedViewOnly && displayOrder.status === 'NEW_ORDER' && (
+            <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+              <p className="text-sm font-medium text-amber-900">New order — accept or reject</p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  className="bg-green-600 text-white hover:bg-green-700"
+                  disabled={!selectedOrder || acceptingOrderId === selectedOrder.id}
+                  onClick={() => selectedOrder && acceptOrder(selectedOrder.id)}
+                >
+                  {selectedOrder && acceptingOrderId === selectedOrder.id ? (
+                    <span className="mr-1 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  ) : (
+                    <CheckCircle className="mr-1 h-4 w-4" />
+                  )}
+                  Accept order
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-red-600 hover:bg-red-50"
+                  disabled={!selectedOrder || acceptingOrderId === selectedOrder.id}
+                  onClick={() => selectedOrder && rejectOrder(selectedOrder.id)}
+                >
+                  <XCircle className="mr-1 h-4 w-4" />
+                  Reject order
+                </Button>
+              </div>
             </div>
           )}
+
+          {/* ACCEPTED / legacy PREPARING|SERVED → single step to completed */}
+          {!isCompletedViewOnly && isOrderInProgressStatus(displayOrder.status) && (
+              <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/80 p-3">
+                <p className="text-muted-foreground text-sm">
+                  In progress — mark completed when the order is ready for payment.
+                </p>
+                <Button
+                  size="sm"
+                  disabled={!selectedOrder || actionOrderId === selectedOrder.id}
+                  onClick={() => selectedOrder && markStatus(selectedOrder.id, 'ORDER_COMPLETE')}
+                >
+                  {selectedOrder && actionOrderId === selectedOrder.id ? (
+                    <span className="mr-1 inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  ) : (
+                    <CheckCircle className="mr-1 h-4 w-4" />
+                  )}
+                  Mark completed
+                </Button>
+              </div>
+            )}
 
           {displayOrder.status === 'ORDER_COMPLETE' && (
             <div className="space-y-2">
@@ -680,26 +680,36 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
               <div className="bg-muted/30 flex flex-col gap-3 rounded-lg p-3 sm:flex-row sm:items-center sm:justify-between">
                 <Badge
                   className={
-                    displayOrder.paymentStatus === 'PAID'
+                    isPaymentPaid(displayOrder)
                       ? 'w-fit border-green-300 bg-green-100 text-green-800'
                       : 'w-fit border-amber-300 bg-amber-100 text-amber-800'
                   }
                 >
-                  {displayOrder.paymentStatus === 'PAID' ? 'Paid' : 'Unpaid'}
+                  {paymentLabel(displayOrder.paymentStatus)}
                 </Badge>
-                {displayOrder.paymentStatus !== 'PAID' && selectedOrder && (
-                  <Button
-                    className="min-h-[48px] w-full rounded-lg bg-emerald-600 hover:bg-emerald-700 sm:w-auto"
-                    disabled={actionOrderId === selectedOrder.id}
-                    onClick={() => confirmPayment(selectedOrder.id)}
-                  >
-                    {actionOrderId === selectedOrder.id ? (
-                      <span className="mr-2 inline-block h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                    ) : (
-                      <CreditCard className="mr-2 h-5 w-5" />
-                    )}
-                    Mark Paid
-                  </Button>
+                {!isPaymentPaid(displayOrder) && selectedOrder && (
+                  <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                    <Button
+                      className="min-h-[48px] w-full bg-emerald-600 hover:bg-emerald-700 sm:w-auto"
+                      disabled={actionOrderId === selectedOrder.id}
+                      onClick={() => applyOrderPayment(selectedOrder.id, 'PAID')}
+                    >
+                      {actionOrderId === selectedOrder.id ? (
+                        <span className="mr-2 inline-block h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                      ) : (
+                        <CreditCard className="mr-2 h-5 w-5" />
+                      )}
+                      Mark as Paid
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="min-h-[48px] w-full sm:w-auto"
+                      disabled={actionOrderId === selectedOrder.id}
+                      onClick={() => applyOrderPayment(selectedOrder.id, 'PENDING')}
+                    >
+                      Mark as Pending
+                    </Button>
+                  </div>
                 )}
               </div>
             </div>
@@ -1528,6 +1538,8 @@ const EmployeeDashboard = () => {
   const [popupCustomerMobile, setPopupCustomerMobile] = useState('');
   const [savingCustomer, setSavingCustomer] = useState(false);
   const [newOrderPopupOrders, setNewOrderPopupOrders] = useState<Order[]>([]);
+  /** Bumps every 1s while new-order popup is open (countdown UI). */
+  const [newOrderPopupTick, setNewOrderPopupTick] = useState(0);
   const [pauseNewOrderPopup, setPauseNewOrderPopup] = useState(false);
   const hasCompletedFirstLoad = useRef(false);
   const isOrderPopupOpenRef = useRef(false);
@@ -1627,6 +1639,7 @@ const EmployeeDashboard = () => {
         p.totalAmount === n.totalAmount &&
         (p.updatedAt ?? '') === (n.updatedAt ?? '') &&
         (p.employeeId ?? null) === (n.employeeId ?? null) &&
+        (p.orderSource ?? '') === (n.orderSource ?? '') &&
         (p.items?.length ?? 0) === (n.items?.length ?? 0);
       if (!same) changed = true;
       return same ? p : { ...p, ...n };
@@ -1785,6 +1798,12 @@ const EmployeeDashboard = () => {
       if (socketRef.current === s) socketRef.current = null;
     };
   }, [ready, token, shiftActive, isShiftPaused, pauseNewOrderPopup]);
+
+  useEffect(() => {
+    if (newOrderPopupOrders.length === 0) return;
+    const id = window.setInterval(() => setNewOrderPopupTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [newOrderPopupOrders.length]);
 
   // Auto-play sound when popup opens
   useEffect(() => {
@@ -2221,6 +2240,18 @@ const EmployeeDashboard = () => {
           )
         );
         setSelectedOrder(prev => (prev && prev.id === orderId ? { ...prev, ...updated } : prev));
+        setPopupDisplayOrder(prev =>
+          prev && prev.id === orderId
+            ? {
+                ...prev,
+                ...updated,
+                employeeId: updated.employeeId ?? updated.employee?.id ?? prev.employeeId,
+                employee: updated.employee ?? prev.employee,
+                acceptedAt: updated.acceptedAt ?? prev.acceptedAt,
+                status: updated.status ?? 'ACCEPTED',
+              }
+            : prev
+        );
         toast.success(data.message || 'You are now handling this order.');
         // Business rule: employees can send WhatsApp only after payment is completed.
         if (data.statusWaMeLink) {
@@ -2261,6 +2292,9 @@ const EmployeeDashboard = () => {
           )
         );
         setSelectedOrder(prev => (prev && prev.id === orderId ? { ...prev, ...updated } : prev));
+        setPopupDisplayOrder(prev =>
+          prev && prev.id === orderId ? { ...prev, ...updated, status: 'REJECTED' } : prev
+        );
         toast.success(data.message || 'Order rejected successfully.');
       } else {
         const err = await res.json().catch(() => ({}));
@@ -2272,6 +2306,26 @@ const EmployeeDashboard = () => {
       setAcceptingOrderId(null);
     }
   };
+
+  const rejectOrderRef = useRef(rejectOrder);
+  rejectOrderRef.current = rejectOrder;
+
+  useEffect(() => {
+    if (newOrderPopupOrders.length === 0) return;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    for (const o of newOrderPopupOrders) {
+      if (o.status !== 'NEW_ORDER') continue;
+      const elapsed = Date.now() - new Date(o.createdAt).getTime();
+      const delay = Math.max(0, NEW_ORDER_AUTO_REJECT_MS - elapsed);
+      const orderId = o.id;
+      timers.push(
+        window.setTimeout(() => {
+          void rejectOrderRef.current(orderId);
+        }, delay)
+      );
+    }
+    return () => timers.forEach(clearTimeout);
+  }, [newOrderPopupOrders]);
 
   const markStatus = useCallback(
     async (orderId: number, status: string) => {
@@ -2337,12 +2391,24 @@ const EmployeeDashboard = () => {
     [token]
   );
 
-  const confirmPayment = useCallback(
-    async (orderId: number) => {
+  const applyOrderPayment = useCallback(
+    async (orderId: number, mode: 'PAID' | 'PENDING') => {
       if (!token) return;
-      const order = orders.find(o => o.id === orderId);
-      if (!order) return;
+      const localOrder = orders.find(o => o.id === orderId);
+      if (!localOrder) return;
       setActionOrderId(orderId);
+      const body =
+        mode === 'PAID'
+          ? {
+              paymentStatus: 'PAID',
+              paidAmount: localOrder.totalAmount,
+              remainingAmount: 0,
+            }
+          : {
+              paymentStatus: 'PAYMENT_PENDING',
+              paidAmount: 0,
+              remainingAmount: localOrder.totalAmount,
+            };
       try {
         const res = await fetch(`${apiBase}/payments/${orderId}`, {
           method: 'PATCH',
@@ -2350,68 +2416,76 @@ const EmployeeDashboard = () => {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({
-            paymentStatus: 'PAID',
-            paidAmount: order.totalAmount,
-            remainingAmount: 0,
-          }),
+          body: JSON.stringify(body),
         });
         if (res.ok) {
           const data = await res.json();
-          const order = data.order ?? {};
+          const updated = data.order ?? {};
+          const ps = updated.paymentStatus ?? (mode === 'PAID' ? 'PAID' : 'PAYMENT_PENDING');
           setOrders(prev =>
-            prev.map(o =>
-              o.id === orderId ? { ...o, paymentStatus: order.paymentStatus ?? 'PAID' } : o
-            )
+            prev.map(o => (o.id === orderId ? { ...o, paymentStatus: ps } : o))
           );
           setSelectedOrder(prev =>
-            prev && prev.id === orderId
-              ? { ...prev, paymentStatus: order.paymentStatus ?? 'PAID' }
-              : prev
+            prev && prev.id === orderId ? { ...prev, paymentStatus: ps } : prev
           );
-          setPopupDisplayOrder(null);
-          setIsOrderPopupOpen(false);
-          setSelectedOrder(null);
-          fetch(`${apiBase}/shift/current`, {
-            headers: { Authorization: `Bearer ${token}` },
-          })
-            .then(r => (r.ok ? r.json() : null))
-            .then(d => d?.shift && setCurrentShift(d.shift))
-            .catch(() => {});
-          if (data.paymentWaMeLink) {
-            const win = window.open(data.paymentWaMeLink, '_blank', 'noopener,noreferrer');
-            if (!win || win.closed === undefined) {
-              toast.error(
-                'Popup blocked. Allow popups for this site to open WhatsApp and send receipt to customer.',
-                { duration: 8000 }
-              );
-              toast(
-                'You can copy the receipt link from the address bar after allowing popups and retry Mark Paid.',
-                { duration: 6000 }
-              );
+          setPopupDisplayOrder(prev =>
+            prev && prev.id === orderId ? { ...prev, paymentStatus: ps } : prev
+          );
+
+          if (mode === 'PAID') {
+            setPopupDisplayOrder(null);
+            setIsOrderPopupOpen(false);
+            setSelectedOrder(null);
+            fetch(`${apiBase}/shift/current`, {
+              headers: { Authorization: `Bearer ${token}` },
+            })
+              .then(r => (r.ok ? r.json() : null))
+              .then(d => d?.shift && setCurrentShift(d.shift))
+              .catch(() => {});
+            if (data.paymentWaMeLink) {
+              const win = window.open(data.paymentWaMeLink, '_blank', 'noopener,noreferrer');
+              if (!win || win.closed === undefined) {
+                toast.error(
+                  'Popup blocked. Allow popups for this site to open WhatsApp and send receipt to customer.',
+                  { duration: 8000 }
+                );
+                toast(
+                  'You can copy the receipt link from the address bar after allowing popups and retry Mark as Paid.',
+                  { duration: 6000 }
+                );
+              } else {
+                toast.success('WhatsApp opened – send the receipt to the customer.');
+              }
             } else {
-              toast.success('WhatsApp opened – send the receipt to the customer.');
+              if (!localOrder.customerMobile || !localOrder.customerName) {
+                toast.success(
+                  'Payment marked as received. Save customer name & mobile before marking paid to send WhatsApp receipt next time.'
+                );
+              } else {
+                toast.success(data.message || 'Payment marked as received');
+              }
             }
           } else {
-            if (!order.customerMobile || !order.customerName) {
-              toast.success(
-                'Payment marked as received. Save customer name & mobile before marking paid to send WhatsApp receipt next time.'
-              );
-            } else {
-              toast.success(data.message || 'Payment marked as received');
-            }
+            toast.success(data.message || 'Payment marked as pending.');
           }
         } else {
-          const data = await res.json().catch(() => ({}));
-          toast.error(data.message || 'Failed to confirm payment');
+          const errData = await res.json().catch(() => ({}));
+          toast.error(errData.message || 'Failed to update payment');
         }
       } catch {
-        toast.error('Failed to confirm payment');
+        toast.error('Failed to update payment');
       } finally {
         setActionOrderId(null);
       }
     },
     [token, orders]
+  );
+
+  const confirmPayment = useCallback(
+    (orderId: number) => {
+      void applyOrderPayment(orderId, 'PAID');
+    },
+    [applyOrderPayment]
   );
 
   const openOrderPopup = useCallback((order: Order) => {
@@ -2699,22 +2773,11 @@ const EmployeeDashboard = () => {
   );
 
   const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'NEW_ORDER':
-        return <Bell className="h-3 w-3" />;
-      case 'ACCEPTED':
-        return <CheckCircle className="h-3 w-3" />;
-      case 'PREPARING':
-        return <ChefHat className="h-3 w-3" />;
-      case 'SERVED':
-        return <Utensils className="h-3 w-3" />;
-      case 'ORDER_COMPLETE':
-        return <CheckCircle className="h-3 w-3" />;
-      case 'REJECTED':
-        return <XCircle className="h-3 w-3" />;
-      default:
-        return null;
-    }
+    if (status === 'NEW_ORDER') return <Bell className="h-3 w-3" />;
+    if (isOrderInProgressStatus(status)) return <CheckCircle className="h-3 w-3" />;
+    if (status === 'ORDER_COMPLETE') return <CheckCircle className="h-3 w-3" />;
+    if (status === 'REJECTED') return <XCircle className="h-3 w-3" />;
+    return null;
   };
 
   /** Order is delayed if NEW_ORDER/ACCEPTED and older than threshold from acceptedAt (fallback createdAt). */
@@ -2729,39 +2792,23 @@ const EmployeeDashboard = () => {
   /** Priority label for POS-style visibility */
   const getPriorityLabel = (order: Order): string => {
     if (isOrderDelayed(order)) return 'Delayed';
-    switch (order.status) {
-      case 'NEW_ORDER':
-        return 'New Order';
-      case 'ACCEPTED':
-      case 'PREPARING':
-      case 'SERVED':
-        return 'Preparing';
-      case 'ORDER_COMPLETE':
-        return 'Completed';
-      case 'REJECTED':
-        return 'Rejected';
-      default:
-        return order.status.replace('_', ' ');
-    }
+    if (order.status === 'NEW_ORDER') return 'New Order';
+    if (isOrderInProgressStatus(order.status)) return 'In progress';
+    if (order.status === 'ORDER_COMPLETE') return 'Completed';
+    if (order.status === 'REJECTED') return 'Rejected';
+    return order.status.replace('_', ' ');
   };
 
   /** Badge style: green New, yellow Preparing, red Delayed, green Completed */
   const getPriorityBadgeClass = (order: Order): string => {
     if (isOrderDelayed(order)) return 'bg-red-100 text-red-800 border border-red-300';
-    switch (order.status) {
-      case 'NEW_ORDER':
-        return 'bg-emerald-100 text-emerald-800 border border-emerald-300';
-      case 'ACCEPTED':
-      case 'PREPARING':
-      case 'SERVED':
-        return 'bg-amber-100 text-amber-800 border border-amber-300';
-      case 'ORDER_COMPLETE':
-        return 'bg-green-100 text-green-800 border border-green-300';
-      case 'REJECTED':
-        return 'bg-rose-100 text-rose-800 border border-rose-300';
-      default:
-        return getStatusColor(order.status);
-    }
+    if (order.status === 'NEW_ORDER') return 'bg-emerald-100 text-emerald-800 border border-emerald-300';
+    if (isOrderInProgressStatus(order.status))
+      return 'bg-amber-100 text-amber-800 border border-amber-300';
+    if (order.status === 'ORDER_COMPLETE')
+      return 'bg-green-100 text-green-800 border border-green-300';
+    if (order.status === 'REJECTED') return 'bg-rose-100 text-rose-800 border border-rose-300';
+    return getStatusColor(order.status);
   };
 
   const renderOrderCard = (
@@ -2806,7 +2853,7 @@ const EmployeeDashboard = () => {
     const isAcceptingThis = acceptingOrderId === order.id;
     const isActionThis = actionOrderId === order.id;
 
-    // Completed (ready for payment): Order # + Table + Payment Status (prominent), View Order, Confirm Payment.
+    // Completed: View, Mark as Paid, Mark as Pending (no add/modify on card).
     const compactCompletedBlock = isReadyForPayment && (
       <div className="flex min-h-0 flex-col gap-2 p-3">
         <div className="text-base font-bold text-slate-900">Order #{order.id}</div>
@@ -2822,10 +2869,10 @@ const EmployeeDashboard = () => {
           </p>
         )}
         <Badge
-          variant={order.paymentStatus === 'PAID' ? 'default' : 'secondary'}
-          className={`w-fit shrink-0 px-3 py-1 text-sm font-semibold ${order.paymentStatus === 'PAID' ? 'border-green-300 bg-green-100 text-green-800' : 'border-red-300 bg-red-100 text-red-800'}`}
+          variant={isPaymentPaid(order) ? 'default' : 'secondary'}
+          className={`w-fit shrink-0 px-3 py-1 text-sm font-semibold ${isPaymentPaid(order) ? 'border-green-300 bg-green-100 text-green-800' : 'border-amber-300 bg-amber-100 text-amber-800'}`}
         >
-          {order.paymentStatus === 'PAID' ? 'Paid' : 'Unpaid'}
+          {paymentLabel(order.paymentStatus)}
         </Badge>
         <div className="mt-auto flex w-full flex-col gap-2">
           <Button
@@ -2838,36 +2885,39 @@ const EmployeeDashboard = () => {
             }}
           >
             <Eye className="mr-1 h-3 w-3 shrink-0" />
-            <span className="truncate">View Order</span>
+            <span className="truncate">View</span>
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="min-h-[44px] w-full text-xs"
-            disabled
-            title="Completed orders cannot be edited"
-            onClick={e => e.stopPropagation()}
-          >
-            <Plus className="mr-1 h-3 w-3 shrink-0" />
-            <span className="truncate">Add More Items</span>
-          </Button>
-          {order.paymentStatus !== 'PAID' && (
-            <Button
-              size="sm"
-              className="min-h-[44px] w-full rounded-lg text-xs"
-              disabled={isActionThis || order.status !== 'ORDER_COMPLETE'}
-              onClick={e => {
-                e.stopPropagation();
-                confirmPayment(order.id);
-              }}
-            >
-              {isActionThis ? (
-                <span className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-white border-t-transparent" />
-              ) : (
-                <CreditCard className="mr-1 h-4 w-4 shrink-0" />
-              )}
-              <span className="truncate">Confirm Payment</span>
-            </Button>
+          {!isPaymentPaid(order) && (
+            <>
+              <Button
+                size="sm"
+                className="min-h-[44px] w-full rounded-lg text-xs bg-emerald-600 hover:bg-emerald-700"
+                disabled={isActionThis}
+                onClick={e => {
+                  e.stopPropagation();
+                  void applyOrderPayment(order.id, 'PAID');
+                }}
+              >
+                {isActionThis ? (
+                  <span className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                ) : (
+                  <CreditCard className="mr-1 h-4 w-4 shrink-0" />
+                )}
+                <span className="truncate">Mark as Paid</span>
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="min-h-[44px] w-full text-xs"
+                disabled={isActionThis}
+                onClick={e => {
+                  e.stopPropagation();
+                  void applyOrderPayment(order.id, 'PENDING');
+                }}
+              >
+                Mark as Pending
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -2913,7 +2963,17 @@ const EmployeeDashboard = () => {
                     <Badge className={`shrink-0 ${getStatusColor(order.status)}`}>
                       <span className="flex items-center gap-1">
                         {getStatusIcon(order.status)}
-                        <span className="hidden sm:inline">{order.status}</span>
+                        <span className="hidden sm:inline">
+                          {isOrderInProgressStatus(order.status)
+                            ? 'In progress'
+                            : order.status === 'NEW_ORDER'
+                              ? 'New order'
+                              : order.status === 'ORDER_COMPLETE'
+                                ? 'Completed'
+                                : order.status === 'REJECTED'
+                                  ? 'Rejected'
+                                  : order.status.replace(/_/g, ' ')}
+                        </span>
                       </span>
                     </Badge>
                   </div>
@@ -2938,6 +2998,15 @@ const EmployeeDashboard = () => {
                       </span>
                     )}
                   </div>
+                  {isOrderInProgressStatus(order.status) && (order.acceptedAt || order.createdAt) && (
+                      <p className="text-xs font-medium text-amber-800">
+                        Prep timer:{' '}
+                        {formatPrepDuration(
+                          order.acceptedAt ?? order.createdAt,
+                          currentTime.getTime()
+                        )}
+                      </p>
+                    )}
                   {/* Paused shift: show who accepted (no popup/ringing while paused). */}
                   {isShiftPaused && order.employee && (order.employee as any).name && (
                     <p className="text-xs font-medium text-slate-600">
@@ -2969,14 +3038,14 @@ const EmployeeDashboard = () => {
                     <p className="text-base font-bold sm:text-lg">{formatINR(order.totalAmount)}</p>
                     {order.status === 'ORDER_COMPLETE' && (
                       <Badge
-                        variant={order.paymentStatus === 'PAID' ? 'default' : 'secondary'}
+                        variant={isPaymentPaid(order) ? 'default' : 'secondary'}
                         className={
-                          order.paymentStatus === 'PAID'
+                          isPaymentPaid(order)
                             ? 'border-green-300 bg-green-100 text-green-800'
                             : 'border-amber-300 bg-amber-100 text-amber-800'
                         }
                       >
-                        {order.paymentStatus === 'PAID' ? 'Paid' : 'Unpaid'}
+                        {paymentLabel(order.paymentStatus)}
                       </Badge>
                     )}
                   </div>
@@ -2984,40 +3053,35 @@ const EmployeeDashboard = () => {
               </div>
               <Separator className="my-2 sm:my-3" />
               <div className="mt-auto flex flex-wrap gap-2">
-                {/* Show View, Add More Items, Modify for all non-rejected orders */}
-                {order.status !== 'REJECTED' && (
-                  <>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={e => {
-                        e.stopPropagation();
-                        openOrderPopup(order);
-                      }}
-                      className="text-xs sm:text-sm"
-                    >
-                      <Eye className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
-                      View
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={e => {
-                        e.stopPropagation();
-                        openOrderPopup(order);
-                      }}
-                      className="text-xs sm:text-sm"
-                      disabled={order.status === 'ORDER_COMPLETE'}
-                      title={
-                        order.status === 'ORDER_COMPLETE'
-                          ? 'Completed orders cannot be edited'
-                          : undefined
-                      }
-                    >
-                      <Plus className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
-                      Add More Items
-                    </Button>
-                    {order.status !== 'ORDER_COMPLETE' && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={e => {
+                    e.stopPropagation();
+                    openOrderPopup(order);
+                  }}
+                  className="text-xs sm:text-sm"
+                >
+                  <Eye className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
+                  View
+                </Button>
+
+                {order.status !== 'REJECTED' &&
+                  order.status !== 'ORDER_COMPLETE' &&
+                  order.status !== 'NEW_ORDER' && (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={e => {
+                          e.stopPropagation();
+                          openOrderPopup(order);
+                        }}
+                        className="text-xs sm:text-sm"
+                      >
+                        <Plus className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
+                        Add more items
+                      </Button>
                       <Button
                         size="sm"
                         variant="outline"
@@ -3030,13 +3094,35 @@ const EmployeeDashboard = () => {
                         <Edit2 className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
                         Modify
                       </Button>
-                    )}
-                  </>
-                )}
-                
-                {/* Show Accept/Reject only for NEW_ORDER status */}
+                    </>
+                  )}
+
                 {order.status === 'NEW_ORDER' && (
                   <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={e => {
+                        e.stopPropagation();
+                        openOrderPopup(order);
+                      }}
+                      className="text-xs sm:text-sm"
+                    >
+                      <Plus className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
+                      Add more items
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={e => {
+                        e.stopPropagation();
+                        openOrderPopup(order);
+                      }}
+                      className="text-xs sm:text-sm"
+                    >
+                      <Edit2 className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
+                      Modify
+                    </Button>
                     <Button
                       size="sm"
                       className="bg-green-600 text-xs text-white hover:bg-green-700 sm:text-sm"
@@ -3070,87 +3156,58 @@ const EmployeeDashboard = () => {
                     </Button>
                   </>
                 )}
-                
-                {/* Show Complete/Remove Mark Preparation for accepted orders (not NEW_ORDER or ORDER_COMPLETE) */}
-                {order.status !== 'NEW_ORDER' && order.status !== 'ORDER_COMPLETE' && order.status !== 'REJECTED' && (
-                  <>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={isActionThis}
-                      onClick={e => {
-                        e.stopPropagation();
-                        markStatus(order.id, order.status === 'PREPARING' ? 'SERVED' : 'PREPARING');
-                      }}
-                      className="text-xs sm:text-sm"
-                    >
-                      {isActionThis ? (
-                        <>
-                          <span className="mr-1 inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent sm:h-4 sm:w-4" />
-                          Updating...
-                        </>
-                      ) : (
-                        <>
-                          <ChefHat className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
-                          {order.status === 'PREPARING' ? 'Mark Served' : 'Mark Preparing'}
-                        </>
-                      )}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={isActionThis}
-                      onClick={e => {
-                        e.stopPropagation();
-                        markStatus(order.id, 'ORDER_COMPLETE');
-                      }}
-                      className="text-xs sm:text-sm"
-                    >
-                      {isActionThis ? (
-                        <span className="mr-1 inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent sm:h-4 sm:w-4" />
-                      ) : (
-                        <CheckCircle className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
-                      )}
-                      Complete
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      disabled={isActionThis}
-                      onClick={e => {
-                        e.stopPropagation();
-                        markStatus(order.id, 'CANCELLED');
-                      }}
-                      className="text-xs sm:text-sm"
-                    >
-                      <Trash2 className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
-                      Remove
-                    </Button>
-                  </>
-                )}
-                
-                {/* Show Confirm Payment for completed orders */}
-                {order.status === 'ORDER_COMPLETE' && (
+
+                {isOrderInProgressStatus(order.status) && (
                   <Button
                     size="sm"
-                    variant={order.paymentStatus === 'PAID' ? 'secondary' : 'default'}
+                    variant="outline"
+                    disabled={isActionThis}
                     onClick={e => {
                       e.stopPropagation();
-                      confirmPayment(order.id);
+                      markStatus(order.id, 'ORDER_COMPLETE');
                     }}
-                    disabled={order.paymentStatus === 'PAID' || isActionThis}
-                    title={
-                      order.status !== 'ORDER_COMPLETE' ? 'Mark order complete first' : undefined
-                    }
                     className="text-xs sm:text-sm"
                   >
                     {isActionThis ? (
-                      <span className="mr-1 inline-block h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent sm:h-4 sm:w-4" />
+                      <span className="mr-1 inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent sm:h-4 sm:w-4" />
                     ) : (
-                      <CreditCard className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
+                      <CheckCircle className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
                     )}
-                    {order.paymentStatus === 'PAID' ? 'Paid' : 'Confirm Payment'}
+                    Mark as Completed
                   </Button>
+                )}
+
+                {order.status === 'ORDER_COMPLETE' && !isPaymentPaid(order) && (
+                  <>
+                    <Button
+                      size="sm"
+                      className="bg-emerald-600 text-xs text-white hover:bg-emerald-700 sm:text-sm"
+                      disabled={isActionThis}
+                      onClick={e => {
+                        e.stopPropagation();
+                        void applyOrderPayment(order.id, 'PAID');
+                      }}
+                    >
+                      {isActionThis ? (
+                        <span className="mr-1 inline-block h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent sm:h-4 sm:w-4" />
+                      ) : (
+                        <CreditCard className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
+                      )}
+                      Mark as Paid
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-xs sm:text-sm"
+                      disabled={isActionThis}
+                      onClick={e => {
+                        e.stopPropagation();
+                        void applyOrderPayment(order.id, 'PENDING');
+                      }}
+                    >
+                      Mark as Pending
+                    </Button>
+                  </>
                 )}
               </div>
             </div>
@@ -3273,7 +3330,16 @@ const EmployeeDashboard = () => {
   // Memoize live orders section so it does not re-render when only currentTime (clock) updates – stops card flashing
   const liveOrdersSectionContent = useMemo(
     () => renderOrderList(liveOrders, 'Live Orders'),
-    [liveOrders, acceptingOrderId, actionOrderId, currentShift?.status, shiftActive, shiftLoading]
+    [
+      liveOrders,
+      acceptingOrderId,
+      actionOrderId,
+      currentShift?.status,
+      shiftActive,
+      shiftLoading,
+      applyOrderPayment,
+      currentTime,
+    ]
   );
 
   const PAGE_SIZE = 10;
@@ -4970,7 +5036,7 @@ const EmployeeDashboard = () => {
                       onClick={() => handleAddMoreItems(order)}
                     >
                       <Plus className="mr-1 h-3 w-3" />
-                      Add Items
+                      Add more items
                     </Button>
                     <Button
                       size="sm"
@@ -5261,10 +5327,13 @@ const EmployeeDashboard = () => {
         pendingQtyByOrderItemId={pendingQtyByOrderItemId}
         setPendingQtyByOrderItemId={setPendingQtyByOrderItemId}
         markStatus={markStatus}
-        confirmPayment={confirmPayment}
+        acceptOrder={acceptOrder}
+        rejectOrder={rejectOrder}
+        applyOrderPayment={applyOrderPayment}
         modifyOrder={modifyOrder}
         isModifying={isModifying}
         actionOrderId={actionOrderId}
+        acceptingOrderId={acceptingOrderId}
         selectedOrder={selectedOrder}
       />
       <Dialog open={confirmEndShiftOpen} onOpenChange={setConfirmEndShiftOpen}>

@@ -5,7 +5,7 @@ import { authenticate, requireRole } from '../../middleware/auth.js';
 import { buildPaymentMessage, getWaMeLink } from '../../services/whatsapp.js';
 
 const paymentSchema = z.object({
-  paymentStatus: z.enum(['PAID', 'PARTIAL', 'UNPAID']),
+  paymentStatus: z.enum(['PAID', 'PARTIAL', 'UNPAID', 'PAYMENT_PENDING']),
   paidAmount: z.number().nonnegative().optional(),
   remainingAmount: z.number().nonnegative().optional(),
 });
@@ -31,20 +31,31 @@ paymentRouter.patch('/:orderId', authenticate, requireRole('EMPLOYEE'), async (r
     return res.status(404).json({ message: 'Order not found' });
   }
 
-  // Business rule: an order can be marked PAID only after it is completed.
-  if (paymentStatus === 'PAID' && existingOrder.status !== 'ORDER_COMPLETE') {
+  // Business rule: payment flags only after order is completed (kitchen flow done).
+  if (
+    (paymentStatus === 'PAID' || paymentStatus === 'PAYMENT_PENDING') &&
+    existingOrder.status !== 'ORDER_COMPLETE'
+  ) {
     return res.status(400).json({
-      message: 'Complete the order first, then mark it as paid.',
+      message: 'Complete the order first, then update payment.',
     });
   }
 
   const includeReviewLink = paymentStatus === 'PAID' && !existingOrder.reviewSent;
 
+  const prismaPaymentStatus =
+    paymentStatus === 'PAID'
+      ? 'PAID'
+      : paymentStatus === 'PARTIAL'
+        ? 'PARTIAL'
+        : paymentStatus === 'PAYMENT_PENDING'
+          ? 'PAYMENT_PENDING'
+          : 'UNPAID';
+
   const order = await prisma.order.update({
     where: { id: orderId },
     data: {
-      paymentStatus:
-        paymentStatus === 'PAID' ? 'PAID' : paymentStatus === 'PARTIAL' ? 'PARTIAL' : 'UNPAID',
+      paymentStatus: prismaPaymentStatus,
       reviewSent: paymentStatus === 'PAID' && includeReviewLink ? true : existingOrder.reviewSent,
     },
     include: { branch: true, items: true },
@@ -53,8 +64,7 @@ paymentRouter.patch('/:orderId', authenticate, requireRole('EMPLOYEE'), async (r
   const record = await prisma.paymentRecord.create({
     data: {
       orderId: order.id,
-      paymentStatus:
-        paymentStatus === 'PAID' ? 'PAID' : paymentStatus === 'PARTIAL' ? 'PARTIAL' : 'UNPAID',
+      paymentStatus: prismaPaymentStatus,
       paidAmount,
       remainingAmount,
       confirmedByEmployee: employeeId,
@@ -97,6 +107,13 @@ paymentRouter.patch('/:orderId', authenticate, requireRole('EMPLOYEE'), async (r
           showTotalAmountToCustomers: (order.branch as any).showTotalAmountToCustomers,
         }
       : null;
+    const waPaymentStatus: 'PAID' | 'PARTIAL' | 'UNPAID' =
+      order.paymentStatus === 'PAID'
+        ? 'PAID'
+        : order.paymentStatus === 'PARTIAL'
+          ? 'PARTIAL'
+          : 'UNPAID';
+
     paymentWhatsAppMessage = buildPaymentMessage({
       orderId: order.id,
       customerName: order.customerName,
@@ -108,7 +125,7 @@ paymentRouter.patch('/:orderId', authenticate, requireRole('EMPLOYEE'), async (r
         isRemoved: i.isRemoved,
       })),
       totalAmount: order.totalAmount,
-      paymentStatus: order.paymentStatus as 'PAID' | 'PARTIAL' | 'UNPAID',
+      paymentStatus: waPaymentStatus,
       includeReviewLink: paymentStatus === 'PAID' ? includeReviewLink : false,
       branch: branchInfo,
     });

@@ -236,9 +236,10 @@ orderRouter.post('/', async (req, res) => {
     });
   }
 
-  // Assign order to employee with active shift
-  const { employeeId: assignedEmployeeId, shiftId: assignedShiftId } = await assignEmployeeToOrder(branchId);
-  if (assignedEmployeeId == null) {
+  // Require at least one ACTIVE employee for the branch so orders can be handled; stay unassigned
+  // until an employee taps Accept (pre-assigning employeeId broke POST /orders/:id/accept with 409).
+  const { employeeId: branchHasActiveStaff } = await assignEmployeeToOrder(branchId);
+  if (branchHasActiveStaff == null) {
     try {
       await prisma.errorLog.create({
         data: {
@@ -262,8 +263,8 @@ orderRouter.post('/', async (req, res) => {
     data: {
       tableId: resolvedTableId,
       branchId,
-      employeeId: assignedEmployeeId, // Assign to employee with active shift
-      shiftId: assignedShiftId, // Assign the active shift
+      employeeId: null,
+      shiftId: null,
       status: 'NEW_ORDER',
       orderType: orderType as any,
       totalAmount,
@@ -720,6 +721,7 @@ orderRouter.get('/live', authenticate, async (req, res) => {
         customerMobile: true,
         employeeId: true,
         shiftId: true,
+        orderSource: true,
         table: { select: { id: true, tableNumber: true } },
         employee: { select: { id: true, name: true } },
         items: {
@@ -914,6 +916,9 @@ orderRouter.post('/:id/accept', authenticate, requireRole('EMPLOYEE'), async (re
     include: { branch: true, table: true, employee: true },
   });
   if (!order) return res.status(404).json({ message: 'Order not found' });
+  if (order.status !== OrderStatusEnum.NEW_ORDER) {
+    return res.status(409).json({ message: 'Only new orders can be accepted' });
+  }
   if (order.employeeId != null) {
     return res.status(409).json({
       message: 'Order already accepted by another employee',
@@ -929,14 +934,11 @@ orderRouter.post('/:id/accept', authenticate, requireRole('EMPLOYEE'), async (re
   const activeShift = await prisma.employeeShift.findFirst({
     where: { employeeId, branchId: order.branchId, shiftEnd: null, status: 'ACTIVE' as any },
   });
-  if (!activeShift) {
-    return res.status(400).json({ message: 'Start (or resume) your shift first to accept orders' });
-  }
   const updated = await prisma.order.update({
     where: { id },
     data: {
       employeeId,
-      shiftId: activeShift.id,
+      shiftId: activeShift?.id ?? null,
       status: OrderStatusEnum.ACCEPTED,
       ...(order.acceptedAt ? {} : { acceptedAt: new Date() }),
     },
@@ -982,6 +984,34 @@ orderRouter.post('/:id/accept', authenticate, requireRole('EMPLOYEE'), async (re
   return res.json({ order: up, statusWaMeLink });
 });
 
+// Employee: reject NEW_ORDER (frontend uses POST …/reject; same rules as PATCH status REJECTED)
+orderRouter.post('/:id/reject', authenticate, requireRole('EMPLOYEE'), async (req, res) => {
+  const id = Number(req.params.id);
+  const existing = await prisma.order.findUnique({
+    where: { id },
+    select: { id: true, status: true, employeeId: true, shiftId: true },
+  });
+  if (!existing) return res.status(404).json({ message: 'Order not found' });
+  if (existing.status !== OrderStatusEnum.NEW_ORDER || existing.employeeId != null) {
+    return res.status(409).json({ message: 'Order cannot be rejected now' });
+  }
+  const rejected = await prisma.order.update({
+    where: { id },
+    data: { status: OrderStatusEnum.REJECTED, employeeId: null, shiftId: null },
+    include: { branch: true, table: true, items: true, employee: true },
+  });
+  req.app.locals.io?.emit('order:updated', rejected);
+  req.app.locals.io?.to(`branch:${rejected.branchId}`)?.emit('order:updated', rejected);
+  publishOrderStatus({
+    id: rejected.id,
+    status: rejected.status,
+    acceptedAt: (rejected as any).acceptedAt ?? null,
+    completedAt: (rejected as any).completedAt ?? null,
+    updatedAt: (rejected as any).updatedAt ?? null,
+  });
+  return res.json({ order: rejected, message: 'Order rejected' });
+});
+
 orderRouter.patch('/:id/status', authenticate, requireRole('EMPLOYEE'), async (req, res) => {
   const parsed = updateStatusSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -1023,6 +1053,43 @@ orderRouter.patch('/:id/status', authenticate, requireRole('EMPLOYEE'), async (r
       updatedAt: (rejected as any).updatedAt ?? null,
     });
     return res.json({ order: rejected, message: 'Order rejected' });
+  }
+
+  const existing = await prisma.order.findUnique({
+    where: { id },
+    select: { id: true, status: true, branchId: true },
+  });
+  if (!existing) return res.status(404).json({ message: 'Order not found' });
+
+  const empId = req.user!.id;
+  const employee = await prisma.employee.findUnique({
+    where: { id: empId },
+    select: { branchId: true },
+  });
+  if (!employee || employee.branchId !== existing.branchId) {
+    return res.status(403).json({ message: 'You can only update orders for your branch' });
+  }
+
+  // Linear flow: NEW → accept (POST …/accept) → ACCEPTED → ORDER_COMPLETE → payment
+  if (status === OrderStatusEnum.ORDER_COMPLETE) {
+    const canComplete =
+      existing.status === OrderStatusEnum.ACCEPTED ||
+      existing.status === OrderStatusEnum.PREPARING ||
+      existing.status === OrderStatusEnum.SERVED;
+    if (!canComplete) {
+      return res.status(409).json({
+        message: 'Accept the order before marking it completed',
+      });
+    }
+  }
+  if (status === OrderStatusEnum.ACCEPTED && existing.status === OrderStatusEnum.NEW_ORDER) {
+    return res.status(409).json({ message: 'Use Accept to claim this order' });
+  }
+  if (
+    (status === OrderStatusEnum.PREPARING || status === OrderStatusEnum.SERVED) &&
+    existing.status === OrderStatusEnum.NEW_ORDER
+  ) {
+    return res.status(409).json({ message: 'Accept the order first' });
   }
 
   const order = await prisma.order.update({

@@ -61,7 +61,7 @@ export function useDataFetch<T = unknown>(
       }
       throw error;
     }
-  }, [key, fetchWithLoading, showErrorToast, toast, onSuccess, onError]);
+  }, [key, fetchWithLoading, fetcher, showErrorToast, toast, onSuccess, onError]);
 
   // Auto-fetch on mount
   useEffect(() => {

@@ -97,5 +97,43 @@ branchRouter.patch('/:id', authenticate, requireRole('ADMIN'), async (req, res) 
   return res.json(branch);
 });
 
+// Admin: delete branch
+branchRouter.delete('/:id', authenticate, requireRole('ADMIN'), async (req, res) => {
+  const id = Number(req.params.id);
+  try {
+    // Check if branch has employees or orders
+    const branch = await prisma.branch.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: { employees: true, tables: true, orders: true },
+        },
+      },
+    });
+    
+    if (!branch) {
+      return res.status(404).json({ message: 'Branch not found' });
+    }
+    
+    if ((branch._count?.employees || 0) > 0) {
+      return res.status(400).json({ 
+        message: 'Cannot delete branch with active employees. Please remove all employees first.' 
+      });
+    }
+    
+    if ((branch._count?.orders || 0) > 0) {
+      return res.status(400).json({ 
+        message: 'Cannot delete branch with order history. Please archive orders first.' 
+      });
+    }
+    
+    await prisma.branch.delete({ where: { id } });
+    return res.json({ message: 'Branch deleted successfully' });
+  } catch (e: unknown) {
+    const msg = (e as any)?.message ? String((e as any).message) : 'Failed to delete branch';
+    return res.status(500).json({ message: msg });
+  }
+});
+
 // Nested: director management (list, request-verify, request-remove)
 branchRouter.use('/:id/directors', directorRouter);

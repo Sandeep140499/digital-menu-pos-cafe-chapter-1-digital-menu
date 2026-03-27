@@ -688,6 +688,7 @@ type SettingsSectionContentProps = {
   >;
   handleCreateBranch: () => Promise<void>;
   handleUpdateBranch: () => Promise<void>;
+  handleDeleteBranch: (id: number) => Promise<void>;
   loadSettings: () => Promise<void>;
   savingBranch: boolean;
   notifications: any[];
@@ -725,6 +726,7 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
     setCreateBranchForm,
     handleCreateBranch,
     handleUpdateBranch,
+    handleDeleteBranch,
     loadSettings,
     savingBranch,
     notifications,
@@ -800,39 +802,49 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
                   className="flex min-w-0 flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <p className="min-w-0 truncate font-medium">{b.name}</p>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-full shrink-0 sm:w-auto"
-                    onClick={() => {
-                      setBranchForm({
-                        name: b.name,
-                        location: b.location || '',
-                        timezone: b.timezone || 'Asia/Kolkata',
-                        logoUrl: b.logoUrl || '',
-                        phone: b.phone || '',
-                        googleReviewUrl: b.googleReviewUrl || '',
-                        pincode: b.pincode || '',
-                        directorsEmail: b.directorsEmail || '',
-                        showTotalAmountToCustomers:
-                          typeof (b as any).showTotalAmountToCustomers === 'boolean'
-                            ? (b as any).showTotalAmountToCustomers
-                            : true,
-                        enableNewOrderRinging:
-                          typeof (b as any).enableNewOrderRinging === 'boolean'
-                            ? (b as any).enableNewOrderRinging
-                            : true,
-                        newOrderSoundPreset: (b as any).newOrderSoundPreset || 'ring',
-                        newOrderSoundVolume:
-                          typeof (b as any).newOrderSoundVolume === 'number'
-                            ? (b as any).newOrderSoundVolume
-                            : 1,
-                      });
-                      setBranch(b);
-                    }}
-                  >
-                    Edit in Branch Settings
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full shrink-0 sm:w-auto"
+                      onClick={() => {
+                        setBranchForm({
+                          name: b.name,
+                          location: b.location || '',
+                          timezone: b.timezone || 'Asia/Kolkata',
+                          logoUrl: b.logoUrl || '',
+                          phone: b.phone || '',
+                          googleReviewUrl: b.googleReviewUrl || '',
+                          pincode: b.pincode || '',
+                          directorsEmail: b.directorsEmail || '',
+                          showTotalAmountToCustomers:
+                            typeof (b as any).showTotalAmountToCustomers === 'boolean'
+                              ? (b as any).showTotalAmountToCustomers
+                              : true,
+                          enableNewOrderRinging:
+                            typeof (b as any).enableNewOrderRinging === 'boolean'
+                              ? (b as any).enableNewOrderRinging
+                              : true,
+                          newOrderSoundPreset: (b as any).newOrderSoundPreset || 'ring',
+                          newOrderSoundVolume:
+                            typeof (b as any).newOrderSoundVolume === 'number'
+                              ? (b as any).newOrderSoundVolume
+                              : 1,
+                        });
+                        setBranch(b);
+                      }}
+                    >
+                      Edit in Branch Settings
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full shrink-0 text-red-600 hover:bg-red-50 hover:text-red-700 sm:w-auto"
+                      onClick={() => handleDeleteBranch(b.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -5012,6 +5024,43 @@ const AdminDashboard = () => {
         const description = await readApiErrorMessage(res);
         toast({
           title: 'Could not save branch',
+          description,
+          variant: 'destructive',
+        });
+      }
+    } catch {
+      toast({
+        title: 'Error',
+        description: 'Network error or server unreachable. Try again in a moment.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingBranch(false);
+    }
+  };
+
+  // Delete branch
+  const handleDeleteBranch = async (branchId: number) => {
+    if (!token) return;
+    if (!window.confirm('Are you sure you want to delete this branch? This action cannot be undone.')) {
+      return;
+    }
+    setSavingBranch(true);
+    try {
+      const res = await fetch(`${apiBase}/branches/${branchId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        toast({
+          title: 'Branch deleted',
+          description: 'The branch has been permanently removed.',
+        });
+        await loadSettings();
+      } else {
+        const description = await readApiErrorMessage(res);
+        toast({
+          title: 'Could not delete branch',
           description,
           variant: 'destructive',
         });
@@ -9420,6 +9469,7 @@ const AdminDashboard = () => {
             setCreateBranchForm={setCreateBranchForm}
             handleCreateBranch={handleCreateBranch}
             handleUpdateBranch={handleUpdateBranch}
+            handleDeleteBranch={handleDeleteBranch}
             loadSettings={loadSettings}
             savingBranch={savingBranch}
             notifications={notifications}

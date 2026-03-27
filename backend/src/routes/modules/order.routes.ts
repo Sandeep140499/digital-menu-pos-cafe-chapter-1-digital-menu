@@ -111,27 +111,43 @@ const modifyOrderV2Schema = z.object({
 export const orderRouter = Router();
 
 async function assignEmployeeToOrder(branchId: number) {
-  // ONLY assign to employees with active shifts - no fallback to active employees
-  const shift = await prisma.employeeShift.findFirst({
+  // Allow any ACTIVE employee to handle orders, not just those with active shifts
+  // This enables multiple employees to work concurrently
+  const employee = await prisma.employee.findFirst({
     where: {
       branchId,
-      shiftEnd: null,
       status: 'ACTIVE' as any,
-      employee: { status: 'ACTIVE' },
     },
-    select: { id: true, employeeId: true },
-    orderBy: { shiftStart: 'desc' },
+    select: { id: true },
+    orderBy: undefined,
   });
 
-  if (shift) {
+  if (employee) {
     return {
-      employeeId: shift.employeeId,
-      shiftId: shift.id,
+      employeeId: employee.id,
+      shiftId: null, // Not using shift system for concurrent access
     };
   }
 
-  // No active shift found - cannot assign order
-  console.log(`Cannot assign order for branch ${branchId} - no active shifts found`);
+  // No active employee found - fallback to any active employee
+  const anyActiveEmployee = await prisma.employee.findFirst({
+    where: {
+      branchId,
+      status: 'ACTIVE' as any,
+    },
+    select: { id: true },
+  });
+
+  if (anyActiveEmployee) {
+    console.log(`Assigning order to any active employee for branch ${branchId}`);
+    return {
+      employeeId: anyActiveEmployee.id,
+      shiftId: null,
+    };
+  }
+
+  // No active employees at all
+  console.log(`Cannot assign order for branch ${branchId} - no active employees found`);
   return {
     employeeId: null,
     shiftId: null,

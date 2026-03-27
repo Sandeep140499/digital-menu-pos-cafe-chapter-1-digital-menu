@@ -138,12 +138,12 @@ const DashboardShell = ({
         <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
           <button
             type="button"
-            className="inline-flex min-h-[44px] min-w-[44px] flex-none cursor-pointer touch-manipulation items-center justify-center rounded-lg border-2 border-white/50 bg-white/20 p-2.5 hover:bg-white/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            className="inline-flex min-h-[44px] min-w-[44px] flex-none cursor-pointer touch-manipulation items-center justify-center rounded-lg border-2 border-white/50 bg-white/20 p-2.5 hover:bg-white/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-white active:bg-white/40 md:min-h-[48px] md:min-w-[48px]"
             onClick={toggleSidebar}
             aria-label={sidebarOpen ? 'Close menu' : 'Open menu'}
             aria-expanded={sidebarOpen}
           >
-            {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            {sidebarOpen ? <X className="h-5 w-5 md:h-6 md:w-6" /> : <Menu className="h-5 w-5 md:h-6 md:w-6" />}
           </button>
           <img
             src={typeof logoUrl === 'string' ? logoUrl : cafeLogo}

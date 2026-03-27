@@ -34,6 +34,7 @@ import {
   Loader2,
   Package,
   CalendarDays,
+  Edit2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { LoaderButton } from '@/components/shared/LoaderButton';
@@ -379,6 +380,7 @@ const sidebarItems = [
   { key: 'live', label: 'Live Orders', icon: ShoppingCart },
   { key: 'add-order', label: 'Add Order', icon: Plus },
   { key: 'all-orders', label: 'All Orders', icon: ShoppingCart },
+  { key: 'paid', label: 'Paid & Pending', icon: CreditCard },
   { key: 'shift', label: 'My Shift', icon: Clock },
   { key: 'leave', label: 'Leave', icon: CalendarDays },
   { key: 'profile', label: 'Profile', icon: User },
@@ -1784,46 +1786,15 @@ const EmployeeDashboard = () => {
     };
   }, [ready, token, shiftActive, isShiftPaused, pauseNewOrderPopup]);
 
-  // New order sound when popup gets new orders (real-time notification)
+  // Auto-play sound when popup opens
   useEffect(() => {
-    const n = newOrderPopupOrders.length;
-    if (n > prevNewOrderCountRef.current) {
-      // Ring only for the active (on-shift) employee.
-      if (ringingEnabledByAdmin && shiftActive && !isShiftPaused) {
-        playNewOrderSound(newOrderSoundPreset, newOrderSoundVolume);
-      }
-    }
-    prevNewOrderCountRef.current = n;
-  }, [
-    newOrderPopupOrders.length,
-    newOrderSoundPreset,
-    ringingEnabledByAdmin,
-    shiftActive,
-    isShiftPaused,
-    newOrderSoundVolume,
-  ]);
-
-  // Keep ringing (beep) until staff accepts/clears, unless paused.
-  useEffect(() => {
-    if (pauseNewOrderPopup) return;
-    if (newOrderPopupOrders.length === 0) return;
-    if (!ringingEnabledByAdmin) return;
-    if (!shiftActive) return;
-    if (isShiftPaused) return;
-    const id = window.setInterval(() => {
+    if (newOrderPopupOrders.length > 0 && ringingEnabledByAdmin && shiftActive && !isShiftPaused) {
+      // Play sound immediately when popup opens
       playNewOrderSound(newOrderSoundPreset, newOrderSoundVolume);
-    }, 2500);
-    return () => window.clearInterval(id);
-  }, [
-    newOrderPopupOrders.length,
-    pauseNewOrderPopup,
-    newOrderSoundPreset,
-    ringingEnabledByAdmin,
-    shiftActive,
-    isShiftPaused,
-    newOrderSoundVolume,
-  ]);
+    }
+  }, [newOrderPopupOrders.length, ringingEnabledByAdmin, shiftActive, isShiftPaused, newOrderSoundPreset, newOrderSoundVolume]);
 
+  
   const [profile, setProfile] = useState<{
     name: string;
     email: string;
@@ -2253,7 +2224,7 @@ const EmployeeDashboard = () => {
         toast.success(data.message || 'You are now handling this order.');
         // Business rule: employees can send WhatsApp only after payment is completed.
         if (data.statusWaMeLink) {
-          toast.info('WhatsApp messages can be sent after payment is marked as Paid.');
+          toast('WhatsApp messages can be sent after payment is marked as Paid.');
         }
       } else {
         const err = await res.json().catch(() => ({}));
@@ -2261,6 +2232,42 @@ const EmployeeDashboard = () => {
       }
     } catch {
       toast.error('Failed to accept order');
+    } finally {
+      setAcceptingOrderId(null);
+    }
+  };
+
+  const rejectOrder = async (orderId: number) => {
+    if (!token) return;
+    setAcceptingOrderId(orderId);
+    try {
+      const res = await fetch(`${apiBase}/orders/${orderId}/reject`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const updated = data.order ?? data;
+        setNewOrderPopupOrders(prev => prev.filter(o => o.id !== orderId));
+        setOrders(prev =>
+          prev.map(o =>
+            o.id === orderId
+              ? {
+                  ...o,
+                  ...updated,
+                  status: 'REJECTED',
+                }
+              : o
+          )
+        );
+        setSelectedOrder(prev => (prev && prev.id === orderId ? { ...prev, ...updated } : prev));
+        toast.success(data.message || 'Order rejected successfully.');
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.message || 'Failed to reject order');
+      }
+    } catch {
+      toast.error('Failed to reject order');
     } finally {
       setAcceptingOrderId(null);
     }
@@ -2312,7 +2319,7 @@ const EmployeeDashboard = () => {
               : prev
           );
           if (data.statusWaMeLink) {
-            toast.info('WhatsApp messages can be sent after payment is marked as Paid.');
+            toast('WhatsApp messages can be sent after payment is marked as Paid.');
           }
           toast.success(
             data.message || `Order marked as ${status.replace('_', ' ').toLowerCase()}`
@@ -2378,7 +2385,7 @@ const EmployeeDashboard = () => {
                 'Popup blocked. Allow popups for this site to open WhatsApp and send receipt to customer.',
                 { duration: 8000 }
               );
-              toast.info(
+              toast(
                 'You can copy the receipt link from the address bar after allowing popups and retry Mark Paid.',
                 { duration: 6000 }
               );
@@ -2673,7 +2680,7 @@ const EmployeeDashboard = () => {
     [ordersInBusinessDay]
   );
   const paidOrders = useMemo(
-    () => ordersInBusinessDay.filter(o => o.paymentStatus === 'PAID'),
+    () => ordersInBusinessDay.filter(o => o.paymentStatus === 'PAID' || o.status === 'ORDER_COMPLETE'),
     [ordersInBusinessDay]
   );
 
@@ -2977,51 +2984,95 @@ const EmployeeDashboard = () => {
               </div>
               <Separator className="my-2 sm:my-3" />
               <div className="mt-auto flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={e => {
-                    e.stopPropagation();
-                    openOrderPopup(order);
-                  }}
-                  className="text-xs sm:text-sm"
-                >
-                  <Eye className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
-                  View
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={e => {
-                    e.stopPropagation();
-                    openOrderPopup(order);
-                  }}
-                  className="text-xs sm:text-sm"
-                  disabled={order.status === 'ORDER_COMPLETE'}
-                  title={
-                    order.status === 'ORDER_COMPLETE'
-                      ? 'Completed orders cannot be edited'
-                      : undefined
-                  }
-                >
-                  <Plus className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
-                  Add More Items
-                </Button>
-                {order.status !== 'ORDER_COMPLETE' && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={e => {
-                      e.stopPropagation();
-                      openOrderPopup(order);
-                    }}
-                    className="text-xs sm:text-sm"
-                  >
-                    Modify
-                  </Button>
+                {/* Show View, Add More Items, Modify for all non-rejected orders */}
+                {order.status !== 'REJECTED' && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={e => {
+                        e.stopPropagation();
+                        openOrderPopup(order);
+                      }}
+                      className="text-xs sm:text-sm"
+                    >
+                      <Eye className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
+                      View
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={e => {
+                        e.stopPropagation();
+                        openOrderPopup(order);
+                      }}
+                      className="text-xs sm:text-sm"
+                      disabled={order.status === 'ORDER_COMPLETE'}
+                      title={
+                        order.status === 'ORDER_COMPLETE'
+                          ? 'Completed orders cannot be edited'
+                          : undefined
+                      }
+                    >
+                      <Plus className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
+                      Add More Items
+                    </Button>
+                    {order.status !== 'ORDER_COMPLETE' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={e => {
+                          e.stopPropagation();
+                          openOrderPopup(order);
+                        }}
+                        className="text-xs sm:text-sm"
+                      >
+                        <Edit2 className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
+                        Modify
+                      </Button>
+                    )}
+                  </>
                 )}
-                {/* No Accept button needed - orders are assigned immediately to employees with active shifts */}
-                {order.employeeId && order.status !== 'ORDER_COMPLETE' && (
+                
+                {/* Show Accept/Reject only for NEW_ORDER status */}
+                {order.status === 'NEW_ORDER' && (
+                  <>
+                    <Button
+                      size="sm"
+                      className="bg-green-600 text-xs text-white hover:bg-green-700 sm:text-sm"
+                      disabled={isAcceptingThis || isActionThis}
+                      onClick={e => {
+                        e.stopPropagation();
+                        acceptOrder(order.id);
+                      }}
+                    >
+                      {isAcceptingThis ? (
+                        <>
+                          <span className="mr-1 inline-block h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent sm:h-4 sm:w-4" />
+                          Accepting...
+                        </>
+                      ) : (
+                        <>Accept</>
+                      )}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-xs text-red-600 hover:bg-red-50 hover:text-red-700 sm:text-sm"
+                      disabled={isAcceptingThis || isActionThis}
+                      onClick={e => {
+                        e.stopPropagation();
+                        rejectOrder(order.id);
+                      }}
+                    >
+                      <XCircle className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
+                      Reject
+                    </Button>
+                  </>
+                )}
+                
+                {/* Show Complete/Remove Mark Preparation for accepted orders (not NEW_ORDER or ORDER_COMPLETE) */}
+                {order.status !== 'NEW_ORDER' && order.status !== 'ORDER_COMPLETE' && order.status !== 'REJECTED' && (
                   <>
                     <Button
                       size="sm"
@@ -3062,8 +3113,23 @@ const EmployeeDashboard = () => {
                       )}
                       Complete
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      disabled={isActionThis}
+                      onClick={e => {
+                        e.stopPropagation();
+                        markStatus(order.id, 'CANCELLED');
+                      }}
+                      className="text-xs sm:text-sm"
+                    >
+                      <Trash2 className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
+                      Remove
+                    </Button>
                   </>
                 )}
+                
+                {/* Show Confirm Payment for completed orders */}
                 {order.status === 'ORDER_COMPLETE' && (
                   <Button
                     size="sm"
@@ -4822,6 +4888,30 @@ const EmployeeDashboard = () => {
 
   const NewOrderPopupDialog = () => {
     if (newOrderPopupOrders.length === 0) return null;
+    
+    const handleAcceptOrder = async (orderId: number) => {
+      await acceptOrder(orderId);
+    };
+    
+    const handleRejectOrder = async (orderId: number) => {
+      await rejectOrder(orderId);
+    };
+
+    const handleViewOrder = (order: Order) => {
+      openOrderPopup(order);
+      setNewOrderPopupOrders([]);
+    };
+
+    const handleAddMoreItems = (order: Order) => {
+      openOrderPopup(order);
+      setNewOrderPopupOrders([]);
+    };
+
+    const handleModifyOrder = (order: Order) => {
+      openOrderPopup(order);
+      setNewOrderPopupOrders([]);
+    };
+    
     return (
       <Dialog
         open={newOrderPopupOrders.length > 0}
@@ -4841,25 +4931,86 @@ const EmployeeDashboard = () => {
             </DialogDescription>
           </DialogHeader>
           <ScrollArea className="max-h-[280px] pr-2">
-            <div className="space-y-3">{newOrderPopupCards}</div>
-          </ScrollArea>
-          <div className="mt-3 rounded-lg border bg-slate-50 p-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-sm font-semibold text-slate-900">New order sound</div>
-                <div className="text-xs text-slate-600">
-                  This is set by Admin Settings and applies to all devices.
+            <div className="space-y-3">
+              {newOrderPopupOrders.map(order => (
+                <div key={order.id} className="rounded-lg border-2 border-emerald-200 bg-emerald-50/50 p-3 text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold">
+                      Table {order.table?.tableNumber || order.table?.id || '?'}
+                    </span>
+                    <Badge className={getPriorityBadgeClass(order)}>{getPriorityLabel(order)}</Badge>
+                  </div>
+                  <p className="text-muted-foreground mt-0.5">
+                    Order #{order.id} · {formatPopupTime(order.createdAt)}
+                  </p>
+                  <ul className="mt-2 space-y-0.5 font-medium text-slate-800">
+                    {order.items
+                      .filter(i => !i.isRemoved)
+                      .map(item => (
+                        <li key={item.id}>
+                          {item.quantity}× {formatItemDisplayName(item.name, item.variant)}
+                        </li>
+                      ))}
+                  </ul>
+                  <p className="mt-2 font-bold text-emerald-700">{formatINR(order.totalAmount)}</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-xs"
+                      onClick={() => handleViewOrder(order)}
+                    >
+                      <Eye className="mr-1 h-3 w-3" />
+                      View
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-xs"
+                      onClick={() => handleAddMoreItems(order)}
+                    >
+                      <Plus className="mr-1 h-3 w-3" />
+                      Add Items
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-xs"
+                      onClick={() => handleModifyOrder(order)}
+                    >
+                      <Edit2 className="mr-1 h-3 w-3" />
+                      Modify
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-green-600 text-xs text-white hover:bg-green-700"
+                      disabled={acceptingOrderId === order.id}
+                      onClick={() => handleAcceptOrder(order.id)}
+                    >
+                      {acceptingOrderId === order.id ? (
+                        <>
+                          <span className="mr-1 inline-block h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                          Accepting...
+                        </>
+                      ) : (
+                        <>Accept</>
+                      )}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
+                      disabled={acceptingOrderId === order.id}
+                      onClick={() => handleRejectOrder(order.id)}
+                    >
+                      <XCircle className="mr-1 h-3 w-3" />
+                      Reject
+                    </Button>
+                  </div>
                 </div>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => playNewOrderSound(newOrderSoundPreset, newOrderSoundVolume)}
-              >
-                Test
-              </Button>
+              ))}
             </div>
-          </div>
+          </ScrollArea>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setNewOrderPopupOrders([])}>
               Dismiss
@@ -4950,9 +5101,9 @@ const EmployeeDashboard = () => {
     () => (
       <OrdersTableSection
         orders={paidOrders}
-        title="Paid Orders"
+        title="Paid & Pending Orders"
         loading={loading}
-        showConfirmPayment={false}
+        showConfirmPayment={true}
         onViewOrder={openOrderPopup}
         onConfirmPayment={confirmPayment}
         actionOrderId={actionOrderId}

@@ -43,8 +43,15 @@ function readCookie(name: string) {
 
 function extractMessage(payload: unknown): string | undefined {
   if (!payload || typeof payload !== 'object') return undefined;
-  const msg = (payload as Record<string, unknown>).message;
-  return typeof msg === 'string' ? msg : undefined;
+  const o = payload as Record<string, unknown>;
+  const msg = o.message;
+  if (typeof msg === 'string' && msg.trim()) return msg.trim();
+  const errors = o.errors;
+  if (Array.isArray(errors) && errors.length > 0) {
+    const first = errors[0] as { message?: string; path?: unknown };
+    if (typeof first?.message === 'string') return first.message;
+  }
+  return undefined;
 }
 
 async function authFetch(path: string, init: RequestInit = {}) {
@@ -83,10 +90,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const refreshing = useRef<Promise<string | null> | null>(null);
   const bootstrapped = useRef(false);
+  /** Bumps on each new access-token session so a stale in-flight /auth/refresh cannot wipe a fresh login. */
+  const sessionGeneration = useRef(0);
 
   const setSession = useCallback((t: string | null, r: AuthRole | null) => {
     if (typeof window !== 'undefined') {
       if (t) {
+        sessionGeneration.current += 1;
         // Persist across refresh/tab close so UX doesn't depend on sessionStorage lifetime.
         window.localStorage.setItem(TOKEN_KEY, t);
         window.sessionStorage.setItem(TOKEN_KEY, t);
@@ -112,15 +122,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async (): Promise<string | null> => {
     if (refreshing.current) return refreshing.current;
     refreshing.current = (async () => {
+      const genAtStart = sessionGeneration.current;
       // If we don't have a readable CSRF cookie yet, don't even attempt refresh.
       // (Backend enforces double-submit CSRF and will return 403.)
-      if (!readCookie('csrf')) return null;
+      if (!readCookie('csrf')) {
+        // Cookies cleared (or another tab / domain issue) but access JWT still in storage —
+        // without CSRF we cannot refresh; keeping the old token makes /login redirect away
+        // and dashboards look "broken".
+        if (typeof window !== 'undefined') {
+          const hasStoredAccess =
+            !!(window.localStorage.getItem(TOKEN_KEY) || window.sessionStorage.getItem(TOKEN_KEY));
+          if (hasStoredAccess && genAtStart === sessionGeneration.current) setSession(null, null);
+        }
+        return null;
+      }
       const res = await authFetch('/auth/refresh', { method: 'POST' });
       if (!res.ok) {
-        // If refresh token is invalid/expired, backend will return 401 (and clear cookies).
-        // That is the only time we should invalidate the session client-side.
-        if (res.status === 401) {
-          setSession(null, null);
+        // Invalid refresh or CSRF mismatch: drop client session so login works again.
+        if (res.status === 401 || res.status === 403) {
+          if (genAtStart === sessionGeneration.current) setSession(null, null);
         }
         return null;
       }
@@ -177,11 +197,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (bootstrapped.current) return;
     bootstrapped.current = true;
-    const stored =
-      typeof window !== 'undefined'
-        ? window.localStorage.getItem(TOKEN_KEY) || window.sessionStorage.getItem(TOKEN_KEY)
-        : null;
-    if (stored) setReady(true);
+    // Do not set `ready` early just because a token exists — refresh may clear a stale
+    // session; otherwise /login immediately redirects with a dead JWT.
     void refresh().catch(() => setReady(true));
   }, [refresh]);
 

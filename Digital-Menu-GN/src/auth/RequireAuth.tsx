@@ -30,6 +30,8 @@ export function RequireAuth({
   }
 
   if (role && currentRole !== role) {
+    if (currentRole === 'ADMIN') return <Navigate to="/admin" replace />;
+    if (currentRole === 'EMPLOYEE') return <Navigate to="/employee" replace />;
     return <Navigate to="/login" replace />;
   }
 

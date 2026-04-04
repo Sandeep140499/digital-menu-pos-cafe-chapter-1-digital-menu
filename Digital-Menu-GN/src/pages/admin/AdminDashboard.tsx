@@ -706,6 +706,8 @@ type SettingsSectionContentProps = {
   } | null;
   loadDirectors: () => Promise<void>;
   branchesListUnavailable: boolean;
+  autoRefreshEnabled: boolean;
+  setAutoRefreshEnabled: React.Dispatch<React.SetStateAction<boolean>>;
 };
 function parseDirectorEmails(s: string): string[] {
   const arr = (s || '')
@@ -740,6 +742,8 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
     directorsData,
     loadDirectors,
     branchesListUnavailable,
+    autoRefreshEnabled,
+    setAutoRefreshEnabled,
   } = props;
   const [newDirectorEmail, setNewDirectorEmail] = useState('');
   const [sendingVerify, setSendingVerify] = useState(false);
@@ -750,7 +754,6 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
   const [changingPassword, setChangingPassword] = useState(false);
   const [orderNotificationsEnabled, setOrderNotificationsEnabled] = useState(true);
   const [soundAlertsEnabled, setSoundAlertsEnabled] = useState(true);
-  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const [savingSystemPrefs, setSavingSystemPrefs] = useState(false);
   const branchId = branch?.id ?? branches[0]?.id;
 
@@ -758,10 +761,8 @@ const SettingsSectionContent = memo(function SettingsSectionContent(
     try {
       const on = window.localStorage.getItem('dm_admin_order_notifications');
       const sound = window.localStorage.getItem('dm_admin_sound_alerts');
-      const auto = window.localStorage.getItem('dm_admin_auto_refresh');
       if (on !== null) setOrderNotificationsEnabled(on === 'true');
       if (sound !== null) setSoundAlertsEnabled(sound === 'true');
-      if (auto !== null) setAutoRefreshEnabled(auto === 'true');
     } catch {
       // ignore (storage blocked)
     }
@@ -3352,6 +3353,7 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const { token, ready } = useAuth();
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const tokenRef = useRef(token);
   tokenRef.current = token;
   const [profile, setProfile] = useState<{ name?: string } | null>(null);
@@ -3373,6 +3375,15 @@ const AdminDashboard = () => {
       localStorage.setItem('admin_active_section', activeSection);
     }
   }, [activeSection]);
+
+  useEffect(() => {
+    try {
+      const auto = window.localStorage.getItem('dm_admin_auto_refresh');
+      if (auto !== null) setAutoRefreshEnabled(auto === 'true');
+    } catch {
+      // ignore (storage blocked)
+    }
+  }, []);
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -3840,12 +3851,18 @@ const AdminDashboard = () => {
   useEffect(() => {
     if (!token) return;
     if (isOrderDialogOpen) return;
-    // Avoid background traffic: only auto-load on Overview.
+    // Overview: full refresh + reset new-order badge.
     if (activeSection === 'overview') {
       loadDashboardData();
       setNewOrdersBadge(0);
+      return;
     }
-  }, [token, isOrderDialogOpen, activeSection, autoRefreshEnabled]);
+    // Any other saved section (menu, orders, …) still needs the first bulk load or the shell
+    // stays on loading forever (loading=true, hasLoadedOnce=false).
+    if (!hasLoadedOnce) {
+      void loadDashboardData();
+    }
+  }, [token, isOrderDialogOpen, activeSection, autoRefreshEnabled, hasLoadedOnce]);
 
   // Calculate today's stats
   const todayStats: TodayStats = useMemo(() => {
@@ -9581,6 +9598,8 @@ const AdminDashboard = () => {
             directorsData={directorsData}
             loadDirectors={loadDirectors}
             branchesListUnavailable={branchesListUnavailable}
+            autoRefreshEnabled={autoRefreshEnabled}
+            setAutoRefreshEnabled={setAutoRefreshEnabled}
           />
         );
       default:
@@ -9606,6 +9625,7 @@ const AdminDashboard = () => {
     loadLeaves,
     updateLeaveStatus,
     employees,
+    autoRefreshEnabled,
   ]);
 
   if (!ready || !token) {

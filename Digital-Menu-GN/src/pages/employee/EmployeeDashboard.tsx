@@ -1665,6 +1665,8 @@ const EmployeeDashboard = () => {
   const [newOrderSoundVolume, setNewOrderSoundVolume] = useState<number>(1);
 
   const { token, ready, refresh, logout } = useAuth();
+  const tokenRef = useRef(token);
+  tokenRef.current = token;
 
   useEffect(() => {
     ordersRef.current = orders;
@@ -1701,7 +1703,7 @@ const EmployeeDashboard = () => {
 
   const { stopGlobalLoading } = useGlobalLoading();
 
-  const mergeOrders = (prev: Order[], next: Order[]) => {
+  const mergeOrders = useCallback((prev: Order[], next: Order[]) => {
     if (prev.length === 0) return next;
     const prevById = new Map(prev.map(o => [o.id, o]));
     let changed = prev.length !== next.length;
@@ -1724,7 +1726,7 @@ const EmployeeDashboard = () => {
       return same ? p : { ...p, ...n };
     });
     return changed ? merged : prev;
-  };
+  }, []);
 
   // Clock every 30s only – avoids re-rendering every second so cards stay stable (no blink)
   useEffect(() => {
@@ -1801,13 +1803,28 @@ const EmployeeDashboard = () => {
     const s = io(socketBaseUrl, {
       path: '/socket.io',
       withCredentials: true,
-      auth: { token },
+      auth: cb => {
+        cb({ token: tokenRef.current || '' });
+      },
       transports: ['websocket', 'polling'],
     });
     socketRef.current = s;
 
     const canNotify = () =>
       shiftActive && !isShiftPaused && !pauseNewOrderPopup && !isOrderPopupOpenRef.current;
+
+    /** Always merge into the live list so customer orders show even when popup/sound is suppressed. */
+    const upsertLiveOrder = (o: Order) => {
+      if (!o || typeof o.id !== 'number') return;
+      setOrders(prev =>
+        mergeOrders(
+          prev,
+          prev.some(p => p.id === o.id)
+            ? prev.map(p => (p.id === o.id ? { ...p, ...o } : p))
+            : [...prev, o]
+        )
+      );
+    };
 
     const addPopupOrder = (o: Order) => {
       if (!canNotify()) return;
@@ -1831,6 +1848,7 @@ const EmployeeDashboard = () => {
     };
 
     s.on('order:new', (o: Order) => {
+      upsertLiveOrder(o);
       addPopupOrder(o);
     });
 
@@ -1840,27 +1858,12 @@ const EmployeeDashboard = () => {
       if (o.status !== 'NEW_ORDER') {
         removePopupOrder(o.id);
       }
-      // Keep list fresh quickly without waiting for poll.
-      setOrders(prev =>
-        mergeOrders(
-          prev,
-          prev.some(p => p.id === o.id)
-            ? prev.map(p => (p.id === o.id ? { ...p, ...o } : p))
-            : [...prev, o]
-        )
-      );
+      upsertLiveOrder(o);
     });
 
     s.on('order:modified', (o: Order) => {
       if (!o || typeof o.id !== 'number') return;
-      setOrders(prev =>
-        mergeOrders(
-          prev,
-          prev.some(p => p.id === o.id)
-            ? prev.map(p => (p.id === o.id ? { ...p, ...o } : p))
-            : [...prev, o]
-        )
-      );
+      upsertLiveOrder(o);
     });
 
     s.on('disconnect', () => {
@@ -1897,7 +1900,7 @@ const EmployeeDashboard = () => {
       }
       if (socketRef.current === s) socketRef.current = null;
     };
-  }, [ready, token, shiftActive, isShiftPaused, pauseNewOrderPopup]);
+  }, [ready, token, shiftActive, isShiftPaused, pauseNewOrderPopup, mergeOrders]);
 
   useEffect(() => {
     if (newOrderPopupOrders.length === 0) return;
@@ -1977,7 +1980,7 @@ const EmployeeDashboard = () => {
         stopGlobalLoading();
       }
     })();
-  }, [ready, token, refresh, logout, isOrderPopupOpen]);
+  }, [ready, token, refresh, logout, isOrderPopupOpen, mergeOrders]);
 
   useEffect(() => {
     if (!token) return;

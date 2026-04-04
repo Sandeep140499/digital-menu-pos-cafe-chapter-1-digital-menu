@@ -63,15 +63,16 @@ let publicMenuCache: { data: PublicMenuResponse; ts: number; bestTs: number } | 
 const MENU_CACHE_MS = 15_000;
 const BEST_SELLER_CACHE_MS = 5 * 60_000;
 
-// Month-to-date for best-seller calculation (start of month 00:00 to now)
-function getMonthToDateRange(): { start: Date; end: Date } {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+// Rolling 7 days for best-seller ranking (weekly demand)
+function getRolling7DayRange(): { start: Date; end: Date } {
+  const end = new Date();
+  const start = new Date(end);
+  start.setDate(start.getDate() - 7);
   start.setHours(0, 0, 0, 0);
-  return { start, end: now };
+  return { start, end };
 }
 
-// Public: get menu for QR customer (only active items) + bestSellerItemIds (top 5 month-to-date)
+// Public: get menu for QR customer (only active items) + bestSellerItemIds (top 5 by last-7-days demand)
 menuRouter.get('/', async (_req, res) => {
   incrementPublicMenuViews();
   const now = Date.now();
@@ -114,7 +115,7 @@ menuRouter.get('/', async (_req, res) => {
     let bestSellerItemIds: number[] = publicMenuCache?.data.bestSellerItemIds ?? [];
     const bestStale = !publicMenuCache || now - publicMenuCache.bestTs > BEST_SELLER_CACHE_MS;
     if (bestStale) {
-      const { start, end } = getMonthToDateRange();
+      const { start, end } = getRolling7DayRange();
       const lastWeekOrderItems = await prisma.orderItem.groupBy({
         by: ['menuItemId'],
         where: {
@@ -131,7 +132,7 @@ menuRouter.get('/', async (_req, res) => {
         .slice(0, 5);
       bestSellerItemIds = sorted.map(r => r.menuItemId as number);
 
-      // If there isn't enough order history this month, fill remaining slots
+      // If there isn't enough order history in the window, fill remaining slots
       // with active items so UI still has a consistent "top 5" section.
       if (bestSellerItemIds.length < 5) {
         const fillers = await prisma.menuItem.findMany({

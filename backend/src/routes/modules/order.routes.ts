@@ -324,8 +324,9 @@ orderRouter.post('/', async (req, res) => {
   await notificationService.sendNewOrderNotification(notificationData);
 
   // Keep legacy emissions for backward compatibility
-  req.app.locals.io?.emit('order:new', orderForRealtime ?? order);
-  req.app.locals.io?.to(`branch:${order.branchId}`)?.emit('order:new', orderForRealtime ?? order);
+  const payload = orderForRealtime ?? order;
+  req.app.locals.io?.emit('order:new', payload);
+  req.app.locals.io?.to(`branch:${order.branchId}`)?.emit('order:new', payload);
 
   publishOrderStatus({
     id: order.id,
@@ -663,15 +664,21 @@ orderRouter.get('/customer-mobiles', authenticate, requireRole('ADMIN'), async (
 });
 
 // Admin or Employee: get live orders (NEW_ORDER..SERVED) + ORDER_COMPLETE (so Pending Payments shows completed-but-unpaid)
-// Limited to today (branch timezone, default Asia/Kolkata) so we don't return yesterday's orders.
-function getStartOfTodayInTimezone(timeZone = 'Asia/Kolkata'): Date {
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('en-CA', { timeZone }); // "YYYY-MM-DD"
-  const [y, m, d] = dateStr.split('-').map(Number);
-  // 00:00 in that timezone: for Asia/Kolkata (UTC+5:30), (y,m,d) 00:00 IST = (y,m,d-1) 18:30 UTC
-  const utcPrevDay = Date.UTC(y, m - 1, d - 1);
-  const istOffsetMs = 18.5 * 60 * 60 * 1000; // 18h30 in ms
-  return new Date(utcPrevDay + istOffsetMs);
+// Limited to today's calendar date in branch timezone so we don't return yesterday's orders.
+function getStartOfTodayInTimezone(timeZone: string): Date {
+  const ref = new Date();
+  const targetYmd = ref.toLocaleDateString('en-CA', { timeZone });
+  const zonedYmd = (t: number) => new Date(t).toLocaleDateString('en-CA', { timeZone });
+  let lo = ref.getTime() - 40 * 60 * 60 * 1000;
+  let hi = ref.getTime() + 40 * 60 * 60 * 1000;
+  while (zonedYmd(lo) > targetYmd) lo -= 24 * 60 * 60 * 1000;
+  while (zonedYmd(hi) < targetYmd) hi += 24 * 60 * 60 * 1000;
+  while (hi - lo > 1) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (zonedYmd(mid) < targetYmd) lo = mid;
+    else hi = mid;
+  }
+  return new Date(hi);
 }
 
 orderRouter.get('/live', authenticate, async (req, res) => {

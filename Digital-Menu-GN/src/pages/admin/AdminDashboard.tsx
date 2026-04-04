@@ -3350,6 +3350,8 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const { token, ready } = useAuth();
+  const tokenRef = useRef(token);
+  tokenRef.current = token;
   const [profile, setProfile] = useState<{ name?: string } | null>(null);
   const [publicNetworkTraffic, setPublicNetworkTraffic] = useState<number>(0);
   const [performanceSummary, setPerformanceSummary] = useState<{
@@ -3768,7 +3770,9 @@ const AdminDashboard = () => {
     const s = io(socketBaseUrl, {
       path: '/socket.io',
       withCredentials: true,
-      auth: { token },
+      auth: cb => {
+        cb({ token: tokenRef.current || '' });
+      },
       transports: ['websocket', 'polling'],
     });
     socketRef.current = s;

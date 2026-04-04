@@ -332,6 +332,182 @@ type MenuItem = {
   highlightNewUntil?: string | null;
 };
 
+// Category dialog – module-level so it does not remount on every dashboard render (avoids stuck overlay / scroll lock).
+const CategoryMenuDialog = memo(function CategoryMenuDialog({
+  open,
+  editingCategory,
+  onOpenChange,
+  onCreated,
+  onUpdated,
+  token,
+}: {
+  open: boolean;
+  editingCategory: MenuCategory | null;
+  onOpenChange: (open: boolean) => void;
+  onCreated: (cat: MenuCategory) => void;
+  onUpdated: (cat: MenuCategory) => void;
+  token: string | null;
+}) {
+  const { toast } = useToast();
+  const [name, setName] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [imagePreview, setImagePreview] = useState('');
+  const [highlightAsNewLaunch, setHighlightAsNewLaunch] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      if (editingCategory) {
+        setName(editingCategory.name);
+        setImageUrl(editingCategory.imageUrl || '');
+        setImagePreview(editingCategory.imageUrl || '');
+        const u = editingCategory.highlightNewUntil;
+        setHighlightAsNewLaunch(!!(u && new Date(u) > new Date()));
+      } else {
+        setName('');
+        setImageUrl('');
+        setImagePreview('');
+        setHighlightAsNewLaunch(true);
+      }
+    }
+  }, [open, editingCategory]);
+
+  const handleSubmit = async () => {
+    if (!token || !name.trim()) return;
+    setSaving(true);
+    try {
+      if (editingCategory) {
+        const res = await fetch(`${apiBase}/menu/categories/${editingCategory.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name: name.trim(),
+            imageUrl: imageUrl.trim() || undefined,
+            highlightAsNewLaunch,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok)
+          throw new Error((data as { message?: string }).message || 'Failed to update category');
+        toast({ title: 'Success', description: 'Category updated' });
+        onOpenChange(false);
+        onUpdated(data);
+      } else {
+        const res = await fetch(`${apiBase}/menu/categories`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name: name.trim(),
+            imageUrl: imageUrl.trim() || undefined,
+            highlightAsNewLaunch,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok)
+          throw new Error((data as { message?: string }).message || 'Failed to create category');
+        toast({ title: 'Success', description: 'Category created' });
+        onOpenChange(false);
+        onCreated(data);
+      }
+    } catch (e) {
+      toast({
+        title: 'Error',
+        description: e instanceof Error ? e.message : 'Failed to save category',
+        variant: 'destructive',
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent aria-describedby="category-dialog-desc">
+        <DialogHeader>
+          <DialogTitle>{editingCategory ? 'Edit Category' : 'New Category'}</DialogTitle>
+          <DialogDescription id="category-dialog-desc" className="sr-only">
+            Enter category name and optional description.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          <div className="grid gap-2">
+            <Label>Category Name</Label>
+            <Input
+              placeholder="e.g., Cold Coffee, Momos"
+              value={name}
+              onChange={e => setName(e.target.value)}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label>Image URL</Label>
+            <Input
+              placeholder="https://example.com/image.jpg"
+              value={imageUrl}
+              onChange={e => {
+                setImageUrl(e.target.value);
+                setImagePreview(e.target.value);
+              }}
+            />
+          </div>
+          {(imagePreview || editingCategory?.imageUrl) && (
+            <div className="grid gap-2">
+              <Label>Image Preview</Label>
+              <div className="rounded-lg border p-2">
+                <img
+                  src={imagePreview || editingCategory?.imageUrl}
+                  alt="Category preview"
+                  className="h-32 w-full rounded-md object-cover"
+                  onError={e => {
+                    e.currentTarget.style.display = 'none';
+                    (e.currentTarget.nextElementSibling as HTMLElement)?.classList.remove('hidden');
+                  }}
+                />
+                <div className="text-muted-foreground hidden py-8 text-center text-sm">
+                  Failed to load image
+                </div>
+              </div>
+            </div>
+          )}
+          <div className="flex items-start gap-2 rounded-lg border border-violet-100 bg-violet-50/40 p-3">
+            <Checkbox
+              id="cat-highlight-new"
+              checked={highlightAsNewLaunch}
+              onCheckedChange={c => setHighlightAsNewLaunch(!!c)}
+            />
+            <Label htmlFor="cat-highlight-new" className="text-sm leading-snug font-medium">
+              Highlight category as <span className="text-violet-700">New launch</span> on customer
+              menu (7 days from save). Uncheck to clear the highlight.
+            </Label>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit} disabled={saving}>
+            {saving ? (
+              <>
+                <span className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                {editingCategory ? 'Updating...' : 'Creating...'}
+              </>
+            ) : editingCategory ? (
+              'Update'
+            ) : (
+              'Create'
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+});
+
 type Employee = {
   id: number;
   name: string;
@@ -3405,6 +3581,7 @@ const AdminDashboard = () => {
   const [isItemDialogOpen, setIsItemDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [editingCategory, setEditingCategory] = useState<MenuCategory | null>(null);
+  const [togglingMenuItemId, setTogglingMenuItemId] = useState<number | null>(null);
   const [itemForm, setItemForm] = useState({
     name: '',
     description: '',
@@ -3655,7 +3832,7 @@ const AdminDashboard = () => {
   // Menu management state
   const [menuSearchQuery, setMenuSearchQuery] = useState('');
   const [viewingCategory, setViewingCategory] = useState<number | null>(null);
-  const [menuSortBy, setMenuSortBy] = useState<string>('name');
+  const [menuSortBy, setMenuSortBy] = useState<string>('unlive-first');
   const [menuFilterBy, setMenuFilterBy] = useState<string>('all');
 
   // Salary slips state
@@ -3748,6 +3925,12 @@ const AdminDashboard = () => {
       const statusB = getCategoryStatus(b);
 
       switch (menuSortBy) {
+        case 'unlive-first': {
+          const pa = statusA.pendingItems;
+          const pb = statusB.pendingItems;
+          if (pb !== pa) return pb - pa;
+          return a.name.localeCompare(b.name);
+        }
         case 'name':
           return a.name.localeCompare(b.name);
         case 'items-asc':
@@ -3769,6 +3952,16 @@ const AdminDashboard = () => {
     if (!viewingCategory) return null;
     return categories.find(c => c.id === viewingCategory);
   }, [categories, viewingCategory]);
+
+  /** Unlive (not on customer menu) items first so admins see them without scrolling. */
+  const viewingCategoryItemsSorted = useMemo(() => {
+    const items = viewingCategoryData?.items;
+    if (!items?.length) return [];
+    return [...items].sort((a, b) => {
+      if (a.isActive === b.isActive) return 0;
+      return a.isActive ? 1 : -1;
+    });
+  }, [viewingCategoryData]);
 
   // Roster-active employees (status ACTIVE) — same as employee list "Active" filter
   const activeEmployees = useMemo(() => {
@@ -4276,184 +4469,6 @@ const AdminDashboard = () => {
     }
   };
 
-  // Category Add/Edit Dialog – local form state so typing doesn't re-render parent (no flashing)
-  const CategoryDialog = memo(function CategoryDialog({
-    open,
-    editingCategory,
-    onOpenChange,
-    onCreated,
-    onUpdated,
-    token,
-  }: {
-    open: boolean;
-    editingCategory: MenuCategory | null;
-    onOpenChange: (open: boolean) => void;
-    onCreated: (cat: MenuCategory) => void;
-    onUpdated: (cat: MenuCategory) => void;
-    token: string | null;
-  }) {
-    const { toast } = useToast();
-    const [name, setName] = useState('');
-    const [imageUrl, setImageUrl] = useState('');
-    const [imagePreview, setImagePreview] = useState('');
-    const [highlightAsNewLaunch, setHighlightAsNewLaunch] = useState(true);
-    const [saving, setSaving] = useState(false);
-
-    useEffect(() => {
-      if (open) {
-        if (editingCategory) {
-          setName(editingCategory.name);
-          setImageUrl(editingCategory.imageUrl || '');
-          setImagePreview(editingCategory.imageUrl || '');
-          const u = editingCategory.highlightNewUntil;
-          setHighlightAsNewLaunch(!!(u && new Date(u) > new Date()));
-        } else {
-          setName('');
-          setImageUrl('');
-          setImagePreview('');
-          setHighlightAsNewLaunch(true);
-        }
-      }
-    }, [open, editingCategory]);
-
-    const handleSubmit = async () => {
-      if (!token || !name.trim()) return;
-      setSaving(true);
-      try {
-        if (editingCategory) {
-          const res = await fetch(`${apiBase}/menu/categories/${editingCategory.id}`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              name: name.trim(),
-              imageUrl: imageUrl.trim() || undefined,
-              highlightAsNewLaunch,
-            }),
-          });
-          const data = await res.json();
-          if (!res.ok)
-            throw new Error((data as { message?: string }).message || 'Failed to update category');
-          toast({ title: 'Success', description: 'Category updated' });
-          onOpenChange(false);
-          onUpdated(data);
-        } else {
-          const res = await fetch(`${apiBase}/menu/categories`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              name: name.trim(),
-              imageUrl: imageUrl.trim() || undefined,
-              highlightAsNewLaunch,
-            }),
-          });
-          const data = await res.json();
-          if (!res.ok)
-            throw new Error((data as { message?: string }).message || 'Failed to create category');
-          toast({ title: 'Success', description: 'Category created' });
-          onOpenChange(false);
-          onCreated(data);
-        }
-      } catch (e) {
-        toast({
-          title: 'Error',
-          description: e instanceof Error ? e.message : 'Failed to save category',
-          variant: 'destructive',
-        });
-      } finally {
-        setSaving(false);
-      }
-    };
-
-    return (
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent aria-describedby="category-dialog-desc">
-          <DialogHeader>
-            <DialogTitle>{editingCategory ? 'Edit Category' : 'New Category'}</DialogTitle>
-            <DialogDescription id="category-dialog-desc" className="sr-only">
-              Enter category name and optional description.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label>Category Name</Label>
-              <Input
-                placeholder="e.g., Cold Coffee, Momos"
-                value={name}
-                onChange={e => setName(e.target.value)}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label>Image URL</Label>
-              <Input
-                placeholder="https://example.com/image.jpg"
-                value={imageUrl}
-                onChange={e => {
-                  setImageUrl(e.target.value);
-                  setImagePreview(e.target.value);
-                }}
-              />
-            </div>
-            {(imagePreview || editingCategory?.imageUrl) && (
-              <div className="grid gap-2">
-                <Label>Image Preview</Label>
-                <div className="rounded-lg border p-2">
-                  <img
-                    src={imagePreview || editingCategory?.imageUrl}
-                    alt="Category preview"
-                    className="h-32 w-full rounded-md object-cover"
-                    onError={e => {
-                      e.currentTarget.style.display = 'none';
-                      (e.currentTarget.nextElementSibling as HTMLElement)?.classList.remove(
-                        'hidden'
-                      );
-                    }}
-                  />
-                  <div className="text-muted-foreground hidden py-8 text-center text-sm">
-                    Failed to load image
-                  </div>
-                </div>
-              </div>
-            )}
-            <div className="flex items-start gap-2 rounded-lg border border-violet-100 bg-violet-50/40 p-3">
-              <Checkbox
-                id="cat-highlight-new"
-                checked={highlightAsNewLaunch}
-                onCheckedChange={c => setHighlightAsNewLaunch(!!c)}
-              />
-              <Label htmlFor="cat-highlight-new" className="text-sm leading-snug font-medium">
-                Highlight category as <span className="text-violet-700">New launch</span> on customer
-                menu (7 days from save). Uncheck to clear the highlight.
-              </Label>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-              Cancel
-            </Button>
-            <Button onClick={handleSubmit} disabled={saving}>
-              {saving ? (
-                <>
-                  <span className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  {editingCategory ? 'Updating...' : 'Creating...'}
-                </>
-              ) : editingCategory ? (
-                'Update'
-              ) : (
-                'Create'
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    );
-  });
-
   const handleCreateItem = async () => {
     if (!token || !itemForm.name.trim() || itemForm.basePrice <= 0) return;
     try {
@@ -4571,6 +4586,45 @@ const AdminDashboard = () => {
         description: 'Failed to delete item',
         variant: 'destructive',
       });
+    }
+  };
+
+  const handleToggleMenuItemLive = async (item: MenuItem) => {
+    if (!token) return;
+    setTogglingMenuItemId(item.id);
+    try {
+      const res = await fetch(`${apiBase}/menu/items/${item.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ isActive: !item.isActive }),
+      });
+      if (res.ok) {
+        toast({
+          title: item.isActive ? 'Unlisted' : 'Live',
+          description: item.isActive
+            ? 'Customers will no longer see this item on the menu.'
+            : 'This item is visible on the customer menu again.',
+        });
+        loadDashboardData();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast({
+          title: 'Error',
+          description: (err as { message?: string }).message || 'Could not update item',
+          variant: 'destructive',
+        });
+      }
+    } catch {
+      toast({
+        title: 'Error',
+        description: 'Could not update item',
+        variant: 'destructive',
+      });
+    } finally {
+      setTogglingMenuItemId(null);
     }
   };
 
@@ -6043,25 +6097,26 @@ const AdminDashboard = () => {
           <Card>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
-                <Table className="min-w-[320px]">
+                <Table className="min-w-[420px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead className="whitespace-nowrap">Item Name</TableHead>
                       <TableHead className="whitespace-nowrap">Full Price</TableHead>
                       <TableHead className="whitespace-nowrap">Half Price</TableHead>
                       <TableHead className="whitespace-nowrap">Status</TableHead>
+                      <TableHead className="whitespace-nowrap text-center">On menu</TableHead>
                       <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {viewingCategoryData?.items?.length === 0 && (
+                    {viewingCategoryItemsSorted.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-muted-foreground py-8 text-center">
+                        <TableCell colSpan={6} className="text-muted-foreground py-8 text-center">
                           No items in this category
                         </TableCell>
                       </TableRow>
                     )}
-                    {viewingCategoryData?.items?.map((item: any) => (
+                    {viewingCategoryItemsSorted.map(item => (
                       <TableRow key={item.id}>
                         <TableCell className="font-medium">{item.name}</TableCell>
                         <TableCell>{formatINR(item.basePrice)}</TableCell>
@@ -6075,8 +6130,18 @@ const AdminDashboard = () => {
                             }
                             variant={item.isActive ? 'outline' : 'secondary'}
                           >
-                            {item.isActive ? 'Live' : 'Hidden'}
+                            {item.isActive ? 'Live' : 'Unlive'}
                           </Badge>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Switch
+                            checked={item.isActive}
+                            disabled={togglingMenuItemId === item.id}
+                            onCheckedChange={() => handleToggleMenuItemLive(item)}
+                            aria-label={
+                              item.isActive ? 'Unlist from customer menu' : 'Show on customer menu'
+                            }
+                          />
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
@@ -6142,25 +6207,6 @@ const AdminDashboard = () => {
               <Plus className="mr-1 h-4 w-4" />
               Add Category
             </Button>
-            <CategoryDialog
-              open={isCategoryDialogOpen}
-              editingCategory={editingCategory}
-              onOpenChange={open => {
-                if (!open) setEditingCategory(null);
-                setIsCategoryDialogOpen(open);
-              }}
-              onCreated={cat => {
-                setCategories(prev => [...prev, cat]);
-                setIsCategoryDialogOpen(false);
-                setEditingCategory(null);
-              }}
-              onUpdated={cat => {
-                setCategories(prev => prev.map(c => (c.id === cat.id ? { ...c, ...cat } : c)));
-                setIsCategoryDialogOpen(false);
-                setEditingCategory(null);
-              }}
-              token={token}
-            />
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row">
@@ -10030,6 +10076,26 @@ const AdminDashboard = () => {
         </DialogContent>
       </Dialog>
 
+      <CategoryMenuDialog
+        open={isCategoryDialogOpen}
+        editingCategory={editingCategory}
+        onOpenChange={open => {
+          if (!open) setEditingCategory(null);
+          setIsCategoryDialogOpen(open);
+        }}
+        onCreated={cat => {
+          setCategories(prev => [...prev, cat]);
+          setIsCategoryDialogOpen(false);
+          setEditingCategory(null);
+        }}
+        onUpdated={cat => {
+          setCategories(prev => prev.map(c => (c.id === cat.id ? { ...c, ...cat } : c)));
+          setIsCategoryDialogOpen(false);
+          setEditingCategory(null);
+        }}
+        token={token}
+      />
+
       {/* Add/Edit Menu Item Dialog */}
       <Dialog
         open={isItemDialogOpen}
@@ -10039,7 +10105,7 @@ const AdminDashboard = () => {
         }}
       >
         <DialogContent
-          className="max-h-[90vh] w-[calc(100vw-1rem)] max-w-md overflow-y-auto p-4 sm:w-[calc(100vw-2rem)] sm:p-6"
+          className="max-h-[90vh] w-[calc(100vw-1rem)] max-w-md overflow-x-hidden overflow-y-auto p-4 sm:w-[calc(100vw-2rem)] sm:p-6"
           aria-describedby="menu-item-dialog-desc"
         >
           <DialogHeader>
@@ -10119,7 +10185,7 @@ const AdminDashboard = () => {
                 checked={itemForm.isActive}
                 onCheckedChange={c => setItemForm(f => ({ ...f, isActive: !!c }))}
               />
-              <Label htmlFor="isActive">Active (visible on menu)</Label>
+              <Label htmlFor="isActive">Live on customer menu (uncheck to unlist)</Label>
             </div>
             <div className="flex items-start gap-2 rounded-lg border border-violet-100 bg-violet-50/40 p-3">
               <Checkbox

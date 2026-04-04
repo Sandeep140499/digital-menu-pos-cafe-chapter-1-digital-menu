@@ -162,7 +162,8 @@ async function main() {
     {
       slug: 'fried-rice',
       name: 'Rice',
-      imageUrl: 'https://i.ibb.co/6Pjw8H4/rice.jpg',
+      imageUrl:
+        'https://thai-foodie.com/wp-content/uploads/2025/04/thai-curry-fried-rice-plated.jpg',
     },
     {
       slug: 'burger',

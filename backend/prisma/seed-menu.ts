@@ -197,7 +197,8 @@ const menuData = [
   {
     name: "Rice",
     slug: "fried-rice",
-    imageUrl: "https://i.ibb.co/6Pjw8H4/rice.jpg",
+    imageUrl:
+      "https://thai-foodie.com/wp-content/uploads/2025/04/thai-curry-fried-rice-plated.jpg",
     items: [
       { name: "Chicken Fried Rice", basePrice: 169, halfPrice: 109, hasHalf: true },
       { name: "Paneer Fried Rice", basePrice: 159, halfPrice: 109, hasHalf: true },

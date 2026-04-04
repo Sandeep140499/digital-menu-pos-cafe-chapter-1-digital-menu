@@ -18,7 +18,7 @@ const categoryImages = {
   'Spring Roll': 'https://i.ibb.co/3T6vj0D/spring-roll.jpg',
   Manchurian: 'https://i.ibb.co/K0Xq4B2/manchurian.jpg',
   Noodles: 'https://i.ibb.co/LQk1bMj/noodles.jpg',
-  Rice: 'https://i.ibb.co/6Pjw8H4/rice.jpg',
+  Rice: 'https://thai-foodie.com/wp-content/uploads/2025/04/thai-curry-fried-rice-plated.jpg',
   'Dal / Paneer': 'https://i.ibb.co/3T6vj0D/dal-paneer.jpg',
   'Roti / Naan': 'https://i.ibb.co/K0Xq4B2/roti-naan.jpg',
   Specials: 'https://i.ibb.co/LQk1bMj/specials.jpg',

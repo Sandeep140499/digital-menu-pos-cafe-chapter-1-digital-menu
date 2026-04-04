@@ -13,6 +13,21 @@ const menuData = [
     ],
   },
   {
+    name: "Fresh Smoothies",
+    slug: "fresh-smoothies",
+    imageUrl:
+      "https://images.unsplash.com/photo-1553530666-d3408ec28ec0?auto=format&fit=crop&w=1200&q=80",
+    items: [
+      {
+        name: "Strawberries",
+        basePrice: 179,
+        hasHalf: false,
+        description:
+          "Fresh strawberry smoothie — pure, vibrant flavour. Naturally refreshing, with a light, wholesome energy boost. A fruity, uplifting choice when you want something delicious and better-for-you.",
+      },
+    ],
+  },
+  {
     name: "Milkshake",
     imageUrl: "https://png.pngtree.com/png-vector/20240819/ourmid/pngtree-chocolate-banana-milkshake-png-image_13347216.png",
     items: [
@@ -249,12 +264,18 @@ async function seedMenu() {
     });
 
     if (!category) {
-      // Create category
-      category = await prisma.menuCategory.create({
-        data: {
-          name: categoryData.name,
-        },
-      });
+      const catPayload: {
+        name: string;
+        imageUrl?: string;
+        slug?: string;
+      } = { name: categoryData.name };
+      if ("imageUrl" in categoryData && categoryData.imageUrl) {
+        catPayload.imageUrl = categoryData.imageUrl;
+      }
+      if ("slug" in categoryData && typeof (categoryData as { slug?: string }).slug === "string") {
+        catPayload.slug = (categoryData as { slug: string }).slug;
+      }
+      category = await prisma.menuCategory.create({ data: catPayload });
       console.log(`Created category: ${category.name}`);
     } else {
       console.log(`Category already exists: ${category.name}`);
@@ -266,12 +287,18 @@ async function seedMenu() {
         where: { name: itemData.name, categoryId: category.id },
       });
 
+      const desc =
+        "description" in itemData && typeof (itemData as { description?: string }).description === "string"
+          ? (itemData as { description: string }).description
+          : undefined;
+
       if (!existingItem) {
         await prisma.menuItem.create({
           data: {
             name: itemData.name,
+            description: desc ?? null,
             basePrice: itemData.basePrice,
-            halfPrice: 'halfPrice' in itemData ? itemData.halfPrice : null,
+            halfPrice: "halfPrice" in itemData ? itemData.halfPrice : null,
             hasHalf: itemData.hasHalf,
             categoryId: category.id,
             isActive: true,
@@ -279,7 +306,15 @@ async function seedMenu() {
         });
         console.log(`  - Created item: ${itemData.name}`);
       } else {
-        console.log(`  - Item already exists: ${itemData.name}`);
+        if (desc && (!existingItem.description || existingItem.description !== desc)) {
+          await prisma.menuItem.update({
+            where: { id: existingItem.id },
+            data: { description: desc },
+          });
+          console.log(`  - Updated description: ${itemData.name}`);
+        } else {
+          console.log(`  - Item already exists: ${itemData.name}`);
+        }
       }
     }
   }

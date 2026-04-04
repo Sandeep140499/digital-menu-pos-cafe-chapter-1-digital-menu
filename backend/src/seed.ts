@@ -84,6 +84,12 @@ async function main() {
       imageUrl: 'https://buytea.com/cdn/shop/articles/Summer-Explore-Iced-Tea.jpg?v=1682577131',
     },
     {
+      slug: 'fresh-smoothies',
+      name: 'Fresh Smoothies',
+      imageUrl:
+        'https://images.unsplash.com/photo-1553530666-d3408ec28ec0?auto=format&fit=crop&w=1200&q=80',
+    },
+    {
       slug: 'hot-coffee',
       name: 'Hot Coffee',
       imageUrl:
@@ -192,6 +198,7 @@ async function main() {
   }
 
   const coldCoffee = await prisma.menuCategory.findUnique({ where: { slug: 'cold-coffee' } });
+  const freshSmoothies = await prisma.menuCategory.findUnique({ where: { slug: 'fresh-smoothies' } });
   const milkshake = await prisma.menuCategory.findUnique({ where: { slug: 'milkshake' } });
   const chai = await prisma.menuCategory.findUnique({ where: { slug: 'chai' } });
   const pizza = await prisma.menuCategory.findUnique({ where: { slug: 'pizza' } });
@@ -233,6 +240,14 @@ async function main() {
       description: 'Espresso with cold milk',
       basePrice: 150,
       categoryId: coldCoffee?.id ?? null,
+    },
+    {
+      name: 'Strawberries',
+      description:
+        'Fresh strawberry smoothie — pure, vibrant flavour. Naturally refreshing, with a light, wholesome energy boost. A fruity, uplifting choice when you want something delicious and better-for-you.',
+      basePrice: 179,
+      hasHalf: false,
+      categoryId: freshSmoothies?.id ?? null,
     },
     {
       name: 'Oreo Shake',

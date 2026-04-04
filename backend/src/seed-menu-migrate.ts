@@ -96,6 +96,12 @@ const categories: { slug: string; name: string; imageUrl: string }[] = [
       'https://static.vecteezy.com/system/resources/thumbnails/074/380/819/small/refreshing-slushies-on-ice-a-colorful-and-delicious-treat-photo.jpg',
   },
   {
+    slug: 'fresh-smoothies',
+    name: 'Fresh Smoothies',
+    imageUrl:
+      'https://images.unsplash.com/photo-1553530666-d3408ec28ec0?auto=format&fit=crop&w=1200&q=80',
+  },
+  {
     slug: 'garlic-bread',
     name: 'Garlic Bread',
     imageUrl:

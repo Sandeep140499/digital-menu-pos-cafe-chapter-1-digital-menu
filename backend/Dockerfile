@@ -21,6 +21,6 @@ COPY --from=builder /app/dist ./dist/
 # Do not override PORT here. Railway may inject it at runtime via env vars.
 # Keep EXPOSE so Railway/routers can infer the container port if needed.
 EXPOSE 4000
-# Debug-friendly startup for Railway: print dist contents and PORT, then run server.
-# (Once stable, we can re-add `prisma migrate deploy` without blocking healthchecks.)
-CMD ["sh", "-c", "echo \"[startup] PORT=${PORT}\" && echo \"[startup] dist contents:\" && ls -la dist && node dist/index.js"]
+# Apply pending migrations before serving (required for prod menu/data SQL migrations).
+# Fails fast if DATABASE_URL is wrong or migrate errors — check deploy logs.
+CMD ["sh", "-c", "npx prisma migrate deploy && exec node dist/index.js"]

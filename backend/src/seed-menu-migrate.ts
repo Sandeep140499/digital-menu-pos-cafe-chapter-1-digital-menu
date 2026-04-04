@@ -113,6 +113,11 @@ const categories: { slug: string; name: string; imageUrl: string }[] = [
     imageUrl: 'https://images.unsplash.com/photo-1585032226651-759b368d7246',
   },
   {
+    slug: 'fried-rice',
+    name: 'Rice',
+    imageUrl: 'https://i.ibb.co/6Pjw8H4/rice.jpg',
+  },
+  {
     slug: 'burger',
     name: 'Burger',
     imageUrl: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',

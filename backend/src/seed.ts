@@ -160,6 +160,11 @@ async function main() {
       imageUrl: 'https://images.unsplash.com/photo-1585032226651-759b368d7246',
     },
     {
+      slug: 'fried-rice',
+      name: 'Rice',
+      imageUrl: 'https://i.ibb.co/6Pjw8H4/rice.jpg',
+    },
+    {
       slug: 'burger',
       name: 'Burger',
       imageUrl: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',
@@ -244,7 +249,7 @@ async function main() {
     {
       name: 'Strawberries',
       description:
-        'Fresh strawberry smoothie — pure, vibrant flavour. Naturally refreshing, with a light, wholesome energy boost. A fruity, uplifting choice when you want something delicious and better-for-you.',
+        'Fresh strawberry smoothie — pure fruit flavour, naturally refreshing. Light, uplifting, and a delicious better-for-you choice.',
       basePrice: 179,
       hasHalf: false,
       categoryId: freshSmoothies?.id ?? null,

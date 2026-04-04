@@ -124,6 +124,7 @@ import {
 import { formatHours } from '@/utils/timeFormatter';
 import { calculateLate } from '@/utils/lateCalculator';
 import { getBusinessDateString } from '@/utils/businessDate';
+import { filterOrderItemsForDisplay } from '@/utils/orderDisplay';
 import cafeLogo from '@/assets/logo.png';
 
 const apiBase = API_BASE_URL;
@@ -4145,7 +4146,7 @@ const AdminDashboard = () => {
         if (ordersData) {
           ordersData.forEach((order: Order) => {
             if (order.paymentStatus !== 'PAID') return;
-            order.items.forEach((item: OrderItem) => {
+            filterOrderItemsForDisplay(order.items).forEach((item: OrderItem) => {
               const key = `${item.name}\0${item.variant ?? ''}`;
               const displayName = formatItemDisplayName(item.name, item.variant);
               const existing = itemMap.get(key);
@@ -9815,7 +9816,9 @@ const AdminDashboard = () => {
                 displayOrder.tableNumber ??
                 displayOrder.tableId ??
                 '—';
-              const items = Array.isArray(displayOrder.items) ? displayOrder.items : [];
+              const items = filterOrderItemsForDisplay(
+                Array.isArray(displayOrder.items) ? displayOrder.items : []
+              );
               return (
                 <div className="min-w-0 space-y-4 py-2 sm:py-4">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

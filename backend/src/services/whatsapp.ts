@@ -3,6 +3,8 @@
  * Builds invoice, status, and payment messages. Use waMeLink to open WhatsApp with pre-filled text.
  */
 
+import { filterOrderItemsForReceipt } from '../utils/orderItemsFilter.js';
+
 const RESTAURANT_NAME = process.env.RESTAURANT_NAME || 'CAFE CHAPTER 1 RESTRO';
 const RESTAURANT_PHONE = process.env.RESTAURANT_PHONE || '';
 const DEFAULT_REVIEW_URL = process.env.GOOGLE_REVIEW_URL || '';
@@ -143,7 +145,7 @@ export function buildPaymentMessage(params: {
   const orderIdStr = `ORD${String(orderId).padStart(4, '0')}`;
   const menuUrl = MENU_BASE_URL;
 
-  const visibleItems = (items || []).filter(i => !i.isRemoved);
+  const visibleItems = filterOrderItemsForReceipt(items || []);
   const itemLines =
     visibleItems.length > 0
       ? visibleItems

@@ -14,6 +14,7 @@ import {
   computeProactiveRefreshIntervalMs,
   isAccessTokenUsable,
   readBrowserCookie,
+  readRoleFromAccessToken,
   readStoredAccessToken,
   VISIBILITY_REFRESH_DEBOUNCE_MS,
   VISIBILITY_REFRESH_MIN_REMAINING_MS,
@@ -87,10 +88,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
   const [role, setRole] = useState<AuthRole | null>(() => {
     if (typeof window === 'undefined') return null;
-    return (
-      (window.localStorage.getItem(AUTH_ROLE_KEY) as AuthRole | null) ??
-      ((window.sessionStorage.getItem(AUTH_ROLE_KEY) as AuthRole | null) ?? null)
-    );
+    const fromLocal = window.localStorage.getItem(AUTH_ROLE_KEY) as AuthRole | null;
+    const fromSession = window.sessionStorage.getItem(AUTH_ROLE_KEY) as AuthRole | null;
+    const fromStorage = fromLocal ?? fromSession;
+    if (fromStorage === 'ADMIN' || fromStorage === 'EMPLOYEE') return fromStorage;
+    const tok =
+      window.localStorage.getItem(AUTH_TOKEN_KEY) || window.sessionStorage.getItem(AUTH_TOKEN_KEY);
+    return readRoleFromAccessToken(tok);
   });
   const [ready, setReady] = useState(false);
   const refreshing = useRef<Promise<string | null> | null>(null);
@@ -104,9 +108,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sessionGeneration.current += 1;
         window.localStorage.setItem(AUTH_TOKEN_KEY, t);
         window.sessionStorage.setItem(AUTH_TOKEN_KEY, t);
-        if (r) {
-          window.localStorage.setItem(AUTH_ROLE_KEY, r);
-          window.sessionStorage.setItem(AUTH_ROLE_KEY, r);
+        const roleToStore = r ?? readRoleFromAccessToken(t);
+        if (roleToStore) {
+          window.localStorage.setItem(AUTH_ROLE_KEY, roleToStore);
+          window.sessionStorage.setItem(AUTH_ROLE_KEY, roleToStore);
         }
       } else {
         window.localStorage.removeItem(AUTH_TOKEN_KEY);
@@ -116,7 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
     setToken(t);
-    setRole(r);
+    setRole(r ?? (t ? readRoleFromAccessToken(t) : null));
     if (t) setReady(true);
   }, []);
 
@@ -140,7 +145,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return null;
       }
 
-      const res = await authFetch('/auth/refresh', { method: 'POST' });
+      const res = await authFetch('/auth/refresh', {
+        method: 'POST',
+        signal: AbortSignal.timeout(20_000),
+      });
       if (!res.ok) {
         if (res.status === 401 || res.status === 403) {
           invalidateSessionIfRefreshCannotRecover(genAtStart);
@@ -174,6 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return authFetch('/auth/login', {
           method: 'POST',
           body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(45_000),
         });
       };
 

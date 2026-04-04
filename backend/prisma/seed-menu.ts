@@ -23,7 +23,7 @@ const menuData = [
         basePrice: 179,
         hasHalf: false,
         description:
-          "Fresh strawberry smoothie — pure, vibrant flavour. Naturally refreshing, with a light, wholesome energy boost. A fruity, uplifting choice when you want something delicious and better-for-you.",
+          "Fresh strawberry smoothie — pure fruit flavour, naturally refreshing. Light, uplifting, and a delicious better-for-you choice.",
       },
     ],
   },
@@ -195,6 +195,17 @@ const menuData = [
     ],
   },
   {
+    name: "Rice",
+    slug: "fried-rice",
+    imageUrl: "https://i.ibb.co/6Pjw8H4/rice.jpg",
+    items: [
+      { name: "Chicken Fried Rice", basePrice: 169, halfPrice: 109, hasHalf: true },
+      { name: "Paneer Fried Rice", basePrice: 159, halfPrice: 109, hasHalf: true },
+      { name: "Egg Fried Rice", basePrice: 159, halfPrice: 99, hasHalf: true },
+      { name: "Veg Fried Rice", basePrice: 149, halfPrice: 89, hasHalf: true },
+    ],
+  },
+  {
     name: "Burger",
     imageUrl: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd",
     items: [
@@ -258,10 +269,19 @@ async function seedMenu() {
   console.log(`Using branch: ${branch.name} (ID: ${branch.id})`);
 
   for (const categoryData of menuData) {
-    // Check if category already exists
-    let category = await prisma.menuCategory.findFirst({
-      where: { name: categoryData.name },
-    });
+    const slug =
+      "slug" in categoryData && typeof (categoryData as { slug?: string }).slug === "string"
+        ? (categoryData as { slug: string }).slug
+        : null;
+
+    let category = slug
+      ? await prisma.menuCategory.findUnique({ where: { slug } })
+      : null;
+    if (!category) {
+      category = await prisma.menuCategory.findFirst({
+        where: { name: categoryData.name },
+      });
+    }
 
     if (!category) {
       const catPayload: {
@@ -272,13 +292,25 @@ async function seedMenu() {
       if ("imageUrl" in categoryData && categoryData.imageUrl) {
         catPayload.imageUrl = categoryData.imageUrl;
       }
-      if ("slug" in categoryData && typeof (categoryData as { slug?: string }).slug === "string") {
-        catPayload.slug = (categoryData as { slug: string }).slug;
+      if (slug) {
+        catPayload.slug = slug;
       }
       category = await prisma.menuCategory.create({ data: catPayload });
       console.log(`Created category: ${category.name}`);
     } else {
       console.log(`Category already exists: ${category.name}`);
+      if (slug && category.slug !== slug) {
+        await prisma.menuCategory.update({
+          where: { id: category.id },
+          data: {
+            slug,
+            ...("imageUrl" in categoryData && categoryData.imageUrl
+              ? { imageUrl: categoryData.imageUrl }
+              : {}),
+          },
+        });
+        console.log(`  - Updated slug -> ${slug}`);
+      }
     }
 
     // Create items for this category
@@ -306,12 +338,27 @@ async function seedMenu() {
         });
         console.log(`  - Created item: ${itemData.name}`);
       } else {
-        if (desc && (!existingItem.description || existingItem.description !== desc)) {
+        const nextHalfPrice =
+          itemData.hasHalf && "halfPrice" in itemData ? itemData.halfPrice ?? null : null;
+        const descChanged = desc != null && existingItem.description !== desc;
+        const priceChanged = existingItem.basePrice !== itemData.basePrice;
+        const halfToggle = existingItem.hasHalf !== itemData.hasHalf;
+        const halfPriceChanged = (existingItem.halfPrice ?? null) !== (nextHalfPrice ?? null);
+        if (descChanged || priceChanged || halfToggle || halfPriceChanged) {
           await prisma.menuItem.update({
             where: { id: existingItem.id },
-            data: { description: desc },
+            data: {
+              ...(descChanged ? { description: desc } : {}),
+              ...(priceChanged ? { basePrice: itemData.basePrice } : {}),
+              ...(halfToggle || halfPriceChanged
+                ? {
+                    hasHalf: itemData.hasHalf,
+                    halfPrice: nextHalfPrice,
+                  }
+                : {}),
+            },
           });
-          console.log(`  - Updated description: ${itemData.name}`);
+          console.log(`  - Updated item: ${itemData.name}`);
         } else {
           console.log(`  - Item already exists: ${itemData.name}`);
         }

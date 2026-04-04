@@ -13,6 +13,7 @@ import {
   determineOrderPriority,
 } from '../../services/orderNotifications.js';
 import { logger } from '../../utils/logger.js';
+import { filterOrderItemsForReceipt } from '../../utils/orderItemsFilter.js';
 
 const mobileRegex = /^[6-9]\d{9}$/;
 
@@ -168,7 +169,6 @@ orderRouter.post('/', async (req, res) => {
     branchId,
     items,
     sessionToken,
-    packaging,
     customerName: rawName,
     customerMobile: rawMobile,
   } = parsed.data;
@@ -227,14 +227,8 @@ orderRouter.post('/', async (req, res) => {
     };
   });
 
-  if (packaging) {
-    orderItemsData.push({
-      name: 'Packaging',
-      quantity: 1,
-      price: 0,
-      variant: undefined,
-    });
-  }
+  // Take away is already shown via orderType TAKE_AWAY — do not add a separate "Packaging" line
+  // (it cluttered order cards, emails, and receipts at ₹0).
 
   // Require at least one ACTIVE employee for the branch so orders can be handled; stay unassigned
   // until an employee taps Accept (pre-assigning employeeId broke POST /orders/:id/accept with 409).
@@ -348,11 +342,13 @@ orderRouter.post('/', async (req, res) => {
   if (isMailConfigured()) {
     setImmediate(async () => {
       try {
-        const items = await prisma.orderItem.findMany({
-          where: { orderId: order.id, isRemoved: false },
-          select: { name: true, quantity: true, price: true, variant: true },
-          orderBy: { id: 'asc' },
-        });
+        const items = filterOrderItemsForReceipt(
+          await prisma.orderItem.findMany({
+            where: { orderId: order.id, isRemoved: false },
+            select: { name: true, quantity: true, price: true, variant: true, isRemoved: true },
+            orderBy: { id: 'asc' },
+          })
+        );
         const branch = await prisma.branch.findUnique({
           where: { id: order.branchId },
           select: { directorsEmail: true },
@@ -502,7 +498,7 @@ orderRouter.get('/:id/whatsapp-invoice', async (req, res) => {
   const invoiceMessage = buildOrderInvoice({
     orderId: order.id,
     customerName: order.customerName,
-    items: order.items.map(i => ({
+    items: filterOrderItemsForReceipt(order.items).map(i => ({
       name: i.name,
       quantity: i.quantity,
       price: i.price,

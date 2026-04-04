@@ -49,6 +49,20 @@ export function readAccessTokenExpiryMs(token: string | null): number | null {
   }
 }
 
+/** When role was never stored (or storage was cleared), recover from JWT so /employee vs /admin routing works. */
+export function readRoleFromAccessToken(token: string | null): 'ADMIN' | 'EMPLOYEE' | null {
+  if (!token) return null;
+  const parts = token.split('.');
+  if (parts.length !== JWT_PARTS || !parts[1]) return null;
+  try {
+    const body = base64UrlToJson(parts[1]) as { role?: unknown };
+    const r = body.role;
+    return r === 'ADMIN' || r === 'EMPLOYEE' ? r : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Whether the access token is still OK to use for API calls.
  * @param minRemainingMs — require at least this much lifetime after skew (e.g. 60s before forcing a refresh on focus).

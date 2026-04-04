@@ -6,6 +6,7 @@ builder = "nixpacks"
 buildCommand = "npm ci && npx prisma generate && npm run build"
 
 [deploy]
+# prestart runs prisma migrate deploy, then start — keeps DB schema + data migrations in sync with prod
 startCommand = "npm start"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 30

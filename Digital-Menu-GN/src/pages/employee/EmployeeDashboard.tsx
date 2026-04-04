@@ -77,6 +77,7 @@ import {
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatHours } from '@/utils/timeFormatter';
+import { filterOrderItemsForDisplay } from '@/utils/orderDisplay';
 import {
   API_BASE_URL,
   fetchWithTimeout,
@@ -537,7 +538,7 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
   const displayQtyFor = (item: OrderItem) => pendingQtyByOrderItemId[item.id] ?? item.quantity;
 
   const calculateNewTotal = () => {
-    const baseItemsTotal = displayOrder.items
+    const baseItemsTotal = filterOrderItemsForDisplay(displayOrder.items)
       .filter(i => !i.isRemoved)
       .filter(i => !removedItemIds.includes(i.id))
       .reduce((sum, i) => sum + i.price * displayQtyFor(i), 0);
@@ -742,7 +743,7 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
           <div>
             <h4 className="mb-3 font-medium">Order Items</h4>
             <div className="space-y-2">
-              {displayOrder.items
+              {filterOrderItemsForDisplay(displayOrder.items)
                 .filter(i => !i.isRemoved)
                 .map(item => (
                   <div
@@ -1956,8 +1957,8 @@ const EmployeeDashboard = () => {
     // (no 10s polling). Shell stays interactive — only order tables show a loading state.
     setOrdersSnapshotLoading(true);
     (async () => {
-      if (isOrderPopupOpenRef.current) return;
       try {
+        if (isOrderPopupOpenRef.current) return;
         let currentToken = token;
         const doFetch = async (t: string) =>
           fetchWithTimeout(`${apiBase}/orders/live`, {
@@ -3080,7 +3081,7 @@ const EmployeeDashboard = () => {
                     </p>
                   )}
                   <div className="mt-2 hidden space-y-1 sm:block">
-                    {order.items
+                    {filterOrderItemsForDisplay(order.items)
                       .filter(i => !i.isRemoved)
                       .map(item => (
                         <p key={item.id} className="text-sm">
@@ -3515,7 +3516,9 @@ const EmployeeDashboard = () => {
         'Time to Complete',
       ];
       const rows = filtered.map(o => {
-        const itemsStr = o.items.map(i => `${i.name} ×${i.quantity}`).join('; ');
+        const itemsStr = filterOrderItemsForDisplay(o.items)
+          .map(i => `${i.name} ×${i.quantity}`)
+          .join('; ');
         const timeToComplete =
           o.acceptedAt && o.completedAt ? formatTimeToComplete(o.acceptedAt, o.completedAt) : '';
         return [
@@ -3547,8 +3550,9 @@ const EmployeeDashboard = () => {
     };
 
     const itemsSummary = (order: Order) => {
-      const parts = order.items.slice(0, 2).map(i => `${i.name} ×${i.quantity}`);
-      if (order.items.length > 2) parts.push(`+${order.items.length - 2} more`);
+      const vis = filterOrderItemsForDisplay(order.items);
+      const parts = vis.slice(0, 2).map(i => `${i.name} ×${i.quantity}`);
+      if (vis.length > 2) parts.push(`+${vis.length - 2} more`);
       return parts.join(', ');
     };
 
@@ -4299,7 +4303,11 @@ const EmployeeDashboard = () => {
                         Table {order.table?.tableNumber ?? order.table?.id ?? '—'}
                       </p>
                       <p className="text-muted-foreground text-sm">
-                        {order.items.length} {order.items.length === 1 ? 'item' : 'items'} ·{' '}
+                        {(() => {
+                          const n = filterOrderItemsForDisplay(order.items).length;
+                          return `${n} ${n === 1 ? 'item' : 'items'}`;
+                        })()}
+                        {' · '}
                         {timeAgo(order.createdAt)}
                         {order.acceptedAt && order.completedAt && (
                           <span className="mt-0.5 block text-xs text-slate-600">
@@ -5013,7 +5021,7 @@ const EmployeeDashboard = () => {
             Order #{order.id} · {formatPopupTime(order.createdAt)}
           </p>
           <ul className="mt-2 space-y-0.5 font-medium text-slate-800">
-            {order.items
+            {filterOrderItemsForDisplay(order.items)
               .filter(i => !i.isRemoved)
               .map(item => (
                 <li key={item.id}>
@@ -5085,7 +5093,7 @@ const EmployeeDashboard = () => {
                     Order #{order.id} · {formatPopupTime(order.createdAt)}
                   </p>
                   <ul className="mt-2 space-y-0.5 font-medium text-slate-800">
-                    {order.items
+                    {filterOrderItemsForDisplay(order.items)
                       .filter(i => !i.isRemoved)
                       .map(item => (
                         <li key={item.id}>

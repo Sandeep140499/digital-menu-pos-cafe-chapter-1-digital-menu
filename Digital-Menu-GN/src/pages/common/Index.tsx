@@ -33,6 +33,7 @@ import QRCodeGenerator from '@/components/QRCodeGenerator';
 import LocationMap from '@/components/LocationMap';
 import { useToast } from '@/hooks/use-toast';
 import { API_BASE_URL, API_TIMEOUT_MS, fetchWithTimeout, readApiErrorMessage } from '@/constants';
+import { dedupeCustomerMenuCategories } from '@/utils/menuDedupe';
 import { useOrderStatusStream } from '@/hooks/useOrderStatusStream';
 import cafeLogo from '@/assets/logo.png';
 
@@ -390,7 +391,8 @@ const MenuCategoriesSection = memo(function MenuCategoriesSection({
   lastToggledKeyRef: React.MutableRefObject<string | null>;
 }) {
   const displayCategories = useMemo(() => {
-    return menuCategories.map((cat: any) => ({
+    const uniqueCats = dedupeCustomerMenuCategories(menuCategories);
+    return uniqueCats.map((cat: any) => ({
       key: String(cat.id),
       title: cat.name || 'Category',
       image: cat.imageUrl && cat.imageUrl.trim() ? cat.imageUrl : DEFAULT_CATEGORY_IMAGE,
@@ -419,12 +421,17 @@ const MenuCategoriesSection = memo(function MenuCategoriesSection({
     );
     const hasBestSeller = (s: (typeof filtered)[0]) =>
       s.items.some((item: any) => bestSellerItemIds.includes(item.menuItemId));
+    // New launch first (including cards that are both new launch + best seller — one card, both badges).
     const tier = (s: (typeof filtered)[0]) => {
       if (s.isNewLaunch) return 0;
       if (hasBestSeller(s)) return 1;
       return 2;
     };
-    return [...filtered].sort((a, b) => tier(a) - tier(b));
+    return [...filtered].sort((a, b) => {
+      const d = tier(a) - tier(b);
+      if (d !== 0) return d;
+      return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
+    });
   }, [displayCategories, categoryQuery, bestSellerItemIds]);
 
   const openKeySet = useMemo(() => new Set(openCategoryKeys), [openCategoryKeys]);
@@ -602,7 +609,7 @@ function MenuCategoryCard({
       aria-pressed={isSelected}
     >
       {(isNewLaunch || isBestSeller) && (
-        <div className="absolute top-2 left-2 z-10 flex max-w-[calc(100%-1rem)] flex-col gap-1">
+        <div className="absolute top-2 left-2 z-10 flex max-w-[calc(100%-1rem)] flex-row flex-wrap items-center gap-1">
           {isNewLaunch && (
             <div className="w-fit rounded-full bg-violet-500 px-2.5 py-0.5 text-[10px] font-bold text-white shadow sm:text-[11px]">
               New launch
@@ -610,7 +617,7 @@ function MenuCategoryCard({
           )}
           {isBestSeller && (
             <div className="w-fit rounded-full bg-amber-400 px-2.5 py-0.5 text-[10px] font-bold text-amber-950 shadow sm:text-[11px]">
-              ★ Best Seller
+              ★ Best seller
             </div>
           )}
         </div>

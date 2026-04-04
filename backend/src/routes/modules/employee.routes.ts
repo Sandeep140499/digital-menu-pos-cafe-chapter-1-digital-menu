@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { prisma } from '../../config/prisma.js';
+import { findEmployeeByEmailLoose, normalizeStaffEmail } from '../../utils/staffEmail.js';
 import { getFromAddress, isMailConfigured, sendEmail } from '../../config/mailer.js';
 import { authenticate, requireRole } from '../../middleware/auth.js';
 import path from 'node:path';
@@ -271,7 +272,7 @@ employeeRouter.post('/', authenticate, requireRole('ADMIN'), async (req, res) =>
 
   const {
     name,
-    email,
+    email: emailRaw,
     branchId,
     role,
     workingHoursPerDay,
@@ -280,7 +281,9 @@ employeeRouter.post('/', authenticate, requireRole('ADMIN'), async (req, res) =>
     joiningDate,
   } = parsed.data;
 
-  const existing = await prisma.employee.findUnique({ where: { email } });
+  const email = normalizeStaffEmail(emailRaw);
+
+  const existing = await findEmployeeByEmailLoose(email);
   if (existing) {
     return res.status(409).json({ message: 'Employee already exists' });
   }
@@ -888,7 +891,7 @@ employeeRouter.post('/verify-email', async (req, res) => {
   }
 
   const { email, otp } = parsed.data;
-  const employee = await prisma.employee.findUnique({ where: { email } });
+  const employee = await findEmployeeByEmailLoose(email);
 
   if (
     !employee ||

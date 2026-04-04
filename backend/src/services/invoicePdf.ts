@@ -3,6 +3,7 @@
  * Used for order confirmation and WhatsApp attachment.
  */
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { filterOrderItemsForReceipt } from '../utils/orderItemsFilter.js';
 
 const RESTAURANT_NAME = process.env.RESTAURANT_NAME || 'CAFE CHAPTER 1 RESTRO';
 const RESTAURANT_GSTIN = process.env.RESTAURANT_GSTIN || '';
@@ -183,7 +184,7 @@ export async function generateOrderInvoicePdf(order: OrderForPdf): Promise<Uint8
   page.drawText('Total', { x: colTotal, y, size: 9, font: fontBold });
   y -= lineHeight;
 
-  const items = order.items.filter(i => !i.isRemoved);
+  const items = filterOrderItemsForReceipt(order.items);
 
   const stripVariantMarkers = (name: string): string =>
     (name || '')

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../../config/prisma.js';
 import { authenticate, requireRole } from '../../middleware/auth.js';
 import { incrementPublicMenuViews } from '../../services/publicTraffic.js';
+import { dedupePublicMenuCategories } from '../../utils/publicMenuDedupe.js';
 
 function createSlug(name: string): string {
   return name
@@ -131,23 +132,28 @@ menuRouter.get('/', async (_req, res) => {
     });
 
     const nowDate = new Date();
-    const categories = categoriesRaw.map(cat => {
-      const catNew =
-        cat.highlightNewUntil != null && new Date(cat.highlightNewUntil) > nowDate;
-      const itemNew = cat.items.some(
-        it => it.highlightNewUntil != null && new Date(it.highlightNewUntil) > nowDate
-      );
-      const isNewLaunch = catNew || itemNew;
-      return {
-        id: cat.id,
-        name: cat.name,
-        slug: cat.slug,
-        imageUrl: cat.imageUrl,
-        createdAt: cat.createdAt,
-        isNewLaunch,
-        items: cat.items.map(({ highlightNewUntil: _omit, ...it }) => it),
-      };
-    });
+    const categories = dedupePublicMenuCategories(
+      categoriesRaw
+        .map(cat => {
+          const catNew =
+            cat.highlightNewUntil != null && new Date(cat.highlightNewUntil) > nowDate;
+          const itemNew = cat.items.some(
+            it => it.highlightNewUntil != null && new Date(it.highlightNewUntil) > nowDate
+          );
+          const isNewLaunch = catNew || itemNew;
+          return {
+            id: cat.id,
+            name: cat.name,
+            slug: cat.slug,
+            imageUrl: cat.imageUrl,
+            createdAt: cat.createdAt,
+            isNewLaunch,
+            items: cat.items.map(({ highlightNewUntil: _omit, ...it }) => it),
+          };
+        })
+        // Customer menu: omit categories with no active items (avoids empty "Rice" / ghost sections).
+        .filter(cat => Array.isArray(cat.items) && cat.items.length > 0)
+    );
 
     let bestSellerItemIds: number[] = publicMenuCache?.data.bestSellerItemIds ?? [];
     const bestStale = !publicMenuCache || now - publicMenuCache.bestTs > BEST_SELLER_CACHE_MS;

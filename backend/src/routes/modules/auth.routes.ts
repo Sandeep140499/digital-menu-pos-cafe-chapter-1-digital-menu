@@ -15,6 +15,7 @@ import {
   setAuthCookies,
 } from '../../utils/authTokens.js';
 import { isEmployeeLoginClosedWindow } from '../../utils/businessDay.js';
+import { findAdminByEmailLoose, findEmployeeByEmailLoose } from '../../utils/staffEmail.js';
 
 const EMPLOYEE_LOGIN_TZ = process.env.TZ || 'Asia/Kolkata';
 
@@ -191,7 +192,7 @@ authRouter.post('/login', async (req, res) => {
   const emailNorm = email.trim().toLowerCase();
 
   const tryEmployeeLogin = async () => {
-    const employee = await prisma.employee.findUnique({ where: { email: emailNorm } });
+    const employee = await findEmployeeByEmailLoose(emailNorm);
     if (!employee) return null;
     const ok = await bcrypt.compare(password, employee.passwordHash);
     if (!ok) return null;
@@ -222,7 +223,7 @@ authRouter.post('/login', async (req, res) => {
   }
 
   // Default: try admin first, then employee
-  const admin = await prisma.admin.findUnique({ where: { email: emailNorm } });
+  const admin = await findAdminByEmailLoose(emailNorm);
   if (admin) {
     const ok = await bcrypt.compare(password, admin.passwordHash);
     if (ok) {
@@ -230,20 +231,20 @@ authRouter.post('/login', async (req, res) => {
     }
   }
 
-  const employee = await prisma.employee.findUnique({ where: { email: emailNorm } });
-  if (!employee) {
+  const employeeRow = await findEmployeeByEmailLoose(emailNorm);
+  if (!employeeRow) {
     return res.status(401).json({ message: 'Invalid credentials' });
   }
 
-  const ok = await bcrypt.compare(password, employee.passwordHash);
+  const ok = await bcrypt.compare(password, employeeRow.passwordHash);
   if (!ok) {
     return res.status(401).json({ message: 'Invalid credentials' });
   }
 
-  if (!employee.emailVerified) {
+  if (!employeeRow.emailVerified) {
     return res.status(403).json({ message: 'Please verify your email before logging in.' });
   }
-  if (String(employee.status || '').toUpperCase() !== 'ACTIVE') {
+  if (String(employeeRow.status || '').toUpperCase() !== 'ACTIVE') {
     return res.status(403).json({ message: 'Your account is inactive. Please contact admin.' });
   }
 
@@ -254,7 +255,7 @@ authRouter.post('/login', async (req, res) => {
     });
   }
 
-  return await issueSession(req as any, res as any, { id: employee.id, role: 'EMPLOYEE' });
+  return await issueSession(req as any, res as any, { id: employeeRow.id, role: 'EMPLOYEE' });
 });
 
 authRouter.post('/refresh', async (req, res) => {
@@ -329,8 +330,8 @@ authRouter.post('/forgot-password', async (req, res) => {
   }
   const { email } = parsed.data;
 
-  const admin = await prisma.admin.findUnique({ where: { email } });
-  const employee = !admin ? await prisma.employee.findUnique({ where: { email } }) : null;
+  const admin = await findAdminByEmailLoose(email);
+  const employee = !admin ? await findEmployeeByEmailLoose(email) : null;
 
   // Security rule: only verified employee emails can request a reset.
   if (employee && !employee.emailVerified) {

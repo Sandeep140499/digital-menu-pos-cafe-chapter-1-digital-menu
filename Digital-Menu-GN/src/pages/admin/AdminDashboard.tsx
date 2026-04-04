@@ -314,6 +314,7 @@ type MenuCategory = {
   imageUrl?: string;
   createdAt: string;
   updatedAt?: string;
+  highlightNewUntil?: string | null;
   items: MenuItem[];
 };
 
@@ -327,6 +328,7 @@ type MenuItem = {
   halfPrice?: number;
   isActive: boolean;
   categoryId?: number;
+  highlightNewUntil?: string | null;
 };
 
 type Employee = {
@@ -3394,6 +3396,8 @@ const AdminDashboard = () => {
     categoryId: 0,
     imageUrl: '',
     notifyCustomers: false,
+    /** Saves as 7-day “New launch” highlight on customer category cards */
+    highlightAsNewLaunch: true,
   });
 
   const [isEmployeeDialogOpen, setIsEmployeeDialogOpen] = useState(false);
@@ -4263,6 +4267,7 @@ const AdminDashboard = () => {
     const [name, setName] = useState('');
     const [imageUrl, setImageUrl] = useState('');
     const [imagePreview, setImagePreview] = useState('');
+    const [highlightAsNewLaunch, setHighlightAsNewLaunch] = useState(true);
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
@@ -4271,10 +4276,13 @@ const AdminDashboard = () => {
           setName(editingCategory.name);
           setImageUrl(editingCategory.imageUrl || '');
           setImagePreview(editingCategory.imageUrl || '');
+          const u = editingCategory.highlightNewUntil;
+          setHighlightAsNewLaunch(!!(u && new Date(u) > new Date()));
         } else {
           setName('');
           setImageUrl('');
           setImagePreview('');
+          setHighlightAsNewLaunch(true);
         }
       }
     }, [open, editingCategory]);
@@ -4293,6 +4301,7 @@ const AdminDashboard = () => {
             body: JSON.stringify({
               name: name.trim(),
               imageUrl: imageUrl.trim() || undefined,
+              highlightAsNewLaunch,
             }),
           });
           const data = await res.json();
@@ -4311,6 +4320,7 @@ const AdminDashboard = () => {
             body: JSON.stringify({
               name: name.trim(),
               imageUrl: imageUrl.trim() || undefined,
+              highlightAsNewLaunch,
             }),
           });
           const data = await res.json();
@@ -4381,6 +4391,17 @@ const AdminDashboard = () => {
                 </div>
               </div>
             )}
+            <div className="flex items-start gap-2 rounded-lg border border-violet-100 bg-violet-50/40 p-3">
+              <Checkbox
+                id="cat-highlight-new"
+                checked={highlightAsNewLaunch}
+                onCheckedChange={c => setHighlightAsNewLaunch(!!c)}
+              />
+              <Label htmlFor="cat-highlight-new" className="text-sm leading-snug font-medium">
+                Highlight category as <span className="text-violet-700">New launch</span> on customer
+                menu (7 days from save). Uncheck to clear the highlight.
+              </Label>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
@@ -4432,6 +4453,7 @@ const AdminDashboard = () => {
           categoryId: 0,
           imageUrl: '',
           notifyCustomers: false,
+          highlightAsNewLaunch: true,
         });
         setIsItemDialogOpen(false);
         loadDashboardData();
@@ -4462,19 +4484,37 @@ const AdminDashboard = () => {
   const handleUpdateItem = async () => {
     if (!token || !editingItem) return;
     try {
+      const { notifyCustomers: _omitNotify, ...rest } = itemForm;
       const res = await fetch(`${apiBase}/menu/items/${editingItem.id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(itemForm),
+        body: JSON.stringify({
+          name: rest.name,
+          description: rest.description?.trim() ? rest.description : undefined,
+          imageUrl: rest.imageUrl?.trim() || undefined,
+          basePrice: rest.basePrice,
+          hasHalf: rest.hasHalf,
+          halfPrice: rest.hasHalf ? rest.halfPrice : undefined,
+          isActive: rest.isActive,
+          categoryId: rest.categoryId,
+          highlightAsNewLaunch: rest.highlightAsNewLaunch,
+        }),
       });
       if (res.ok) {
         toast({ title: 'Success', description: 'Menu item updated' });
         setEditingItem(null);
         setIsItemDialogOpen(false);
         loadDashboardData();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast({
+          title: 'Error',
+          description: (err as { message?: string }).message || 'Failed to update item',
+          variant: 'destructive',
+        });
       }
     } catch (error) {
       toast({
@@ -5960,6 +6000,7 @@ const AdminDashboard = () => {
                     categoryId: viewingCategory,
                     imageUrl: '',
                     notifyCustomers: false,
+                    highlightAsNewLaunch: true,
                   });
                   setIsItemDialogOpen(true);
                 }}
@@ -6026,6 +6067,10 @@ const AdminDashboard = () => {
                                   categoryId: item.categoryId || viewingCategory,
                                   imageUrl: item.imageUrl || '',
                                   notifyCustomers: false,
+                                  highlightAsNewLaunch: !!(
+                                    item.highlightNewUntil &&
+                                    new Date(item.highlightNewUntil) > new Date()
+                                  ),
                                 });
                                 setIsItemDialogOpen(true);
                               }}
@@ -10025,6 +10070,18 @@ const AdminDashboard = () => {
                 onCheckedChange={c => setItemForm(f => ({ ...f, isActive: !!c }))}
               />
               <Label htmlFor="isActive">Active (visible on menu)</Label>
+            </div>
+            <div className="flex items-start gap-2 rounded-lg border border-violet-100 bg-violet-50/40 p-3">
+              <Checkbox
+                id="item-highlight-new"
+                checked={itemForm.highlightAsNewLaunch}
+                onCheckedChange={c => setItemForm(f => ({ ...f, highlightAsNewLaunch: !!c }))}
+              />
+              <Label htmlFor="item-highlight-new" className="text-sm leading-snug font-medium">
+                Highlight this category on the customer menu as{' '}
+                <span className="text-violet-700">New launch</span> (7 days from save). Stacks with
+                Best Seller if both apply.
+              </Label>
             </div>
             {!editingItem && (
               <div className="flex items-center gap-2 rounded-lg border bg-amber-50/50 p-3">

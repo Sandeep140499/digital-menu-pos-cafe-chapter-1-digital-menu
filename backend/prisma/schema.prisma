@@ -261,6 +261,8 @@ model MenuCategory {
   name      String
   slug      String?      @unique
   imageUrl  String?      @map("image_url")
+  /// When set and in the future, customer menu shows this category as “New launch” (admin-controlled).
+  highlightNewUntil DateTime? @map("highlight_new_until")
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
   items     MenuItem[]
@@ -275,6 +277,8 @@ model MenuItem {
   hasHalf     Boolean      @default(false)
   halfPrice   Float?
   isActive    Boolean      @default(true)
+  /// When set and in the future, customer menu highlights this item’s category as new (or stacks with category highlight).
+  highlightNewUntil DateTime? @map("highlight_new_until")
   categoryId  Int?
   category    MenuCategory? @relation(fields: [categoryId], references: [id])
   createdAt   DateTime     @default(now())

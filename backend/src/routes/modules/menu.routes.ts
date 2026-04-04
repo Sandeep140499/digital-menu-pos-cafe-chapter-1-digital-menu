@@ -13,19 +13,30 @@ function createSlug(name: string): string {
     .trim();
 }
 
+const NEW_LAUNCH_DAYS = 7;
+
+function highlightUntilFromNow(): Date {
+  const d = new Date();
+  d.setDate(d.getDate() + NEW_LAUNCH_DAYS);
+  return d;
+}
+
 const upsertCategorySchema = z.object({
   name: z.string().min(1),
   imageUrl: z.string().optional().nullable(),
   slug: z.string().min(1).optional(),
+  /** When true, sets highlight for 7 days from save; when false, clears highlight. Omit to leave unchanged (PATCH only). */
+  highlightAsNewLaunch: z.boolean().optional(),
 });
 
+// Accept empty, or any reasonable-length string (avoids hard failures on partial/relative URLs).
 const optionalUrl = z.preprocess(v => {
   if (typeof v === 'string') {
     const t = v.trim();
     return t.length === 0 ? undefined : t;
   }
   return v;
-}, z.string().url().optional());
+}, z.string().max(2048).optional());
 
 const upsertMenuItemSchema = z
   .object({
@@ -39,6 +50,7 @@ const upsertMenuItemSchema = z
     isActive: z.boolean().optional(),
     categoryId: z.number().int().optional(),
     notifyCustomers: z.boolean().optional(), // when true, prepare broadcast for new launch
+    highlightAsNewLaunch: z.boolean().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.hasHalf) {
@@ -63,6 +75,10 @@ let publicMenuCache: { data: PublicMenuResponse; ts: number; bestTs: number } | 
 const MENU_CACHE_MS = 15_000;
 const BEST_SELLER_CACHE_MS = 5 * 60_000;
 
+function invalidatePublicMenuCache() {
+  publicMenuCache = null;
+}
+
 // Rolling 7 days for best-seller ranking (weekly demand)
 function getRolling7DayRange(): { start: Date; end: Date } {
   const end = new Date();
@@ -85,7 +101,7 @@ menuRouter.get('/', async (_req, res) => {
     });
   }
   try {
-    const categories = await prisma.menuCategory.findMany({
+    const categoriesRaw = await prisma.menuCategory.findMany({
       orderBy: { createdAt: 'asc' },
       select: {
         id: true,
@@ -93,6 +109,7 @@ menuRouter.get('/', async (_req, res) => {
         slug: true,
         imageUrl: true,
         createdAt: true,
+        highlightNewUntil: true,
         items: {
           where: { isActive: true },
           orderBy: { createdAt: 'asc' },
@@ -107,9 +124,29 @@ menuRouter.get('/', async (_req, res) => {
             isActive: true,
             categoryId: true,
             createdAt: true,
+            highlightNewUntil: true,
           },
         },
       },
+    });
+
+    const nowDate = new Date();
+    const categories = categoriesRaw.map(cat => {
+      const catNew =
+        cat.highlightNewUntil != null && new Date(cat.highlightNewUntil) > nowDate;
+      const itemNew = cat.items.some(
+        it => it.highlightNewUntil != null && new Date(it.highlightNewUntil) > nowDate
+      );
+      const isNewLaunch = catNew || itemNew;
+      return {
+        id: cat.id,
+        name: cat.name,
+        slug: cat.slug,
+        imageUrl: cat.imageUrl,
+        createdAt: cat.createdAt,
+        isNewLaunch,
+        items: cat.items.map(({ highlightNewUntil: _omit, ...it }) => it),
+      };
     });
 
     let bestSellerItemIds: number[] = publicMenuCache?.data.bestSellerItemIds ?? [];
@@ -190,6 +227,7 @@ menuRouter.get('/admin', authenticate, requireRole('ADMIN'), async (_req, res) =
       slug: true,
       imageUrl: true,
       createdAt: true,
+      highlightNewUntil: true,
       items: {
         orderBy: { createdAt: 'asc' },
         select: {
@@ -203,6 +241,7 @@ menuRouter.get('/admin', authenticate, requireRole('ADMIN'), async (_req, res) =
           isActive: true,
           categoryId: true,
           createdAt: true,
+          highlightNewUntil: true,
         },
       },
     },
@@ -223,9 +262,11 @@ menuRouter.post('/categories', authenticate, requireRole('ADMIN'), async (req, r
       name: parsed.data.name,
       slug,
       imageUrl: parsed.data.imageUrl ?? undefined,
+      highlightNewUntil: parsed.data.highlightAsNewLaunch ? highlightUntilFromNow() : null,
     },
   });
 
+  invalidatePublicMenuCache();
   return res.status(201).json(category);
 });
 
@@ -237,19 +278,27 @@ async function updateCategory(req: import('express').Request, res: import('expre
   }
 
   const id = Number(req.params.id);
-  const data: { name?: string; imageUrl?: string | null; slug?: string } = {};
+  const data: {
+    name?: string;
+    imageUrl?: string | null;
+    slug?: string;
+    highlightNewUntil?: Date | null;
+  } = {};
   if (parsed.data.name !== undefined) data.name = parsed.data.name;
   if (parsed.data.imageUrl !== undefined)
     data.imageUrl = parsed.data.imageUrl === '' ? null : parsed.data.imageUrl;
   if (parsed.data.slug !== undefined) data.slug = parsed.data.slug;
   if (parsed.data.name !== undefined && parsed.data.slug === undefined)
     data.slug = createSlug(parsed.data.name);
+  if (parsed.data.highlightAsNewLaunch === true) data.highlightNewUntil = highlightUntilFromNow();
+  if (parsed.data.highlightAsNewLaunch === false) data.highlightNewUntil = null;
 
   const category = await prisma.menuCategory.update({
     where: { id },
     data,
   });
 
+  invalidatePublicMenuCache();
   return res.json(category);
 }
 
@@ -261,6 +310,7 @@ menuRouter.put('/categories/:id', authenticate, requireRole('ADMIN'), updateCate
 menuRouter.delete('/categories/:id', authenticate, requireRole('ADMIN'), async (req, res) => {
   const id = Number(req.params.id);
   await prisma.menuCategory.delete({ where: { id } });
+  invalidatePublicMenuCache();
   return res.status(204).send();
 });
 
@@ -271,7 +321,7 @@ menuRouter.post('/items', authenticate, requireRole('ADMIN'), async (req, res) =
     return res.status(400).json({ message: 'Invalid input', errors: parsed.error.issues });
   }
 
-  const { notifyCustomers, ...itemData } = parsed.data;
+  const { notifyCustomers, highlightAsNewLaunch, ...itemData } = parsed.data;
 
   const item = await prisma.menuItem.create({
     data: {
@@ -280,6 +330,7 @@ menuRouter.post('/items', authenticate, requireRole('ADMIN'), async (req, res) =
       halfPrice: (itemData.hasHalf ?? false) ? (itemData.halfPrice ?? null) : null,
       imageUrl: itemData.imageUrl ?? undefined,
       isActive: itemData.isActive ?? true,
+      highlightNewUntil: highlightAsNewLaunch ? highlightUntilFromNow() : null,
     },
   });
 
@@ -315,6 +366,7 @@ menuRouter.post('/items', authenticate, requireRole('ADMIN'), async (req, res) =
     broadcast = { message, mobileCount: mobiles.length, mobiles };
   }
 
+  invalidatePublicMenuCache();
   return res.status(201).json({ item, ...(broadcast ? { broadcast } : {}) });
 });
 
@@ -326,7 +378,8 @@ menuRouter.patch('/items/:id', authenticate, requireRole('ADMIN'), async (req, r
   }
 
   const id = Number(req.params.id);
-  const data: Record<string, unknown> = { ...parsed.data };
+  const { notifyCustomers: _n, highlightAsNewLaunch, ...rest } = parsed.data;
+  const data: Record<string, unknown> = { ...rest };
   // Normalize optional URL / blank strings.
   if (data.imageUrl === '') data.imageUrl = undefined;
   if (data.description === '') data.description = undefined;
@@ -337,11 +390,15 @@ menuRouter.patch('/items/:id', authenticate, requireRole('ADMIN'), async (req, r
   if (data.hasHalf === false) data.halfPrice = null;
   if (typeof data.halfPrice === 'number' && data.halfPrice > 0 && data.hasHalf === undefined) data.hasHalf = true;
 
+  if (highlightAsNewLaunch === true) data.highlightNewUntil = highlightUntilFromNow();
+  if (highlightAsNewLaunch === false) data.highlightNewUntil = null;
+
   const item = await prisma.menuItem.update({
     where: { id },
     data,
   });
 
+  invalidatePublicMenuCache();
   return res.json(item);
 });
 
@@ -353,5 +410,6 @@ menuRouter.delete('/items/:id', authenticate, requireRole('ADMIN'), async (req, 
     data: { isActive: false },
   });
 
+  invalidatePublicMenuCache();
   return res.json(item);
 });

@@ -390,10 +390,11 @@ const MenuCategoriesSection = memo(function MenuCategoriesSection({
   lastToggledKeyRef: React.MutableRefObject<string | null>;
 }) {
   const displayCategories = useMemo(() => {
-    return menuCategories.map(cat => ({
+    return menuCategories.map((cat: any) => ({
       key: String(cat.id),
       title: cat.name || 'Category',
       image: cat.imageUrl && cat.imageUrl.trim() ? cat.imageUrl : DEFAULT_CATEGORY_IMAGE,
+      isNewLaunch: !!cat.isNewLaunch,
       items: Array.isArray(cat.items)
         ? cat.items.map((item: any) => ({
             name: item.name,
@@ -418,7 +419,12 @@ const MenuCategoriesSection = memo(function MenuCategoriesSection({
     );
     const hasBestSeller = (s: (typeof filtered)[0]) =>
       s.items.some((item: any) => bestSellerItemIds.includes(item.menuItemId));
-    return [...filtered].sort((a, b) => (hasBestSeller(b) ? 1 : 0) - (hasBestSeller(a) ? 1 : 0));
+    const tier = (s: (typeof filtered)[0]) => {
+      if (s.isNewLaunch) return 0;
+      if (hasBestSeller(s)) return 1;
+      return 2;
+    };
+    return [...filtered].sort((a, b) => tier(a) - tier(b));
   }, [displayCategories, categoryQuery, bestSellerItemIds]);
 
   const openKeySet = useMemo(() => new Set(openCategoryKeys), [openCategoryKeys]);
@@ -486,6 +492,7 @@ const MenuCategoriesSection = memo(function MenuCategoriesSection({
           const isBestSeller = section.items.some((it: any) =>
             bestSellerItemIds.includes(it.menuItemId)
           );
+          const isNewLaunch = section.isNewLaunch;
           return (
             <div key={categoryKey} className="contents">
               <LazyInView
@@ -502,6 +509,7 @@ const MenuCategoriesSection = memo(function MenuCategoriesSection({
                   section={section}
                   isSelected={isOpen}
                   isBestSeller={isBestSeller}
+                  isNewLaunch={isNewLaunch}
                   setOpenCategoryKeys={setOpenCategoryKeys}
                   lastToggledKeyRef={lastToggledKeyRef}
                 />
@@ -531,16 +539,45 @@ function MenuCategoryCard({
   section,
   isSelected,
   isBestSeller,
+  isNewLaunch,
   setOpenCategoryKeys,
   lastToggledKeyRef,
 }: {
   categoryKey: string;
-  section: { key: string; title: string; image: string; items: any[] };
+  section: { key: string; title: string; image: string; items: any[]; isNewLaunch?: boolean };
   isSelected: boolean;
   isBestSeller: boolean;
+  isNewLaunch: boolean;
   setOpenCategoryKeys: React.Dispatch<React.SetStateAction<string[]>>;
   lastToggledKeyRef: React.MutableRefObject<string | null>;
 }) {
+  const ringAndShadow = isNewLaunch && isBestSeller
+    ? 'shadow-lg ring-2 shadow-violet-200/40 ring-violet-500 focus-visible:ring-violet-600'
+    : isNewLaunch
+      ? 'shadow-lg ring-2 shadow-violet-200/40 ring-violet-500 focus-visible:ring-violet-600'
+      : isBestSeller
+        ? 'shadow-lg ring-2 shadow-amber-200/50 ring-amber-400 focus-visible:ring-amber-500'
+        : '';
+
+  const selectedRing =
+    isSelected &&
+    (isNewLaunch && isBestSeller
+      ? 'ring-2 ring-violet-600 ring-offset-1 ring-offset-amber-200/30'
+      : isNewLaunch
+        ? 'ring-2 ring-violet-600'
+        : isBestSeller
+          ? 'ring-2 ring-amber-500'
+          : 'ring-2 ring-emerald-600');
+
+  const footerBar =
+    isNewLaunch && isBestSeller
+      ? 'bg-gradient-to-r from-violet-600 to-amber-600'
+      : isNewLaunch
+        ? 'bg-gradient-to-r from-violet-600 to-violet-800'
+        : isBestSeller
+          ? 'bg-gradient-to-r from-amber-600 to-amber-700'
+          : 'bg-[#2E8B57]';
+
   return (
     <button
       type="button"
@@ -553,20 +590,29 @@ function MenuCategoryCard({
       className={[
         'group relative aspect-[4/5] h-full min-h-[120px] w-full touch-manipulation overflow-hidden rounded-2xl text-left shadow-sm transition-all will-change-transform',
         'bg-white/90 hover:bg-white hover:shadow-xl focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none',
-        isBestSeller
-          ? 'shadow-lg ring-2 shadow-amber-200/50 ring-amber-400 focus-visible:ring-amber-500'
-          : 'focus-visible:ring-emerald-700 focus-visible:ring-offset-emerald-50',
+        ringAndShadow || 'focus-visible:ring-emerald-700 focus-visible:ring-offset-emerald-50',
         isSelected
-          ? isBestSeller
-            ? '-translate-y-0.5 ring-2 ring-amber-500'
+          ? selectedRing
+            ? `-translate-y-0.5 ${selectedRing}`
             : '-translate-y-0.5 ring-2 ring-emerald-600'
-          : 'ring-1 ring-black/5 hover:-translate-y-0.5',
+          : isNewLaunch || isBestSeller
+            ? 'hover:-translate-y-0.5'
+            : 'ring-1 ring-black/5 hover:-translate-y-0.5',
       ].join(' ')}
       aria-pressed={isSelected}
     >
-      {isBestSeller && (
-        <div className="absolute top-2 left-2 z-10 rounded-full bg-amber-400 px-2.5 py-0.5 text-[10px] font-bold text-amber-950 shadow sm:text-[11px]">
-          ★ Best Seller
+      {(isNewLaunch || isBestSeller) && (
+        <div className="absolute top-2 left-2 z-10 flex max-w-[calc(100%-1rem)] flex-col gap-1">
+          {isNewLaunch && (
+            <div className="w-fit rounded-full bg-violet-500 px-2.5 py-0.5 text-[10px] font-bold text-white shadow sm:text-[11px]">
+              New launch
+            </div>
+          )}
+          {isBestSeller && (
+            <div className="w-fit rounded-full bg-amber-400 px-2.5 py-0.5 text-[10px] font-bold text-amber-950 shadow sm:text-[11px]">
+              ★ Best Seller
+            </div>
+          )}
         </div>
       )}
       <div className="flex h-full min-h-0 min-w-0 flex-col">
@@ -589,7 +635,7 @@ function MenuCategoryCard({
           </div>
         </div>
         <div
-          className={`flex max-h-[52px] min-h-[52px] flex-shrink-0 items-center justify-start px-3 py-2 ${isBestSeller ? 'bg-gradient-to-r from-amber-600 to-amber-700' : 'bg-[#2E8B57]'}`}
+          className={`flex max-h-[52px] min-h-[52px] flex-shrink-0 items-center justify-start px-3 py-2 ${footerBar}`}
         >
           <h2 className="line-clamp-2 min-w-0 flex-1 text-left text-sm leading-snug font-extrabold break-words whitespace-normal text-white sm:text-base">
             {section.title || categoryKey}

@@ -405,6 +405,7 @@ const MenuCategoriesSection = memo(function MenuCategoriesSection({
             halfPrice: item.halfPrice,
             hasHalf: item.hasHalf,
             menuItemId: item.id,
+            imageUrl: item.imageUrl && String(item.imageUrl).trim() ? item.imageUrl : null,
           }))
         : [],
     }));
@@ -421,10 +422,66 @@ const MenuCategoriesSection = memo(function MenuCategoriesSection({
     return [...filtered].sort((a, b) => (hasBestSeller(b) ? 1 : 0) - (hasBestSeller(a) ? 1 : 0));
   }, [displayCategories, categoryQuery, bestSellerItemIds]);
 
+  /** Up to 5 items for the dedicated Best Sellers row (API order, then fill from menu). */
+  const bestSellerRowItems = useMemo(() => {
+    const idOrder = [...new Set(bestSellerItemIds)].slice(0, 5);
+    const byId = new Map<number, { item: any; categoryTitle: string }>();
+    for (const sec of displayCategories) {
+      for (const it of sec.items) {
+        const mid = it.menuItemId;
+        if (typeof mid === 'number' && !byId.has(mid)) {
+          byId.set(mid, { item: it, categoryTitle: sec.title });
+        }
+      }
+    }
+    const resolved: { item: any; categoryTitle: string }[] = [];
+    for (const id of idOrder) {
+      const r = byId.get(id);
+      if (r) resolved.push(r);
+    }
+    if (resolved.length < 5) {
+      const used = new Set(resolved.map(x => x.item.menuItemId));
+      outer: for (const sec of displayCategories) {
+        for (const it of sec.items) {
+          if (used.has(it.menuItemId)) continue;
+          resolved.push({ item: it, categoryTitle: sec.title });
+          used.add(it.menuItemId);
+          if (resolved.length >= 5) break outer;
+        }
+      }
+    }
+    return resolved.slice(0, 5);
+  }, [displayCategories, bestSellerItemIds]);
+
   const openKeySet = useMemo(() => new Set(openCategoryKeys), [openCategoryKeys]);
 
   return (
     <>
+      {!isLoadingMenu && menuCategories.length > 0 && bestSellerRowItems.length > 0 && (
+        <section
+          className="mb-8 w-full max-w-full min-w-0"
+          aria-label="Best sellers"
+        >
+          <div className="mb-3 flex items-center gap-2 sm:mb-4">
+            <span className="text-amber-600" aria-hidden>
+              ★
+            </span>
+            <h2 className="text-lg font-extrabold tracking-tight text-olive-950 sm:text-xl">
+              Best Sellers
+            </h2>
+          </div>
+          <div className="grid w-full grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-5">
+            {bestSellerRowItems.map(({ item, categoryTitle }) => (
+              <BestSellerItemCard
+                key={item.menuItemId}
+                item={item}
+                categoryTitle={categoryTitle}
+                addToCart={addToCart}
+              />
+            ))}
+          </div>
+        </section>
+      )}
       <div className="grid w-full max-w-full min-w-0 grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 lg:gap-6 xl:grid-cols-5">
         {isLoadingMenu && menuCategories.length === 0 && (
           <>
@@ -597,6 +654,113 @@ function MenuCategoryCard({
         </div>
       </div>
     </button>
+  );
+}
+
+function BestSellerItemCard({
+  item,
+  categoryTitle,
+  addToCart,
+}: {
+  item: {
+    name: string;
+    price: string;
+    basePrice: number;
+    halfPrice?: number;
+    hasHalf?: boolean;
+    menuItemId: number;
+    imageUrl?: string | null;
+  };
+  categoryTitle: string;
+  addToCart: (
+    itemName: string,
+    price: number,
+    variant?: 'HALF' | 'FULL',
+    category?: string
+  ) => void;
+}) {
+  const imgSrc =
+    item.imageUrl && String(item.imageUrl).trim() ? item.imageUrl : DEFAULT_CATEGORY_IMAGE;
+  const priceText = String(item.price);
+  const isAddon = item.name.toLowerCase().startsWith('add-on');
+  const pcVariant = isPcVariantItem({ name: item.name, category: categoryTitle });
+  const halfBtnLabel = pcVariant ? '5pc' : 'Half';
+  const fullBtnLabel = pcVariant ? '8pc' : 'Full';
+  const hasHalfFull = priceText.includes('/');
+  let fullPrice = 0;
+  let halfPrice: number | undefined;
+  if (hasHalfFull) {
+    const [half, full] = priceText
+      .replace(/₹/g, '')
+      .split('/')
+      .map((p: string) => Number(p.trim()));
+    halfPrice = half;
+    fullPrice = full;
+  } else {
+    fullPrice = Number(priceText.replace('₹', '').trim());
+  }
+  const priceDisplay = priceText.startsWith('₹') ? priceText : `₹${priceText}`;
+
+  return (
+    <div className="flex min-w-0 flex-col overflow-hidden rounded-2xl bg-white/95 shadow-md ring-2 ring-amber-400/80">
+      <div className="relative aspect-[4/3] min-h-[100px] w-full shrink-0 bg-slate-200">
+        <img
+          src={imgSrc}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+          loading="lazy"
+          onError={e => {
+            const el = e.currentTarget;
+            if (el.src !== DEFAULT_CATEGORY_IMAGE) el.src = DEFAULT_CATEGORY_IMAGE;
+          }}
+        />
+        <div className="pointer-events-none absolute top-2 left-2 rounded-full bg-amber-400 px-2 py-0.5 text-[9px] font-bold text-amber-950 shadow sm:text-[10px]">
+          Best Seller
+        </div>
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col gap-2 p-2.5 sm:p-3">
+        <h3
+          className={`line-clamp-2 min-h-[2.5rem] text-xs font-bold leading-snug sm:text-sm ${isAddon ? 'text-amber-900' : 'text-emerald-900'}`}
+          title={item.name}
+        >
+          {item.name}
+        </h3>
+        <span
+          className={`w-fit rounded-full px-2 py-0.5 text-[11px] font-extrabold sm:text-xs ${isAddon ? 'bg-amber-100 text-amber-900' : 'bg-olive-100 text-olive-900'}`}
+        >
+          {priceDisplay}
+        </span>
+        {hasHalfFull && halfPrice != null ? (
+          <div className="mt-auto flex gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              className="min-h-[40px] min-w-0 flex-1 touch-manipulation border-emerald-600 px-1.5 text-[11px] text-emerald-700 sm:text-xs"
+              onClick={() => addToCart(item.name, halfPrice!, 'HALF', categoryTitle)}
+            >
+              {halfBtnLabel}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="min-h-[40px] min-w-0 flex-1 touch-manipulation border-emerald-700 bg-emerald-600 px-1.5 text-[11px] text-white hover:bg-emerald-700 sm:text-xs"
+              onClick={() => addToCart(item.name, fullPrice, 'FULL', categoryTitle)}
+            >
+              {fullBtnLabel}
+            </Button>
+          </div>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-auto min-h-[40px] w-full touch-manipulation border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-700"
+            onClick={() => addToCart(item.name, fullPrice, 'FULL', categoryTitle)}
+          >
+            Add
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -961,7 +1125,9 @@ const Index = () => {
           retryRef.current.menuTimer = null;
         }
         const categories = Array.isArray(data) ? data : (data?.categories ?? []);
-        const ids = Array.isArray(data) ? [] : (data?.bestSellerItemIds ?? []);
+        const ids = Array.isArray(data)
+          ? []
+          : [...new Set((data?.bestSellerItemIds ?? []) as number[])].slice(0, 5);
         setMenuCategories(categories);
         setBestSellerItemIds(ids);
         setMenuLoadError(null);

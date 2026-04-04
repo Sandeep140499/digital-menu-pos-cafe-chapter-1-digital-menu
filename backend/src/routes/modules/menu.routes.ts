@@ -77,7 +77,11 @@ menuRouter.get('/', async (_req, res) => {
   const now = Date.now();
   if (publicMenuCache && now - publicMenuCache.ts < MENU_CACHE_MS) {
     res.setHeader('Cache-Control', 'public, max-age=5, stale-while-revalidate=30');
-    return res.json(publicMenuCache.data);
+    const d = publicMenuCache.data;
+    return res.json({
+      ...d,
+      bestSellerItemIds: [...new Set(d.bestSellerItemIds ?? [])].slice(0, 5),
+    });
   }
   try {
     const categories = await prisma.menuCategory.findMany({
@@ -139,6 +143,9 @@ menuRouter.get('/', async (_req, res) => {
         bestSellerItemIds = bestSellerItemIds.concat(fillers.map(f => f.id));
       }
     }
+
+    // At most 5 unique IDs for the customer "Best Sellers" row (fresh or cached).
+    bestSellerItemIds = [...new Set(bestSellerItemIds)].slice(0, 5);
 
     const data: PublicMenuResponse = { categories, bestSellerItemIds };
     publicMenuCache = {

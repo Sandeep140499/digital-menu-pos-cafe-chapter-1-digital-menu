@@ -1,5 +1,6 @@
 import { Navigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
+import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 
 export function RequireAuth({
@@ -12,7 +13,16 @@ export function RequireAuth({
   const { isAuthenticated, role: currentRole, ready } = useAuth();
 
   if (!ready) {
-    return null;
+    return (
+      <div
+        className="flex min-h-[100dvh] min-h-screen items-center justify-center bg-slate-50"
+        role="status"
+        aria-live="polite"
+        aria-label="Checking session"
+      >
+        <Loader2 className="h-10 w-10 animate-spin text-emerald-600" />
+      </div>
+    );
   }
 
   if (!isAuthenticated) {

@@ -103,6 +103,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setToken(t);
     setRole(r);
+    // Critical: bootstrap effect only runs once; if the user logs in before the first
+    // /auth/refresh finishes, `ready` can stay false → RequireAuth renders null and
+    // dashboards never mount (global login spinner never cleared).
+    if (t) setReady(true);
   }, []);
 
   const refresh = useCallback(async (): Promise<string | null> => {
@@ -168,15 +172,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [setSession]);
 
-  // Bootstrap: if refresh cookie exists, grab a fresh access token.
+  // Bootstrap once on mount: try refresh cookie; do not depend on `token` so logging in
+  // does not re-trigger this effect (bootstrapped guard made those runs no-ops anyway).
   useEffect(() => {
     if (bootstrapped.current) return;
     bootstrapped.current = true;
-    // If we already have a token from sessionStorage, we're "ready" immediately
-    // (same UX as before). Refresh can still run in background.
-    if (token) setReady(true);
+    const stored =
+      typeof window !== 'undefined'
+        ? window.localStorage.getItem(TOKEN_KEY) || window.sessionStorage.getItem(TOKEN_KEY)
+        : null;
+    if (stored) setReady(true);
     void refresh().catch(() => setReady(true));
-  }, [refresh, token]);
+  }, [refresh]);
 
   /**
    * Keep access token fresh while the app is open (especially staff taking orders).

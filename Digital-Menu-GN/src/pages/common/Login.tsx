@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { LoaderButton } from '@/components/shared';
@@ -18,7 +18,12 @@ const Login = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { startGlobalLoading, stopGlobalLoading } = useGlobalLoading();
-  const { login } = useAuth();
+  const { login, ready, isAuthenticated, role: authRole } = useAuth();
+
+  useEffect(() => {
+    if (!ready || !isAuthenticated || !authRole) return;
+    navigate(authRole === 'ADMIN' ? '/admin' : '/employee', { replace: true });
+  }, [ready, isAuthenticated, authRole, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,9 +39,10 @@ const Login = () => {
         className: 'border-emerald-500 bg-emerald-50 text-emerald-900 font-medium',
       });
 
-      // Keep global loader active while dashboard bootstraps;
-      // the respective dashboard will stop it after first data load.
       navigate(role === 'ADMIN' ? '/admin' : '/employee');
+      // Clear the full-screen overlay so the dashboard shell (and its own loaders) show.
+      // Dashboards still call stopGlobalLoading after first fetch (idempotent).
+      queueMicrotask(() => stopGlobalLoading());
     } catch (error: any) {
       stopGlobalLoading();
       toast({

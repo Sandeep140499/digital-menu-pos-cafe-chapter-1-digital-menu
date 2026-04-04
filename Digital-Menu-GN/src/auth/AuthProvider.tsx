@@ -8,6 +8,16 @@ import {
   type ReactNode,
 } from 'react';
 import { API_BASE_URL } from '@/constants';
+import {
+  AUTH_ROLE_KEY,
+  AUTH_TOKEN_KEY,
+  computeProactiveRefreshIntervalMs,
+  isAccessTokenUsable,
+  readBrowserCookie,
+  readStoredAccessToken,
+  VISIBILITY_REFRESH_DEBOUNCE_MS,
+  VISIBILITY_REFRESH_MIN_REMAINING_MS,
+} from '@/auth/authSession';
 
 export type AuthRole = 'ADMIN' | 'EMPLOYEE';
 
@@ -30,17 +40,6 @@ export type AuthContextValue = {
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
 
-const TOKEN_KEY = 'dm_auth_token';
-const ROLE_KEY = 'dm_auth_role';
-
-function readCookie(name: string) {
-  if (typeof document === 'undefined') return null;
-  const match = document.cookie.match(
-    new RegExp(`(?:^|; )${name.replace(/[$()*+./?[\\\]^{|}-]/g, '\\$&')}=([^;]*)`)
-  );
-  return match ? decodeURIComponent(match[1]) : null;
-}
-
 function extractMessage(payload: unknown): string | undefined {
   if (!payload || typeof payload !== 'object') return undefined;
   const o = payload as Record<string, unknown>;
@@ -56,14 +55,13 @@ function extractMessage(payload: unknown): string | undefined {
 
 async function authFetch(path: string, init: RequestInit = {}) {
   const url = path.startsWith('http') ? path : `${API_BASE_URL}${path}`;
-  const csrf = readCookie('csrf') || '';
+  const csrf = readBrowserCookie('csrf') || '';
   return fetch(url, {
     ...init,
     credentials: 'include',
     headers: {
       ...(init.headers || {}),
       'Content-Type': 'application/json',
-      // Double-submit CSRF for auth cookie endpoints
       ...(path.startsWith('/auth/') || path.startsWith('/api/auth/')
         ? csrf
           ? { 'X-CSRF-Token': csrf }
@@ -73,77 +71,83 @@ async function authFetch(path: string, init: RequestInit = {}) {
   });
 }
 
+/**
+ * Session policy (high level):
+ * - Access JWT in storage drives “logged in” for the SPA; refresh cookie + CSRF renew it.
+ * - Failed /auth/refresh does NOT log the user out while the access JWT is still usable
+ *   (multi-tab refresh rotation, transient CSRF, or focus-related timing).
+ * - We only clear the client session when refresh failed and the access token is no longer usable,
+ *   or when there is no CSRF and the access token is already unusable (cannot recover).
+ * - Focus / bfcache: refresh only if the token is near expiry, debounced, to avoid spurious calls.
+ */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null;
-    // Access tokens are short-lived; we prefer restoring via refresh cookie on boot.
-    // Keep a localStorage fallback for legacy deployments and offline reloads.
-    return window.localStorage.getItem(TOKEN_KEY) || window.sessionStorage.getItem(TOKEN_KEY);
+    return window.localStorage.getItem(AUTH_TOKEN_KEY) || window.sessionStorage.getItem(AUTH_TOKEN_KEY);
   });
   const [role, setRole] = useState<AuthRole | null>(() => {
     if (typeof window === 'undefined') return null;
     return (
-      (window.localStorage.getItem(ROLE_KEY) as AuthRole | null) ??
-      ((window.sessionStorage.getItem(ROLE_KEY) as AuthRole | null) ?? null)
+      (window.localStorage.getItem(AUTH_ROLE_KEY) as AuthRole | null) ??
+      ((window.sessionStorage.getItem(AUTH_ROLE_KEY) as AuthRole | null) ?? null)
     );
   });
   const [ready, setReady] = useState(false);
   const refreshing = useRef<Promise<string | null> | null>(null);
   const bootstrapped = useRef(false);
-  /** Bumps on each new access-token session so a stale in-flight /auth/refresh cannot wipe a fresh login. */
   const sessionGeneration = useRef(0);
+  const lastFocusRefreshAtRef = useRef(0);
 
   const setSession = useCallback((t: string | null, r: AuthRole | null) => {
     if (typeof window !== 'undefined') {
       if (t) {
         sessionGeneration.current += 1;
-        // Persist across refresh/tab close so UX doesn't depend on sessionStorage lifetime.
-        window.localStorage.setItem(TOKEN_KEY, t);
-        window.sessionStorage.setItem(TOKEN_KEY, t);
+        window.localStorage.setItem(AUTH_TOKEN_KEY, t);
+        window.sessionStorage.setItem(AUTH_TOKEN_KEY, t);
         if (r) {
-          window.localStorage.setItem(ROLE_KEY, r);
-          window.sessionStorage.setItem(ROLE_KEY, r);
+          window.localStorage.setItem(AUTH_ROLE_KEY, r);
+          window.sessionStorage.setItem(AUTH_ROLE_KEY, r);
         }
       } else {
-        window.localStorage.removeItem(TOKEN_KEY);
-        window.localStorage.removeItem(ROLE_KEY);
-        window.sessionStorage.removeItem(TOKEN_KEY);
-        window.sessionStorage.removeItem(ROLE_KEY);
+        window.localStorage.removeItem(AUTH_TOKEN_KEY);
+        window.localStorage.removeItem(AUTH_ROLE_KEY);
+        window.sessionStorage.removeItem(AUTH_TOKEN_KEY);
+        window.sessionStorage.removeItem(AUTH_ROLE_KEY);
       }
     }
     setToken(t);
     setRole(r);
-    // Critical: bootstrap effect only runs once; if the user logs in before the first
-    // /auth/refresh finishes, `ready` can stay false → RequireAuth renders null and
-    // dashboards never mount (global login spinner never cleared).
     if (t) setReady(true);
   }, []);
+
+  const invalidateSessionIfRefreshCannotRecover = useCallback(
+    (genAtStart: number) => {
+      const stored = readStoredAccessToken();
+      if (stored != null && isAccessTokenUsable(stored)) return;
+      if (genAtStart !== sessionGeneration.current) return;
+      setSession(null, null);
+    },
+    [setSession]
+  );
 
   const refresh = useCallback(async (): Promise<string | null> => {
     if (refreshing.current) return refreshing.current;
     refreshing.current = (async () => {
       const genAtStart = sessionGeneration.current;
-      // If we don't have a readable CSRF cookie yet, don't even attempt refresh.
-      // (Backend enforces double-submit CSRF and will return 403.)
-      if (!readCookie('csrf')) {
-        // Cookies cleared (or another tab / domain issue) but access JWT still in storage —
-        // without CSRF we cannot refresh; keeping the old token makes /login redirect away
-        // and dashboards look "broken".
-        if (typeof window !== 'undefined') {
-          const hasStoredAccess =
-            !!(window.localStorage.getItem(TOKEN_KEY) || window.sessionStorage.getItem(TOKEN_KEY));
-          if (hasStoredAccess && genAtStart === sessionGeneration.current) setSession(null, null);
-        }
+
+      if (!readBrowserCookie('csrf')) {
+        invalidateSessionIfRefreshCannotRecover(genAtStart);
         return null;
       }
+
       const res = await authFetch('/auth/refresh', { method: 'POST' });
       if (!res.ok) {
-        // Invalid refresh or CSRF mismatch: drop client session so login works again.
         if (res.status === 401 || res.status === 403) {
-          if (genAtStart === sessionGeneration.current) setSession(null, null);
+          invalidateSessionIfRefreshCannotRecover(genAtStart);
         }
         return null;
       }
+
       const data = (await res.json()) as { accessToken: string; role: AuthRole };
       setSession(data.accessToken, data.role);
       return data.accessToken;
@@ -152,7 +156,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setReady(true);
     });
     return refreshing.current;
-  }, [setSession]);
+  }, [invalidateSessionIfRefreshCannotRecover, setSession]);
+
+  const scheduleProactiveRefreshOnFocus = useCallback(() => {
+    const t = readStoredAccessToken();
+    if (!t) return;
+    if (isAccessTokenUsable(t, VISIBILITY_REFRESH_MIN_REMAINING_MS)) return;
+    const now = Date.now();
+    if (now - lastFocusRefreshAtRef.current < VISIBILITY_REFRESH_DEBOUNCE_MS) return;
+    lastFocusRefreshAtRef.current = now;
+    void refresh();
+  }, [refresh]);
 
   const login = useCallback(
     async (args: { email: string; password: string; loginAs?: 'admin' | 'employee' }) => {
@@ -164,8 +178,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
 
       let res = await doLogin(args);
-      // Some deployments still require explicitly specifying the role.
-      // To keep the UI simple (no role picker), retry once as employee on 401.
       if (res.status === 401 && !args.loginAs) {
         res = await doLogin({ ...args, loginAs: 'employee' });
       }
@@ -192,54 +204,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [setSession]);
 
-  // Bootstrap once on mount: try refresh cookie; do not depend on `token` so logging in
-  // does not re-trigger this effect (bootstrapped guard made those runs no-ops anyway).
   useEffect(() => {
     if (bootstrapped.current) return;
     bootstrapped.current = true;
-    // Do not set `ready` early just because a token exists — refresh may clear a stale
-    // session; otherwise /login immediately redirects with a dead JWT.
     void refresh().catch(() => setReady(true));
   }, [refresh]);
 
-  /**
-   * Keep access token fresh while the app is open (especially staff taking orders).
-   * Without this, short JWTs expire → API 401 and Socket.IO stops joining branch rooms.
-   */
   useEffect(() => {
     if (!token || !ready) return;
-    const intervalMs = (() => {
-      try {
-        const part = token.split('.')[1];
-        if (!part) return 8 * 60_000;
-        const json = atob(part.replace(/-/g, '+').replace(/_/g, '/'));
-        const exp = (JSON.parse(json) as { exp?: number }).exp;
-        if (typeof exp !== 'number') return 8 * 60_000;
-        const ttlMs = exp * 1000 - Date.now();
-        if (ttlMs <= 0) return 60_000;
-        // Refresh at ~1/3 of remaining lifetime, between 2m and 10m.
-        const third = Math.floor(ttlMs / 3);
-        return Math.min(10 * 60_000, Math.max(2 * 60_000, third));
-      } catch {
-        return 8 * 60_000;
-      }
-    })();
+    const intervalMs = computeProactiveRefreshIntervalMs(token);
     const id = window.setInterval(() => {
       void refresh();
     }, intervalMs);
     return () => window.clearInterval(id);
   }, [token, ready, refresh]);
 
-  // When returning to the tab, refresh once so a stale token is fixed before the next order action.
   useEffect(() => {
     if (!token || !ready) return;
-    const onVis = () => {
+    const onVisibility = () => {
       if (document.visibilityState !== 'visible') return;
-      void refresh();
+      scheduleProactiveRefreshOnFocus();
     };
-    document.addEventListener('visibilitychange', onVis);
-    return () => document.removeEventListener('visibilitychange', onVis);
-  }, [token, ready, refresh]);
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) scheduleProactiveRefreshOnFocus();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pageshow', onPageShow);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pageshow', onPageShow);
+    };
+  }, [token, ready, scheduleProactiveRefreshOnFocus]);
 
   const value = useMemo<AuthContextValue>(() => {
     const isAdmin = role === 'ADMIN';

@@ -3384,6 +3384,13 @@ const AdminDashboard = () => {
       // ignore (storage blocked)
     }
   }, []);
+
+  useEffect(() => {
+    if (!token || !ready) return;
+    const id = window.setTimeout(() => stopGlobalLoading(), 120_000);
+    return () => window.clearTimeout(id);
+  }, [token, ready, stopGlobalLoading]);
+
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -3849,7 +3856,7 @@ const AdminDashboard = () => {
   }, [activeSection, ready, toast, token, autoRefreshEnabled]);
 
   useEffect(() => {
-    if (!token) return;
+    if (!token || !ready) return;
     if (isOrderDialogOpen) return;
     // Overview: full refresh + reset new-order badge.
     if (activeSection === 'overview') {
@@ -3862,7 +3869,7 @@ const AdminDashboard = () => {
     if (!hasLoadedOnce) {
       void loadDashboardData();
     }
-  }, [token, isOrderDialogOpen, activeSection, autoRefreshEnabled, hasLoadedOnce]);
+  }, [token, ready, isOrderDialogOpen, activeSection, autoRefreshEnabled, hasLoadedOnce]);
 
   // Calculate today's stats
   const todayStats: TodayStats = useMemo(() => {
@@ -3899,13 +3906,17 @@ const AdminDashboard = () => {
 
   const loadDashboardData = async (loadOpts?: { background?: boolean }) => {
     const background = loadOpts?.background === true;
-    if (!token) return;
+    const authToken = tokenRef.current;
+    if (!authToken) {
+      stopGlobalLoading();
+      return;
+    }
 
     try {
       if (!background) setLoading(true);
 
       const fetchOpts = {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${authToken}` },
         timeout: API_TIMEOUT_MS,
       };
       const businessDate = getBusinessDateString();
@@ -9644,17 +9655,33 @@ const AdminDashboard = () => {
     return (
       <div className="flex min-h-screen flex-col bg-slate-50">
         <header className="h-14 shrink-0 border-b bg-white" />
-        <div className="flex flex-1 gap-4 p-4">
-          <aside className="w-56 shrink-0 animate-pulse rounded-lg bg-slate-200/60" />
-          <main className="min-w-0 flex-1 space-y-4">
-            <div className="h-8 w-56 animate-pulse rounded bg-slate-200/60" />
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-              {[1, 2, 3, 4].map(i => (
-                <div key={i} className="h-24 animate-pulse rounded-xl bg-slate-200/60" />
-              ))}
+        <div className="flex flex-1 flex-col gap-4 p-4">
+          <div
+            className="flex flex-col items-center justify-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50/80 py-6 sm:flex-row sm:gap-4"
+            role="status"
+            aria-live="polite"
+            aria-label="Loading dashboard"
+          >
+            <RefreshCw className="h-8 w-8 shrink-0 animate-spin text-emerald-600" />
+            <div className="text-center sm:text-left">
+              <p className="text-sm font-semibold text-emerald-900">Loading your dashboard</p>
+              <p className="text-muted-foreground text-xs">
+                Fetching menu, orders, and reports — this can take a moment on a cold server.
+              </p>
             </div>
-            <div className="h-80 animate-pulse rounded-xl bg-slate-200/60" />
-          </main>
+          </div>
+          <div className="flex flex-1 gap-4">
+            <aside className="w-56 shrink-0 animate-pulse rounded-lg bg-slate-200/60" />
+            <main className="min-w-0 flex-1 space-y-4">
+              <div className="h-8 w-56 animate-pulse rounded bg-slate-200/60" />
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                {[1, 2, 3, 4].map(i => (
+                  <div key={i} className="h-24 animate-pulse rounded-xl bg-slate-200/60" />
+                ))}
+              </div>
+              <div className="h-80 animate-pulse rounded-xl bg-slate-200/60" />
+            </main>
+          </div>
         </div>
       </div>
     );

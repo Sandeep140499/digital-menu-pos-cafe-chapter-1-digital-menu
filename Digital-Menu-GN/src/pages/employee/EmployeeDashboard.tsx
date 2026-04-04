@@ -1703,6 +1703,12 @@ const EmployeeDashboard = () => {
 
   const { stopGlobalLoading } = useGlobalLoading();
 
+  useEffect(() => {
+    if (!token || !ready) return;
+    const id = window.setTimeout(() => stopGlobalLoading(), 120_000);
+    return () => window.clearTimeout(id);
+  }, [token, ready, stopGlobalLoading]);
+
   const mergeOrders = useCallback((prev: Order[], next: Order[]) => {
     if (prev.length === 0) return next;
     const prevById = new Map(prev.map(o => [o.id, o]));
@@ -1937,12 +1943,14 @@ const EmployeeDashboard = () => {
     if (!ready) return;
     if (!token) {
       setOrdersSnapshotLoading(false);
+      stopGlobalLoading();
       return;
     }
-    // Don't fetch while order popup is open – keeps cards stable
-    if (isOrderPopupOpen) return;
-
-    stopGlobalLoading();
+    // Don't fetch while order popup is open – keeps cards stable (still clear login overlay).
+    if (isOrderPopupOpen) {
+      stopGlobalLoading();
+      return;
+    }
 
     // With realtime socket events keeping the list fresh, do a single initial snapshot load
     // (no 10s polling). Shell stays interactive — only order tables show a loading state.

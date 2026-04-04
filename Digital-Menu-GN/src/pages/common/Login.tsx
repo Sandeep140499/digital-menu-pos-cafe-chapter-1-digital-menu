@@ -39,10 +39,10 @@ const Login = () => {
         className: 'border-emerald-500 bg-emerald-50 text-emerald-900 font-medium',
       });
 
+      // Keep the full-screen loader until the dashboard clears it after the first data load.
+      // Clearing here caused a long white/empty gap while many API calls ran (especially on cold backend).
+      startGlobalLoading('Loading workspace…');
       navigate(role === 'ADMIN' ? '/admin' : '/employee');
-      // Clear the full-screen overlay so the dashboard shell (and its own loaders) show.
-      // Dashboards still call stopGlobalLoading after first fetch (idempotent).
-      queueMicrotask(() => stopGlobalLoading());
     } catch (error: any) {
       stopGlobalLoading();
       toast({

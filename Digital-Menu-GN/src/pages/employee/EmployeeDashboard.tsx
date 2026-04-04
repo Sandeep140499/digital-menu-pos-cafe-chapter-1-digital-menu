@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useRef, useCallback, memo } from 'react';
 import DashboardShell from '@/components/dashboard/DashboardShell';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/hooks/useAuth';
-import { PageLoader, InlineLoader, LoadingButton } from '@/components/shared';
+import { LoadingButton } from '@/components/shared';
 import { io, type Socket } from 'socket.io-client';
 import {
   LayoutDashboard,
@@ -29,6 +29,7 @@ import {
   Minus,
   Trash2,
   Download,
+  Copy,
   Loader2,
   Package,
   CalendarDays,
@@ -1062,6 +1063,61 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
                   <Download className="mr-1 h-4 w-4" />
                   Download Invoice
                 </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    const relative = `${apiBase}/orders/${displayOrder.id}/invoice-pdf`;
+                    const absolute = new URL(relative, window.location.origin).toString();
+                    try {
+                      if (navigator.clipboard?.writeText) {
+                        await navigator.clipboard.writeText(absolute);
+                      } else {
+                        const ta = document.createElement('textarea');
+                        ta.value = absolute;
+                        ta.style.position = 'fixed';
+                        ta.style.left = '-9999px';
+                        document.body.appendChild(ta);
+                        ta.select();
+                        document.execCommand('copy');
+                        ta.remove();
+                      }
+                      toast.success('Invoice link copied.');
+                    } catch {
+                      toast.error('Could not copy link. Try Download Invoice instead.');
+                    }
+                  }}
+                >
+                  <Copy className="mr-1 h-4 w-4" />
+                  Copy Link
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(
+                        `${apiBase}/orders/${displayOrder.id}/whatsapp-invoice`,
+                        {
+                          method: 'GET',
+                        }
+                      );
+                      const data = (await res.json().catch(() => ({}))) as { waMeLink?: string };
+                      if (!res.ok || !data.waMeLink) {
+                        toast.error(
+                          (data as any)?.message ||
+                            'Customer name/mobile missing for this order. Add customer mobile then retry.'
+                        );
+                        return;
+                      }
+                      window.open(data.waMeLink, '_blank', 'noopener,noreferrer');
+                    } catch {
+                      toast.error('Could not open WhatsApp. Check connection and try again.');
+                    }
+                  }}
+                >
+                  Send on WhatsApp
+                </Button>
                 <Button variant="outline" onClick={() => onOpenChange(false)}>
                   Close
                 </Button>
@@ -1106,7 +1162,7 @@ function AddOrderSection({
 
   useEffect(() => {
     setMenuLoading(true);
-    fetch(`${apiBase}/menu`)
+    fetchWithTimeout(`${apiBase}/menu`)
       .then(r => r.json())
       .then(data => {
         const cats = Array.isArray(data) ? data : (data?.categories ?? []);
@@ -1553,8 +1609,8 @@ const EmployeeDashboard = () => {
   const [actionOrderId, setActionOrderId] = useState<number | null>(null);
   /** Only the card where Accept was clicked shows "Accepting..." – prevents other cards showing loading */
   const [acceptingOrderId, setAcceptingOrderId] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  /** True until the first `/orders/live` snapshot finishes (success or failure). */
+  const [ordersSnapshotLoading, setOrdersSnapshotLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<string>('dashboard');
   const [currentTime, setCurrentTime] = useState(new Date());
   const [popupCustomerName, setPopupCustomerName] = useState('');
@@ -1811,6 +1867,27 @@ const EmployeeDashboard = () => {
       // no-op
     });
 
+    // After reconnect, pull a fresh snapshot once (no polling).
+    s.on('connect', () => {
+      (async () => {
+        try {
+          const t = token;
+          if (!t) return;
+          if (isOrderPopupOpenRef.current) return;
+          const res = await fetchWithTimeout(`${apiBase}/orders/live`, {
+            headers: { Authorization: `Bearer ${t}` },
+            credentials: 'include',
+          });
+          if (!res.ok) return;
+          const data = await res.json();
+          if (isOrderPopupOpenRef.current) return;
+          setOrders(prev => mergeOrders(prev, data));
+        } catch {
+          // ignore
+        }
+      })();
+    });
+
     return () => {
       try {
         s.removeAllListeners();
@@ -1855,77 +1932,51 @@ const EmployeeDashboard = () => {
 
   useEffect(() => {
     if (!ready) return;
-    if (!token) return;
-    // Don't set up polling while order popup is open – keeps cards stable
+    if (!token) {
+      setOrdersSnapshotLoading(false);
+      return;
+    }
+    // Don't fetch while order popup is open – keeps cards stable
     if (isOrderPopupOpen) return;
 
-    async function loadOrders() {
+    stopGlobalLoading();
+
+    // With realtime socket events keeping the list fresh, do a single initial snapshot load
+    // (no 10s polling). Shell stays interactive — only order tables show a loading state.
+    setOrdersSnapshotLoading(true);
+    (async () => {
       if (isOrderPopupOpenRef.current) return;
       try {
-        let res = await fetch(`${apiBase}/orders/live`, {
-          headers: { Authorization: `Bearer ${token}` },
-          credentials: 'include',
-        });
-        if (res.status === 401) {
-          const nextToken = await refresh();
-          if (!nextToken) {
-            // Keep employee logged in during shift; don't force logout.
-            // Polling will retry next interval and realtime socket may still be connected.
-            return;
-          }
-          res = await fetch(`${apiBase}/orders/live`, {
-            headers: { Authorization: `Bearer ${nextToken}` },
+        let currentToken = token;
+        const doFetch = async (t: string) =>
+          fetchWithTimeout(`${apiBase}/orders/live`, {
+            headers: { Authorization: `Bearer ${t}` },
             credentials: 'include',
           });
-          if (res.status === 401) {
-            // Do not auto-logout; avoid kicking staff out mid-shift.
-            toast.error('Session refresh failed. Please try again in a moment.');
-            return;
+
+        let res = await doFetch(currentToken);
+        if (res.status === 401) {
+          const nextToken = await refresh();
+          if (nextToken) {
+            currentToken = nextToken;
+            res = await doFetch(currentToken);
           }
         }
-        if (!res.ok) {
-          setOrders(prev => (prev.length ? prev : []));
-          return;
-        }
+        if (!res.ok) return;
         const data = await res.json();
         if (isOrderPopupOpenRef.current) return;
         setOrders(prev => {
-          const canShowPopup =
-            hasCompletedFirstLoad.current &&
-            shiftActive &&
-            prev.length > 0 &&
-            data.length > prev.length &&
-            !pauseNewOrderPopup &&
-            !isShiftPaused;
-          if (canShowPopup) {
-            const prevIds = new Set(prev.map(o => o.id));
-            const newOrders = data.filter((d: Order) => !prevIds.has(d.id));
-            if (newOrders.length > 0) {
-              setNewOrderPopupOrders(popup => [...newOrders, ...popup]);
-              notifyNewOrders(newOrders.length);
-              setTimeout(() => toast.success(`${newOrders.length} new order(s) received.`), 100);
-            }
-          }
           const next = mergeOrders(prev, data);
           if (prev.length === 0 && next.length >= 0) hasCompletedFirstLoad.current = true;
           return next;
         });
       } catch {
-        setOrders(prev => (prev.length ? prev : []));
+        // ignore
       } finally {
-        setLoading(false);
-        setHasLoadedOnce(true);
-        // First employee dashboard load can clear the global loader from login
+        setOrdersSnapshotLoading(false);
         stopGlobalLoading();
       }
-    }
-
-    loadOrders();
-    const id = window.setInterval(() => {
-      if (isOrderPopupOpenRef.current) return;
-      loadOrders();
-    }, 10_000);
-    return () => window.clearInterval(id);
+    })();
   }, [ready, token, refresh, logout, isOrderPopupOpen]);
 
   useEffect(() => {
@@ -2494,18 +2545,28 @@ const EmployeeDashboard = () => {
     setIsOrderPopupOpen(true);
   }, []);
 
-  // Load menu once (for Add More Items inside order popup)
+  // Menu for "Add more items" — load only when the order popup opens (saves a heavy request on every visit).
   useEffect(() => {
+    if (!isOrderPopupOpen) return;
+    let cancelled = false;
     setMenuLoadingForEdits(true);
-    fetch(`${apiBase}/menu`)
+    fetchWithTimeout(`${apiBase}/menu`)
       .then(r => r.json())
       .then(data => {
+        if (cancelled) return;
         const cats = Array.isArray(data) ? data : (data?.categories ?? []);
         setMenuCategoriesForEdits(cats);
       })
-      .catch(() => setMenuCategoriesForEdits([]))
-      .finally(() => setMenuLoadingForEdits(false));
-  }, []);
+      .catch(() => {
+        if (!cancelled) setMenuCategoriesForEdits([]);
+      })
+      .finally(() => {
+        if (!cancelled) setMenuLoadingForEdits(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOrderPopupOpen]);
 
   const addItemToCart = useCallback(
     (item: { name: string; menuItemId?: number; unitPrice: number; variant?: 'HALF' | 'FULL' }) => {
@@ -3206,7 +3267,12 @@ const EmployeeDashboard = () => {
     );
   };
 
-  const renderOrderList = (data: Order[], title: string) => {
+  const renderOrderList = (
+    data: Order[],
+    title: string,
+    options?: { ordersLoading?: boolean }
+  ) => {
+    const ordersLoading = options?.ordersLoading;
     const isLiveOrders = title === 'Live Orders';
     const isCompletedSection = title === 'Completed Orders';
     const emptyState = isLiveOrders ? (
@@ -3291,7 +3357,15 @@ const EmployeeDashboard = () => {
         <CardContent className="px-4 pb-4 sm:px-6 sm:pb-6">
           {isLiveOrders ? (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
-              {data.length === 0 && <div className="col-span-full">{emptyState}</div>}
+              {ordersLoading && data.length === 0 ? (
+                <div className="col-span-full flex flex-col items-center justify-center gap-2 py-12 text-muted-foreground">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                  <p className="text-sm">Loading orders…</p>
+                </div>
+              ) : null}
+              {!ordersLoading && data.length === 0 && (
+                <div className="col-span-full">{emptyState}</div>
+              )}
               {data.map(order => (
                 <div key={order.id} className="min-w-0">
                   {renderOrderCard(order, {
@@ -3318,9 +3392,10 @@ const EmployeeDashboard = () => {
 
   // Memoize live orders section so it does not re-render when only currentTime (clock) updates – stops card flashing
   const liveOrdersSectionContent = useMemo(
-    () => renderOrderList(liveOrders, 'Live Orders'),
+    () => renderOrderList(liveOrders, 'Live Orders', { ordersLoading: ordersSnapshotLoading }),
     [
       liveOrders,
+      ordersSnapshotLoading,
       acceptingOrderId,
       actionOrderId,
       currentShift?.status,
@@ -5105,7 +5180,7 @@ const EmployeeDashboard = () => {
       <OrdersTableSection
         orders={completedOrders}
         title="Completed (Unpaid)"
-        loading={loading}
+        loading={ordersSnapshotLoading}
         showConfirmPayment={true}
         onViewOrder={openOrderPopup}
         onConfirmPayment={confirmPayment}
@@ -5117,7 +5192,7 @@ const EmployeeDashboard = () => {
     ),
     [
       completedOrders,
-      loading,
+      ordersSnapshotLoading,
       actionOrderId,
       openOrderPopup,
       confirmPayment,
@@ -5131,7 +5206,7 @@ const EmployeeDashboard = () => {
       <OrdersTableSection
         orders={pendingPayments}
         title="Pending Payments"
-        loading={loading}
+        loading={ordersSnapshotLoading}
         showConfirmPayment={true}
         onViewOrder={openOrderPopup}
         onConfirmPayment={confirmPayment}
@@ -5143,7 +5218,7 @@ const EmployeeDashboard = () => {
     ),
     [
       pendingPayments,
-      loading,
+      ordersSnapshotLoading,
       actionOrderId,
       openOrderPopup,
       confirmPayment,
@@ -5157,7 +5232,7 @@ const EmployeeDashboard = () => {
       <OrdersTableSection
         orders={paidOrders}
         title="Paid & Pending Orders"
-        loading={loading}
+        loading={ordersSnapshotLoading}
         showConfirmPayment={true}
         onViewOrder={openOrderPopup}
         onConfirmPayment={confirmPayment}
@@ -5169,7 +5244,7 @@ const EmployeeDashboard = () => {
     ),
     [
       paidOrders,
-      loading,
+      ordersSnapshotLoading,
       actionOrderId,
       openOrderPopup,
       confirmPayment,
@@ -5199,7 +5274,7 @@ const EmployeeDashboard = () => {
           <OrdersTableSection
             orders={allOrders}
             title="All Orders"
-            loading={loading}
+            loading={ordersSnapshotLoading}
             showConfirmPayment={true}
             onViewOrder={openOrderPopup}
             onConfirmPayment={confirmPayment}
@@ -5227,7 +5302,7 @@ const EmployeeDashboard = () => {
       shiftSectionContent,
       leaveSectionContent,
       profileSectionContent,
-      loading,
+      ordersSnapshotLoading,
       openOrderPopup,
       confirmPayment,
       actionOrderId,
@@ -5239,27 +5314,6 @@ const EmployeeDashboard = () => {
 
   const companyLogoUrl =
     typeof window !== 'undefined' ? window.localStorage.getItem('branch_logo_url') : null;
-
-  // Skeleton layout so UI feels fast – no blank full-page spinner
-  if (loading && !hasLoadedOnce) {
-    return (
-      <div className="flex min-h-screen flex-col bg-slate-50">
-        <header className="h-14 shrink-0 border-b bg-white" />
-        <div className="flex flex-1 gap-4 p-4">
-          <aside className="w-52 shrink-0 animate-pulse rounded-lg bg-slate-200/60" />
-          <main className="min-w-0 flex-1 space-y-4">
-            <div className="h-8 w-48 animate-pulse rounded bg-slate-200/60" />
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-              {[1, 2, 3, 4].map(i => (
-                <div key={i} className="h-24 animate-pulse rounded-xl bg-slate-200/60" />
-              ))}
-            </div>
-            <div className="h-64 animate-pulse rounded-xl bg-slate-200/60" />
-          </main>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <DashboardShell
@@ -5276,20 +5330,7 @@ const EmployeeDashboard = () => {
       sidebarBadges={liveOrders.length > 0 ? { live: liveOrders.length } : undefined}
       companyLogoUrl={companyLogoUrl || undefined}
     >
-      {/* Show page loader when loading initial data */}
-      {loading && !hasLoadedOnce && (
-        <PageLoader loading text="Loading dashboard..." className="min-h-96" />
-      )}
-      
-      <div className="relative">
-        {/* Show inline loader for data refreshes */}
-        {loading && hasLoadedOnce && (
-          <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm border-b">
-            <InlineLoader loading text="Refreshing data..." />
-          </div>
-        )}
-        {content}
-      </div>
+      <div className="relative">{content}</div>
       <NewOrderPopupDialog />
       <StartShiftPromptDialog />
       <OrderPopupDialogView

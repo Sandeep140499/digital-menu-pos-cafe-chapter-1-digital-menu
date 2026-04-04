@@ -4,6 +4,7 @@ import type { Order, PaymentRecord, ErrorLog } from '@prisma/client';
 import { prisma } from '../../config/prisma.js';
 import { authenticate, requireRole } from '../../middleware/auth.js';
 import { getPublicMenuViewCount } from '../../services/publicTraffic.js';
+import { cacheMiddleware } from '../../services/cache.js';
 import {
   getFromAddress,
   isMailConfigured,
@@ -130,7 +131,8 @@ configRouter.get('/public-traffic', authenticate, requireRole('ADMIN'), (_req, r
 });
 
 // Public: branch contact for menu (Call / WhatsApp) and branch id for placing orders
-configRouter.get('/branch-contact', async (_req, res) => {
+// Cache briefly: reduces DB load under customer traffic while keeping "orderingOpen" responsive.
+configRouter.get('/branch-contact', cacheMiddleware(10, ['public', 'branch-contact']), async (_req, res) => {
   const branch = await prisma.branch.findFirst({
     select: {
       id: true,
@@ -212,7 +214,8 @@ configRouter.get('/employee-settings', authenticate, requireRole('EMPLOYEE'), as
 });
 
 // Public: lightweight settings for customer UI
-configRouter.get('/public-settings', async (_req, res) => {
+// Cache: branch setting changes rarely; safe to cache longer.
+configRouter.get('/public-settings', cacheMiddleware(300, ['public', 'public-settings']), async (_req, res) => {
   const branch = await prisma.branch.findFirst({
     select: { showTotalAmountToCustomers: true },
   });

@@ -557,17 +557,18 @@ orderRouter.get('/:id/invoice-pdf', async (req, res) => {
     const pdfBytes = await generateOrderInvoicePdf({
       id: order.id,
       createdAt: order.createdAt,
-      totalAmount: order.totalAmount,
+      // Defensive: older data / migrations can leave nulls; PDF must still render.
+      totalAmount: Number((order as any).totalAmount ?? 0),
       status: statusMap[order.status] ?? order.status,
       paymentStatus: paymentMap[order.paymentStatus] ?? order.paymentStatus,
-      customerName: order.customerName,
-      customerMobile: order.customerMobile,
+      customerName: order.customerName ?? null,
+      customerMobile: order.customerMobile ?? null,
       tableNumber,
       orderType,
       items: order.items.map(i => ({
-        name: i.name,
-        quantity: i.quantity,
-        price: i.price,
+        name: String(i.name ?? ''),
+        quantity: Number((i as any).quantity ?? 0),
+        price: Number((i as any).price ?? 0),
         variant: i.variant,
         isRemoved: i.isRemoved,
       })),
@@ -638,17 +639,24 @@ orderRouter.get('/session', async (req, res) => {
 
 // Admin: unique customer mobiles (for new item broadcast)
 orderRouter.get('/customer-mobiles', authenticate, requireRole('ADMIN'), async (_req, res) => {
-  const orders = await prisma.order.findMany({
+  // IMPORTANT: do not load all orders into memory.
+  // We only need distinct mobiles; use `distinct` + newest order first to prefer latest name.
+  const rows = await prisma.order.findMany({
     where: { customerMobile: { not: null } },
-    select: { customerMobile: true, customerName: true },
+    orderBy: { createdAt: 'desc' },
+    distinct: ['customerMobile'],
+    select: { customerMobile: true, customerName: true, createdAt: true },
+    take: 100_000, // safety cap; distinct keeps this far smaller in practice
   });
+
   const seen = new Set<string>();
   const mobiles: { mobile: string; name: string | null }[] = [];
-  for (const o of orders) {
-    const m = o.customerMobile!.replace(/\D/g, '').slice(-10);
-    if (m.length === 10 && !seen.has(m)) {
+  for (const o of rows) {
+    const raw = String(o.customerMobile || '');
+    const m = raw.replace(/\D/g, '').slice(-10);
+    if (m.length === 10 && /^[6-9]/.test(m) && !seen.has(m)) {
       seen.add(m);
-      mobiles.push({ mobile: m, name: o.customerName });
+      mobiles.push({ mobile: m, name: o.customerName ?? null });
     }
   }
   return res.json({ mobiles, count: mobiles.length });
@@ -791,16 +799,33 @@ orderRouter.get('/all', authenticate, requireRole('ADMIN'), async (req, res) => 
     where.tableId = Number(tableId);
   }
 
-  const orders = await prisma.order.findMany({
-    where,
-    orderBy: { createdAt: 'desc' },
-    include: {
-      items: { include: { menuItem: true } },
-      table: true,
-      employee: true,
-      branch: true,
-    },
-  });
+  // Pagination/limits (protect production DB + API).
+  // Backward compatible: if caller doesn't pass pagination, we still return a single page,
+  // with a generous default for "daily dashboard".
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const pageSizeRaw = Number(req.query.pageSize ?? req.query.limit ?? 500);
+  const pageSize = Math.min(Math.max(pageSizeRaw || 500, 1), 2000);
+  const skip = (page - 1) * pageSize;
+
+  const [totalCount, orders] = await Promise.all([
+    prisma.order.count({ where }),
+    prisma.order.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: pageSize,
+      include: {
+        // Keep payload reasonable: `menuItem` can be large; include only minimal fields.
+        items: {
+          orderBy: { id: 'asc' },
+          include: { menuItem: { select: { id: true, name: true, categoryId: true } } },
+        },
+        table: true,
+        employee: true,
+        branch: true,
+      },
+    }),
+  ]);
 
   // Group by table
   const byTable = new Map();
@@ -829,6 +854,11 @@ orderRouter.get('/all', authenticate, requireRole('ADMIN'), async (req, res) => 
     orders,
     byTable: Array.from(byTable.values()),
     count: orders.length,
+    totalCount,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(totalCount / pageSize)),
+    truncated: totalCount > orders.length && page === 1 && skip === 0,
     summary: {
       totalOrders,
       pendingOrders,
@@ -842,69 +872,55 @@ orderRouter.get('/customer-leaderboard', authenticate, requireRole('ADMIN'), asy
   const { limit = '20', sortBy = 'orders' } = req.query;
   const limitNum = Math.min(Math.max(Number(limit) || 20, 1), 100);
 
-  const orders = await prisma.order.findMany({
+  // Use DB aggregation; do NOT pull all orders into Node.
+  const grouped = await prisma.order.groupBy({
+    by: ['customerMobile'],
     where: { customerMobile: { not: null } },
-    select: {
-      customerName: true,
-      customerMobile: true,
-      totalAmount: true,
-      createdAt: true,
-    },
-    orderBy: { createdAt: 'desc' },
+    _count: { _all: true },
+    _sum: { totalAmount: true },
+    _max: { createdAt: true },
   });
 
-  const byMobile = new Map<
-    string,
-    {
-      customerName: string | null;
-      totalOrders: number;
-      totalSpent: number;
-      lastOrderDate: string | null;
-    }
-  >();
-  for (const o of orders) {
-    const mobile = (o.customerMobile || '').trim();
-    if (!mobile) continue;
-    const existing = byMobile.get(mobile);
-    const name = (o.customerName || '').trim() || null;
-    const createdAt = o.createdAt?.toISOString?.() ?? null;
-    if (!existing) {
-      byMobile.set(mobile, {
-        customerName: name,
-        totalOrders: 1,
-        totalSpent: o.totalAmount ?? 0,
-        lastOrderDate: createdAt,
-      });
-    } else {
-      existing.totalOrders += 1;
-      existing.totalSpent += o.totalAmount ?? 0;
-      if (createdAt && (!existing.lastOrderDate || createdAt > existing.lastOrderDate)) {
-        existing.lastOrderDate = createdAt;
-      }
-      if (name) existing.customerName = name;
-    }
-  }
+  const top = grouped
+    .map(g => ({
+      customerMobile: String(g.customerMobile || '').trim(),
+      totalOrders: g._count?._all ?? 0,
+      totalSpent: Number(g._sum?.totalAmount ?? 0),
+      lastOrderDate: g._max?.createdAt ? new Date(g._max.createdAt).toISOString() : null,
+    }))
+    .filter(r => r.customerMobile.length > 0)
+    .sort((a, b) => {
+      if (sortBy === 'amount') return b.totalSpent - a.totalSpent;
+      return b.totalOrders - a.totalOrders;
+    })
+    .slice(0, limitNum);
 
-  const toDisplayName = (name: string | null): string => {
+  // Fetch latest known name for these mobiles (distinct by mobile).
+  const mobiles = top.map(t => t.customerMobile);
+  const latestNames = mobiles.length
+    ? await prisma.order.findMany({
+        where: { customerMobile: { in: mobiles } },
+        orderBy: { createdAt: 'desc' },
+        distinct: ['customerMobile'],
+        select: { customerMobile: true, customerName: true },
+        take: mobiles.length,
+      })
+    : [];
+  const nameByMobile = new Map(
+    latestNames.map(r => [String(r.customerMobile || '').trim(), (r.customerName || '').trim()] as const)
+  );
+
+  const toDisplayName = (name: string | null | undefined): string => {
     const s = (name || '').trim();
     return s === '' ? '—' : s.toUpperCase();
   };
-  let list = Array.from(byMobile.entries()).map(([mobile, data]) => ({
-    customerMobile: mobile,
-    customerName: toDisplayName(data.customerName),
-    totalOrders: data.totalOrders,
-    totalSpent: data.totalSpent,
-    lastOrderDate: data.lastOrderDate,
-  }));
 
-  if (sortBy === 'amount') {
-    list.sort((a, b) => b.totalSpent - a.totalSpent);
-  } else {
-    list.sort((a, b) => b.totalOrders - a.totalOrders);
-  }
-  list = list.slice(0, limitNum);
-
-  return res.json({ leaderboard: list });
+  return res.json({
+    leaderboard: top.map(r => ({
+      ...r,
+      customerName: toDisplayName(nameByMobile.get(r.customerMobile) || null),
+    })),
+  });
 });
 
 // Employee: accept order (first to click gets it; locks order to this employee)

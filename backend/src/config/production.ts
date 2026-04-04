@@ -40,6 +40,7 @@ export interface ProductionConfig {
   // Security
   security: {
     jwtExpiration: string;
+    employeeJwtExpiration: string;
     refreshTokenExpiration: string;
     bcryptRounds: number;
     sessionTimeout: number;
@@ -90,7 +91,10 @@ export const productionConfig: ProductionConfig = {
   },
 
   security: {
-    jwtExpiration: process.env.JWT_EXPIRES_IN || '15m',
+    // Align with src/config/auth.ts (JWT_ACCESS_EXPIRES_IN / JWT_EMPLOYEE_ACCESS_EXPIRES_IN).
+    jwtExpiration: process.env.JWT_ACCESS_EXPIRES_IN || process.env.JWT_EXPIRES_IN || '15m',
+    employeeJwtExpiration:
+      process.env.JWT_EMPLOYEE_ACCESS_EXPIRES_IN || '12h',
     refreshTokenExpiration: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
     bcryptRounds: Number(process.env.BCRYPT_ROUNDS) || 12,
     sessionTimeout: Number(process.env.SESSION_TIMEOUT) || 1800000, // 30 minutes

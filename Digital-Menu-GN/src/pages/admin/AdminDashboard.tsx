@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback, memo, useRef } from 'react';
 import React from 'react';
+import { io, type Socket } from 'socket.io-client';
 import DashboardShell from '@/components/dashboard/DashboardShell';
 import MonthlyTargetSetup from '@/components/MonthlyTargetSetup';
 import { useToast } from '@/hooks/use-toast';
@@ -47,6 +48,7 @@ import {
   MinusCircle,
   X,
   Lock,
+  Copy,
 } from 'lucide-react';
 import { useGlobalLoading } from '@/components/GlobalLoadingProvider';
 import {
@@ -3372,6 +3374,8 @@ const AdminDashboard = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [itemSales, setItemSales] = useState<ItemSales[]>([]);
   const [employeeSales, setEmployeeSales] = useState<EmployeeSales[]>([]);
+  const socketRef = useRef<Socket | null>(null);
+  const [newOrdersBadge, setNewOrdersBadge] = useState(0);
 
   // Form states
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
@@ -3750,40 +3754,90 @@ const AdminDashboard = () => {
     isOrderDialogOpenRef.current = isOrderDialogOpen;
   }, [isOrderDialogOpen]);
 
+  // Realtime live-orders updates (Socket.IO). Only active on Overview to avoid background traffic.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!ready) return;
+    if (!token) return;
+    if (activeSection !== 'overview') return;
+
+    const socketBaseUrl = API_BASE_URL.startsWith('http')
+      ? API_BASE_URL.replace(/\/api\/?$/, '')
+      : window.location.origin;
+
+    const s = io(socketBaseUrl, {
+      path: '/socket.io',
+      withCredentials: true,
+      auth: { token },
+      transports: ['websocket', 'polling'],
+    });
+    socketRef.current = s;
+
+    const upsert = (o: Order) => {
+      if (!o || typeof (o as any).id !== 'number') return;
+      setOrders(prev => {
+        const idx = prev.findIndex(p => p.id === o.id);
+        if (idx >= 0) {
+          const copy = prev.slice();
+          copy[idx] = { ...copy[idx], ...o };
+          return copy;
+        }
+        return [...prev, o];
+      });
+    };
+
+    s.on('order:new', (o: Order) => {
+      upsert(o);
+      setNewOrdersBadge(n => n + 1);
+      toast({
+        title: 'New order received',
+        description: `Order #${(o as any).id ?? ''}`.trim(),
+        className: 'border-emerald-500 bg-emerald-50 text-emerald-900 font-medium',
+      });
+    });
+
+    s.on('order:updated', (o: Order) => {
+      upsert(o);
+    });
+
+    s.on('order:modified', (o: Order) => {
+      upsert(o);
+    });
+
+    // Ensure we have the latest snapshot after (re)connect without polling.
+    s.on('connect', () => {
+      try {
+        // Only refresh on Overview and when allowed by existing toggle.
+        if (!isOrderDialogOpenRef.current && autoRefreshEnabled) {
+          // Background refresh: do not block the UI (no full-screen overlay / loading flag).
+          void loadDashboardData({ background: true });
+          setNewOrdersBadge(0);
+        }
+      } catch {
+        // ignore
+      }
+    });
+
+    return () => {
+      try {
+        s.removeAllListeners();
+        s.disconnect();
+      } catch {
+        // ignore
+      }
+      if (socketRef.current === s) socketRef.current = null;
+    };
+  }, [activeSection, ready, toast, token, autoRefreshEnabled]);
+
   useEffect(() => {
     if (!token) return;
     if (isOrderDialogOpen) return;
-    loadDashboardData();
-    const refreshOrdersOnly = async () => {
-      if (!token || isOrderDialogOpenRef.current) return;
-      try {
-        const res = await fetchWithTimeout(`${apiBase}/orders/live`, {
-          headers: { Authorization: `Bearer ${token}` },
-          timeout: 10000,
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (isOrderDialogOpenRef.current) return;
-          setOrders(prev => {
-            if (!Array.isArray(prev) || prev.length !== data.length) return data;
-            const prevIds = prev
-              .map((o: Order) => o.id)
-              .sort()
-              .join(',');
-            const nextIds = data
-              .map((o: Order) => o.id)
-              .sort()
-              .join(',');
-            return prevIds === nextIds ? prev : data;
-          });
-        }
-      } catch {
-        /* ignore */
-      }
-    };
-    const interval = setInterval(refreshOrdersOnly, 10000);
-    return () => clearInterval(interval);
-  }, [token, isOrderDialogOpen]);
+    // Avoid background traffic: only auto-load on Overview.
+    if (activeSection === 'overview') {
+      loadDashboardData();
+      setNewOrdersBadge(0);
+    }
+  }, [token, isOrderDialogOpen, activeSection, autoRefreshEnabled]);
 
   // Calculate today's stats
   const todayStats: TodayStats = useMemo(() => {
@@ -3818,13 +3872,14 @@ const AdminDashboard = () => {
     };
   }, [orders, employees, itemSales]);
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = async (loadOpts?: { background?: boolean }) => {
+    const background = loadOpts?.background === true;
     if (!token) return;
 
     try {
-      setLoading(true);
+      if (!background) setLoading(true);
 
-      const opts = {
+      const fetchOpts = {
         headers: { Authorization: `Bearer ${token}` },
         timeout: API_TIMEOUT_MS,
       };
@@ -3857,7 +3912,7 @@ const AdminDashboard = () => {
       for (let i = 0; i < requests.length; i += PARALLEL_BATCH) {
         const batch = requests.slice(i, i + PARALLEL_BATCH);
         const batchResults = await Promise.allSettled(
-          batch.map(r => fetchWithTimeoutRetry(r.url, opts))
+          batch.map(r => fetchWithTimeoutRetry(r.url, fetchOpts))
         );
         results.push(...batchResults);
       }
@@ -3941,10 +3996,7 @@ const AdminDashboard = () => {
         // Transient 503/timeouts must not wipe the list — branches may still exist in the DB.
         setBranchesListUnavailable(true);
         try {
-          const retry = await fetchWithTimeoutRetry(`${apiBase}/branches`, {
-            headers: { Authorization: `Bearer ${token}` },
-            timeout: API_TIMEOUT_MS,
-          });
+          const retry = await fetchWithTimeoutRetry(`${apiBase}/branches`, fetchOpts);
           if (retry.ok) {
             const branchList = parseBranchesPayload(await retry.json());
             setBranches(branchList);
@@ -4115,7 +4167,7 @@ const AdminDashboard = () => {
       }
 
       const failedForToast = failed.filter(k => k !== 'branches');
-      if (failedForToast.length > 0) {
+      if (!background && failedForToast.length > 0) {
         toast({
           title: 'Dashboard partially loaded',
           description: `Some data could not be loaded (${failedForToast.join(', ')}). Please refresh.`,
@@ -4123,16 +4175,18 @@ const AdminDashboard = () => {
         });
       }
     } catch (error) {
-      const isTimeout = error instanceof Error && error.name === 'AbortError';
-      toast({
-        title: 'Error',
-        description: isTimeout
-          ? 'Request timed out. The server may be slow—try again.'
-          : 'Failed to load dashboard data',
-        variant: 'destructive',
-      });
+      if (!background) {
+        const isTimeout = error instanceof Error && error.name === 'AbortError';
+        toast({
+          title: 'Error',
+          description: isTimeout
+            ? 'Request timed out. The server may be slow—try again.'
+            : 'Failed to load dashboard data',
+          variant: 'destructive',
+        });
+      }
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
       setHasLoadedOnce(true);
       // First dashboard load (admin) can clear the global loader shown from login
       stopGlobalLoading();
@@ -5287,18 +5341,22 @@ const AdminDashboard = () => {
   }, [token, activeSection, loadLeaderboard]);
 
   useEffect(() => {
-    if (token) loadPendingQueriesCount();
+    // Only fetch when user is actually looking at the "Raised Requests" section.
+    // Requirement: avoid background polling for unrelated screens.
+    if (token && activeSection === 'customer-queries') loadPendingQueriesCount();
   }, [token, loadPendingQueriesCount]);
 
   useEffect(() => {
-    if (!token) return;
-    const interval = setInterval(loadPendingQueriesCount, 60000);
-    return () => clearInterval(interval);
-  }, [token, loadPendingQueriesCount]);
+    // Disable background polling (bandwidth + rate limit). Use on-demand fetch instead.
+    return;
+  }, []);
 
   // Load notifications on mount and poll for admin (new orders, status updates). Respect "Clear all" (persisted in localStorage).
   useEffect(() => {
+    // Requirement: the ONLY auto-updating API should be live orders, only on live screen.
+    // So notifications are fetched only when user is on Overview or opens the Notifications UI.
     if (!token) return;
+    if (activeSection !== 'overview') return;
     const fetchNotifications = async () => {
       try {
         const res = await fetch(`${apiBase}/config/notifications`, {
@@ -5320,19 +5378,14 @@ const AdminDashboard = () => {
       } catch (_) {}
     };
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 25000);
-    return () => clearInterval(interval);
-  }, [token]);
+    return () => {};
+  }, [token, activeSection]);
 
   // Auto refresh orders every 10 seconds when on orders page – skip while order dialog is open to keep popup stable
   useEffect(() => {
-    if (activeSection !== 'orders') return;
-    const interval = setInterval(() => {
-      if (isOrderDialogOpenRef.current) return;
-      loadAllOrders();
-    }, 10000);
-    return () => clearInterval(interval);
-  }, [activeSection, orderDateFilter, orderTableFilter, isOrderDialogOpen]);
+    // Requirement: disable non-live auto-refresh. All Orders should be manual refresh/filter-driven.
+    return;
+  }, []);
 
   // ============ SECTIONS ============
 
@@ -9632,14 +9685,6 @@ const AdminDashboard = () => {
             </AlertDescription>
           </Alert>
         )}
-        {loading && hasLoadedOnce && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/40 backdrop-blur-sm">
-            <div className="flex flex-col items-center gap-3 rounded-xl border border-slate-200 bg-white/80 px-5 py-4 shadow-lg">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
-              <p className="text-sm text-slate-600">Loading data…</p>
-            </div>
-          </div>
-        )}
         {mainSectionContent}
       </div>
 
@@ -9761,24 +9806,102 @@ const AdminDashboard = () => {
 
                   {/* Invoice download */}
                   <div className="pt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                      onClick={() => {
-                        const url = `${apiBase}/orders/${displayOrder.id}/invoice-pdf`;
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.target = '_blank';
-                        a.rel = 'noopener noreferrer';
-                        document.body.appendChild(a);
-                        a.click();
-                        a.remove();
-                      }}
-                    >
-                      <Download className="h-4 w-4" />
-                      Download Invoice
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                        onClick={() => {
+                          const url = `${apiBase}/orders/${displayOrder.id}/invoice-pdf`;
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.target = '_blank';
+                          a.rel = 'noopener noreferrer';
+                          document.body.appendChild(a);
+                          a.click();
+                          a.remove();
+                        }}
+                      >
+                        <Download className="h-4 w-4" />
+                        Download Invoice
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-2"
+                        onClick={async () => {
+                          try {
+                            const res = await fetch(
+                              `${apiBase}/orders/${displayOrder.id}/whatsapp-invoice`,
+                              { method: 'GET' }
+                            );
+                            const data = (await res.json().catch(() => ({}))) as {
+                              waMeLink?: string;
+                              message?: string;
+                            };
+                            if (!res.ok || !data.waMeLink) {
+                              toast({
+                                title: 'Cannot send invoice',
+                                description:
+                                  data.message ||
+                                  'Customer name/mobile missing for this order. Add customer mobile then retry.',
+                                variant: 'destructive',
+                              });
+                              return;
+                            }
+                            window.open(data.waMeLink, '_blank', 'noopener,noreferrer');
+                          } catch {
+                            toast({
+                              title: 'WhatsApp failed',
+                              description: 'Could not open WhatsApp. Check connection and try again.',
+                              variant: 'destructive',
+                            });
+                          }
+                        }}
+                      >
+                        Send on WhatsApp
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-2"
+                        onClick={async () => {
+                          const relative = `${apiBase}/orders/${displayOrder.id}/invoice-pdf`;
+                          const absolute = new URL(relative, window.location.origin).toString();
+                          try {
+                            if (navigator.clipboard?.writeText) {
+                              await navigator.clipboard.writeText(absolute);
+                            } else {
+                              const ta = document.createElement('textarea');
+                              ta.value = absolute;
+                              ta.style.position = 'fixed';
+                              ta.style.left = '-9999px';
+                              document.body.appendChild(ta);
+                              ta.select();
+                              document.execCommand('copy');
+                              ta.remove();
+                            }
+                            toast({
+                              title: 'Copied',
+                              description: 'Invoice link copied to clipboard.',
+                              className:
+                                'border-emerald-500 bg-emerald-50 text-emerald-900 font-medium',
+                            });
+                          } catch {
+                            toast({
+                              title: 'Copy failed',
+                              description: 'Could not copy link. Use Download Invoice instead.',
+                              variant: 'destructive',
+                            });
+                          }
+                        }}
+                      >
+                        <Copy className="h-4 w-4" />
+                        Copy Link
+                      </Button>
+                    </div>
                   </div>
 
                   {displayOrder.status !== 'ORDER_COMPLETE' && selectedOrder && (

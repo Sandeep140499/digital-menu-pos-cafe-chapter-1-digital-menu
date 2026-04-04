@@ -69,11 +69,16 @@ async function authFetch(path: string, init: RequestInit = {}) {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null;
-    return window.sessionStorage.getItem(TOKEN_KEY);
+    // Access tokens are short-lived; we prefer restoring via refresh cookie on boot.
+    // Keep a localStorage fallback for legacy deployments and offline reloads.
+    return window.localStorage.getItem(TOKEN_KEY) || window.sessionStorage.getItem(TOKEN_KEY);
   });
   const [role, setRole] = useState<AuthRole | null>(() => {
     if (typeof window === 'undefined') return null;
-    return (window.sessionStorage.getItem(ROLE_KEY) as AuthRole | null) ?? null;
+    return (
+      (window.localStorage.getItem(ROLE_KEY) as AuthRole | null) ??
+      ((window.sessionStorage.getItem(ROLE_KEY) as AuthRole | null) ?? null)
+    );
   });
   const [ready, setReady] = useState(false);
   const refreshing = useRef<Promise<string | null> | null>(null);
@@ -82,9 +87,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const setSession = useCallback((t: string | null, r: AuthRole | null) => {
     if (typeof window !== 'undefined') {
       if (t) {
+        // Persist across refresh/tab close so UX doesn't depend on sessionStorage lifetime.
+        window.localStorage.setItem(TOKEN_KEY, t);
         window.sessionStorage.setItem(TOKEN_KEY, t);
-        if (r) window.sessionStorage.setItem(ROLE_KEY, r);
+        if (r) {
+          window.localStorage.setItem(ROLE_KEY, r);
+          window.sessionStorage.setItem(ROLE_KEY, r);
+        }
       } else {
+        window.localStorage.removeItem(TOKEN_KEY);
+        window.localStorage.removeItem(ROLE_KEY);
         window.sessionStorage.removeItem(TOKEN_KEY);
         window.sessionStorage.removeItem(ROLE_KEY);
       }
@@ -101,8 +113,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!readCookie('csrf')) return null;
       const res = await authFetch('/auth/refresh', { method: 'POST' });
       if (!res.ok) {
-        // Important: if refresh cookies aren't present (or CSRF fails),
-        // do NOT wipe an existing access token. That would change legacy behavior.
+        // If refresh token is invalid/expired, backend will return 401 (and clear cookies).
+        // That is the only time we should invalidate the session client-side.
+        if (res.status === 401) {
+          setSession(null, null);
+        }
         return null;
       }
       const data = (await res.json()) as { accessToken: string; role: AuthRole };
@@ -162,6 +177,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (token) setReady(true);
     void refresh().catch(() => setReady(true));
   }, [refresh, token]);
+
+  /**
+   * Keep access token fresh while the app is open (especially staff taking orders).
+   * Without this, short JWTs expire → API 401 and Socket.IO stops joining branch rooms.
+   */
+  useEffect(() => {
+    if (!token || !ready) return;
+    const intervalMs = (() => {
+      try {
+        const part = token.split('.')[1];
+        if (!part) return 8 * 60_000;
+        const json = atob(part.replace(/-/g, '+').replace(/_/g, '/'));
+        const exp = (JSON.parse(json) as { exp?: number }).exp;
+        if (typeof exp !== 'number') return 8 * 60_000;
+        const ttlMs = exp * 1000 - Date.now();
+        if (ttlMs <= 0) return 60_000;
+        // Refresh at ~1/3 of remaining lifetime, between 2m and 10m.
+        const third = Math.floor(ttlMs / 3);
+        return Math.min(10 * 60_000, Math.max(2 * 60_000, third));
+      } catch {
+        return 8 * 60_000;
+      }
+    })();
+    const id = window.setInterval(() => {
+      void refresh();
+    }, intervalMs);
+    return () => window.clearInterval(id);
+  }, [token, ready, refresh]);
+
+  // When returning to the tab, refresh once so a stale token is fixed before the next order action.
+  useEffect(() => {
+    if (!token || !ready) return;
+    const onVis = () => {
+      if (document.visibilityState !== 'visible') return;
+      void refresh();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [token, ready, refresh]);
 
   const value = useMemo<AuthContextValue>(() => {
     const isAdmin = role === 'ADMIN';

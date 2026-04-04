@@ -5,6 +5,7 @@ import { isMailConfigured, sendEmail } from '../../config/mailer.js';
 import { authenticate, requireRole } from '../../middleware/auth.js';
 import { getPublicMenuViewCount } from '../../services/publicTraffic.js';
 import { computeMonthlyMetrics } from '../../services/monthlyRevenueSnapshot.js';
+import { cacheMiddleware } from '../../services/cache.js';
 import {
   avgOrdersPerDayForIncompleteMonth,
   getCalendarMonthBoundsForNow,
@@ -187,6 +188,7 @@ reportRouter.get(
   '/monthly-revenue-snapshots',
   authenticate,
   requireRole('ADMIN'),
+  cacheMiddleware(300, ['reports', 'monthly-revenue-snapshots']),
   async (_req, res) => {
     const rows = await prisma.monthlyRevenueSnapshot.findMany({
       orderBy: [{ year: 'desc' }, { month: 'desc' }],
@@ -235,6 +237,7 @@ reportRouter.get(
   '/monthly-target/current',
   authenticate,
   requireRole('ADMIN'),
+  cacheMiddleware(60, ['reports', 'monthly-target-current']),
   async (_req, res) => {
     const now = new Date();
     const year = now.getFullYear();

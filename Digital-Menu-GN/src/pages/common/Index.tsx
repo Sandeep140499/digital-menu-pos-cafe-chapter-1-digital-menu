@@ -876,6 +876,7 @@ const Index = () => {
 
   const [menuLoadError, setMenuLoadError] = useState<string | null>(null);
   const MENU_CACHE_KEY = 'dm_public_menu_cache_v1';
+  const MENU_CACHE_TTL_MS = 5 * 60_000; // 5 minutes
 
   // Hydrate from last saved menu immediately (fast first paint), then refresh from server.
   useEffect(() => {
@@ -883,9 +884,13 @@ const Index = () => {
       const raw = window.localStorage.getItem(MENU_CACHE_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw) as {
+        ts?: number;
         categories?: any[];
         bestSellerItemIds?: number[];
       };
+      // If cache is very old, don't show it (avoid "stale menu" UX).
+      const ts = typeof parsed.ts === 'number' ? parsed.ts : 0;
+      if (ts && Date.now() - ts > MENU_CACHE_TTL_MS) return;
       if (Array.isArray(parsed.categories) && parsed.categories.length > 0) {
         menuCategoriesRef.current = parsed.categories;
         setMenuCategories(parsed.categories);
@@ -1053,7 +1058,8 @@ const Index = () => {
             const delay = Math.min(30_000, 1500 + attempts * 1500);
             if (retryRef.current.contactTimer) window.clearTimeout(retryRef.current.contactTimer);
             retryRef.current.contactTimer = window.setTimeout(() => {
-              void fetchBranchContact(false);
+              // Silent retry: avoid flipping the whole page into a loading state on backoff.
+              void fetchBranchContact(true);
             }, delay);
           }
           return;
@@ -1093,7 +1099,7 @@ const Index = () => {
         const delay = Math.min(30_000, 2000 + attempts * 1500);
         if (retryRef.current.contactTimer) window.clearTimeout(retryRef.current.contactTimer);
         retryRef.current.contactTimer = window.setTimeout(() => {
-          void fetchBranchContact(false);
+          void fetchBranchContact(true);
         }, delay);
       } finally {
         if (!silent) {
@@ -1110,9 +1116,8 @@ const Index = () => {
 
   const branchContactPollRef = useRef<number | null>(null);
   useEffect(() => {
-    branchContactPollRef.current = window.setInterval(() => {
-      void fetchBranchContact(true);
-    }, 30_000); // Poll every 30 seconds for faster status updates
+    // Requirement: avoid background polling for non-live screens.
+    // Branch contact is mostly static; we refresh on visibilitychange instead.
     return () => {
       if (branchContactPollRef.current) window.clearInterval(branchContactPollRef.current);
     };

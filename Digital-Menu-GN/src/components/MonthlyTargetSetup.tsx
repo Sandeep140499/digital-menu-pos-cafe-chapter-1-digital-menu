@@ -96,11 +96,16 @@ export default function MonthlyTargetSetup({
             value={inputValue}
             onChange={e => onInputChange(e.target.value)}
             className="sm:max-w-xs"
+            aria-label="Monthly sales target amount"
           />
-          <Button onClick={onSave} disabled={!inputValue.trim() || saving}>
+          <Button type="button" onClick={onSave} disabled={saving}>
             {saving ? 'Saving...' : 'Set Target'}
           </Button>
         </div>
+        <p className="text-muted-foreground text-xs">
+          Enter the target amount, then click Set Target. If the amount is empty or invalid, you will
+          see a short message.
+        </p>
       </CardContent>
     </Card>
   );

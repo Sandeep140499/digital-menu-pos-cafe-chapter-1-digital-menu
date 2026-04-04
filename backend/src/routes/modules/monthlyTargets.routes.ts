@@ -94,50 +94,8 @@ monthlyTargetsRouter.post('/set', authenticate, requireRole('ADMIN'), async (req
   });
 });
 
-// Signature requested: /api/monthly-targets/{branchId}/{year}/{month}
-monthlyTargetsRouter.get(
-  '/:branchId/:year/:month',
-  authenticate,
-  requireRole('ADMIN'),
-  async (req, res) => {
-    if (!featureEnabled()) {
-      return res.status(503).json({ message: 'Monthly target feature is disabled' });
-    }
-    const year = Number(req.params.year);
-    const month = Number(req.params.month);
-    if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
-      return res.status(400).json({ message: 'Invalid year/month' });
-    }
-    const row = await getTargetForMonth(year, month);
-    return res.json({
-      branchId: Number(req.params.branchId),
-      year,
-      month,
-      yearMonth: monthKey(year, month),
-      monthLabel: monthLabel(year, month),
-      targetSet: Boolean(row && row.targetAmount > 0),
-      targetAmount: Number(row?.targetAmount ?? 0),
-      updatedAt: row?.updatedAt ?? null,
-    });
-  }
-);
-
-// Signature requested: /api/monthly-targets/branch/{branchId}
-monthlyTargetsRouter.get(
-  '/branch/:branchId',
-  authenticate,
-  requireRole('ADMIN'),
-  async (req, res) => {
-    if (!featureEnabled()) {
-      return res.status(503).json({ message: 'Monthly target feature is disabled' });
-    }
-    const progress = await getCurrentMonthTargetProgress(new Date());
-    return res.json({
-      branchId: Number(req.params.branchId),
-      ...progress,
-    });
-  }
-);
+// Static path segments MUST be registered before `/:branchId/:year/:month`, otherwise
+// GET /monthly-targets/branch/1 is wrongly parsed as branchId="branch", year="1".
 
 // Optional reporting endpoint: target vs achieved trends
 monthlyTargetsRouter.get('/history', authenticate, requireRole('ADMIN'), async (_req, res) => {
@@ -169,3 +127,48 @@ monthlyTargetsRouter.get('/history', authenticate, requireRole('ADMIN'), async (
   });
   return res.json({ rows });
 });
+
+// Dashboard: /api/monthly-targets/branch/{branchId} — current month progress
+monthlyTargetsRouter.get(
+  '/branch/:branchId',
+  authenticate,
+  requireRole('ADMIN'),
+  async (req, res) => {
+    if (!featureEnabled()) {
+      return res.status(503).json({ message: 'Monthly target feature is disabled' });
+    }
+    const progress = await getCurrentMonthTargetProgress(new Date());
+    return res.json({
+      branchId: Number(req.params.branchId),
+      ...progress,
+    });
+  }
+);
+
+// /api/monthly-targets/{numericBranchId}/{year}/{month} — target for a specific month
+monthlyTargetsRouter.get(
+  '/:branchId/:year/:month',
+  authenticate,
+  requireRole('ADMIN'),
+  async (req, res) => {
+    if (!featureEnabled()) {
+      return res.status(503).json({ message: 'Monthly target feature is disabled' });
+    }
+    const year = Number(req.params.year);
+    const month = Number(req.params.month);
+    if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
+      return res.status(400).json({ message: 'Invalid year/month' });
+    }
+    const row = await getTargetForMonth(year, month);
+    return res.json({
+      branchId: Number(req.params.branchId),
+      year,
+      month,
+      yearMonth: monthKey(year, month),
+      monthLabel: monthLabel(year, month),
+      targetSet: Boolean(row && row.targetAmount > 0),
+      targetAmount: Number(row?.targetAmount ?? 0),
+      updatedAt: row?.updatedAt ?? null,
+    });
+  }
+);

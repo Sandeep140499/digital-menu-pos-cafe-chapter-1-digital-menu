@@ -19,17 +19,38 @@ const upsertCategorySchema = z.object({
   slug: z.string().min(1).optional(),
 });
 
-const upsertMenuItemSchema = z.object({
-  name: z.string().min(1),
-  description: z.string().optional(),
-  imageUrl: z.string().url().optional(),
-  basePrice: z.number().positive(),
-  hasHalf: z.boolean().optional(),
-  halfPrice: z.number().positive().optional(),
-  isActive: z.boolean().optional(),
-  categoryId: z.number().int().optional(),
-  notifyCustomers: z.boolean().optional(), // when true, prepare broadcast for new launch
-});
+const optionalUrl = z.preprocess(v => {
+  if (typeof v === 'string') {
+    const t = v.trim();
+    return t.length === 0 ? undefined : t;
+  }
+  return v;
+}, z.string().url().optional());
+
+const upsertMenuItemSchema = z
+  .object({
+    name: z.string().min(1),
+    description: z.preprocess(v => (typeof v === 'string' && v.trim() === '' ? undefined : v), z.string().optional()),
+    imageUrl: optionalUrl,
+    basePrice: z.number().positive(),
+    hasHalf: z.boolean().optional(),
+    // UI may send 0 when "half" is not enabled; allow it and validate conditionally below.
+    halfPrice: z.number().nonnegative().optional(),
+    isActive: z.boolean().optional(),
+    categoryId: z.number().int().optional(),
+    notifyCustomers: z.boolean().optional(), // when true, prepare broadcast for new launch
+  })
+  .superRefine((data, ctx) => {
+    if (data.hasHalf) {
+      if (!data.halfPrice || data.halfPrice <= 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['halfPrice'],
+          message: 'Half price is required and must be > 0 when half is enabled',
+        });
+      }
+    }
+  });
 
 export const menuRouter = Router();
 
@@ -42,23 +63,15 @@ let publicMenuCache: { data: PublicMenuResponse; ts: number; bestTs: number } | 
 const MENU_CACHE_MS = 15_000;
 const BEST_SELLER_CACHE_MS = 5 * 60_000;
 
-// Last week (Monday 00:00 to Sunday 23:59) for best-seller calculation
-function getLastWeekRange(): { start: Date; end: Date } {
+// Month-to-date for best-seller calculation (start of month 00:00 to now)
+function getMonthToDateRange(): { start: Date; end: Date } {
   const now = new Date();
-  const day = now.getDay();
-  const diffToMonday = day === 0 ? -6 : 1 - day;
-  const thisMonday = new Date(now);
-  thisMonday.setDate(now.getDate() + diffToMonday);
-  thisMonday.setHours(0, 0, 0, 0);
-  const lastMonday = new Date(thisMonday);
-  lastMonday.setDate(thisMonday.getDate() - 7);
-  const lastSunday = new Date(lastMonday);
-  lastSunday.setDate(lastMonday.getDate() + 6);
-  lastSunday.setHours(23, 59, 59, 999);
-  return { start: lastMonday, end: lastSunday };
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  start.setHours(0, 0, 0, 0);
+  return { start, end: now };
 }
 
-// Public: get menu for QR customer (only active items) + bestSellerItemIds (top 5 from last week)
+// Public: get menu for QR customer (only active items) + bestSellerItemIds (top 5 month-to-date)
 menuRouter.get('/', async (_req, res) => {
   incrementPublicMenuViews();
   const now = Date.now();
@@ -97,7 +110,7 @@ menuRouter.get('/', async (_req, res) => {
     let bestSellerItemIds: number[] = publicMenuCache?.data.bestSellerItemIds ?? [];
     const bestStale = !publicMenuCache || now - publicMenuCache.bestTs > BEST_SELLER_CACHE_MS;
     if (bestStale) {
-      const { start, end } = getLastWeekRange();
+      const { start, end } = getMonthToDateRange();
       const lastWeekOrderItems = await prisma.orderItem.groupBy({
         by: ['menuItemId'],
         where: {
@@ -113,6 +126,18 @@ menuRouter.get('/', async (_req, res) => {
         .sort((a, b) => (b._sum.quantity ?? 0) - (a._sum.quantity ?? 0))
         .slice(0, 5);
       bestSellerItemIds = sorted.map(r => r.menuItemId as number);
+
+      // If there isn't enough order history this month, fill remaining slots
+      // with active items so UI still has a consistent "top 5" section.
+      if (bestSellerItemIds.length < 5) {
+        const fillers = await prisma.menuItem.findMany({
+          where: { isActive: true, id: { notIn: bestSellerItemIds } },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true },
+          take: 5 - bestSellerItemIds.length,
+        });
+        bestSellerItemIds = bestSellerItemIds.concat(fillers.map(f => f.id));
+      }
     }
 
     const data: PublicMenuResponse = { categories, bestSellerItemIds };
@@ -244,6 +269,8 @@ menuRouter.post('/items', authenticate, requireRole('ADMIN'), async (req, res) =
     data: {
       ...itemData,
       hasHalf: itemData.hasHalf ?? false,
+      halfPrice: (itemData.hasHalf ?? false) ? (itemData.halfPrice ?? null) : null,
+      imageUrl: itemData.imageUrl ?? undefined,
       isActive: itemData.isActive ?? true,
     },
   });
@@ -259,9 +286,14 @@ menuRouter.post('/items', authenticate, requireRole('ADMIN'), async (req, res) =
       itemDetails: item.description ?? undefined,
       branch: branch || undefined,
     });
+    // IMPORTANT: do not load all orders into memory.
+    // We only need distinct mobiles for broadcast.
     const orders = await prisma.order.findMany({
       where: { customerMobile: { not: null } },
+      orderBy: { createdAt: 'desc' },
+      distinct: ['customerMobile'],
       select: { customerMobile: true },
+      take: 100_000, // safety cap; distinct keeps this far smaller in practice
     });
     const seen = new Set<string>();
     const mobiles: string[] = [];
@@ -286,9 +318,20 @@ menuRouter.patch('/items/:id', authenticate, requireRole('ADMIN'), async (req, r
   }
 
   const id = Number(req.params.id);
+  const data: Record<string, unknown> = { ...parsed.data };
+  // Normalize optional URL / blank strings.
+  if (data.imageUrl === '') data.imageUrl = undefined;
+  if (data.description === '') data.description = undefined;
+
+  // Normalize half-price rules:
+  // - if hasHalf is explicitly false -> clear halfPrice
+  // - if halfPrice is provided (>0) but hasHalf is missing -> auto-enable hasHalf
+  if (data.hasHalf === false) data.halfPrice = null;
+  if (typeof data.halfPrice === 'number' && data.halfPrice > 0 && data.hasHalf === undefined) data.hasHalf = true;
+
   const item = await prisma.menuItem.update({
     where: { id },
-    data: parsed.data,
+    data,
   });
 
   return res.json(item);

@@ -116,13 +116,13 @@ function getAdminPasswordChangeNotificationContent(
 export const authRouter = Router();
 
 function signAccessToken(payload: { id: number; role: 'ADMIN' | 'EMPLOYEE' }) {
-  return jwt.sign(
-    payload,
-    jwtConfig.secret as string,
-    {
-      expiresIn: jwtConfig.accessExpiresIn,
-    } as SignOptions
-  );
+  const expiresIn =
+    payload.role === 'EMPLOYEE'
+      ? jwtConfig.employeeAccessExpiresIn
+      : jwtConfig.accessExpiresIn;
+  return jwt.sign(payload, jwtConfig.secret as string, {
+    expiresIn,
+  } as SignOptions);
 }
 
 function parseExpiresToMs(expiresIn: string): number {

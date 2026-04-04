@@ -51,13 +51,16 @@ export function setAuthCookies(
     expires: opts.refreshExpiresAt,
   });
 
-  // CSRF token: readable by JS (double-submit). Scoped to auth paths only.
+  // CSRF token: readable by JS (double-submit).
+  // IMPORTANT: cookie `path` also affects visibility via `document.cookie` in the browser.
+  // If we scope CSRF to `/api/auth`, pages like `/admin` won't be able to read it, and
+  // silent refresh will fail forever (leading to logouts when access tokens expire).
   res.cookie('csrf', opts.csrfToken, {
     httpOnly: false,
     secure,
     sameSite,
     domain: authCookieConfig.domain,
-    path: '/api/auth',
+    path: '/',
     expires: opts.refreshExpiresAt,
   });
 }
@@ -75,7 +78,13 @@ export function clearAuthCookies(req: Request, res: Response) {
   } as const;
 
   res.clearCookie('rt', base);
-  res.clearCookie('csrf', { ...base, httpOnly: false } as any);
+  // Clear CSRF on `/` (see setAuthCookies path notes).
+  res.clearCookie('csrf', {
+    secure,
+    sameSite,
+    domain: authCookieConfig.domain,
+    path: '/',
+  } as any);
 }
 
 export function requireCsrfDoubleSubmit(req: Request) {

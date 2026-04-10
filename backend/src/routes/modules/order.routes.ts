@@ -871,9 +871,14 @@ orderRouter.get('/all', authenticate, requireRole('ADMIN'), async (req, res) => 
 });
 
 // Admin: customer leaderboard (aggregate from orders by customerMobile)
+const CUSTOMER_LEADERBOARD_MAX_LIMIT = 50_000;
+
 orderRouter.get('/customer-leaderboard', authenticate, requireRole('ADMIN'), async (req, res) => {
   const { limit = '20', sortBy = 'orders' } = req.query;
-  const limitNum = Math.min(Math.max(Number(limit) || 20, 1), 100);
+  const limitNum = Math.min(
+    Math.max(Number(limit) || 20, 1),
+    CUSTOMER_LEADERBOARD_MAX_LIMIT
+  );
 
   // Use DB aggregation; do NOT pull all orders into Node.
   const grouped = await prisma.order.groupBy({

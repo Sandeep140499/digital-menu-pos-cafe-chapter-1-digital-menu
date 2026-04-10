@@ -3632,6 +3632,7 @@ const AdminDashboard = () => {
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [leaderboardSortBy, setLeaderboardSortBy] = useState<'orders' | 'amount'>('amount');
   const [leaderboardLimit, setLeaderboardLimit] = useState(10);
+  const [leaderboardCsvLoading, setLeaderboardCsvLoading] = useState(false);
 
   // Customer queries state
   const [customerQueries, setCustomerQueries] = useState<
@@ -7305,7 +7306,7 @@ const AdminDashboard = () => {
             value={String(leaderboardLimit)}
             onValueChange={v => setLeaderboardLimit(Number(v))}
           >
-            <SelectTrigger className="min-h-[44px] w-full min-w-0 sm:min-h-0 sm:w-[120px]">
+            <SelectTrigger className="min-h-[44px] w-full min-w-0 sm:min-h-0 sm:w-[140px]">
               <SelectValue placeholder="Top" />
             </SelectTrigger>
             <SelectContent>
@@ -7313,6 +7314,10 @@ const AdminDashboard = () => {
               <SelectItem value="10">Top 10</SelectItem>
               <SelectItem value="20">Top 20</SelectItem>
               <SelectItem value="50">Top 50</SelectItem>
+              <SelectItem value="100">Top 100</SelectItem>
+              <SelectItem value="200">Top 200</SelectItem>
+              <SelectItem value="500">Top 500</SelectItem>
+              <SelectItem value="1000">Top 1000</SelectItem>
             </SelectContent>
           </Select>
           <Button
@@ -7328,53 +7333,97 @@ const AdminDashboard = () => {
           <Button
             size="sm"
             variant="outline"
-            disabled={leaderboard.length === 0}
+            disabled={leaderboard.length === 0 || leaderboardCsvLoading || !token}
             className="min-h-[44px] sm:min-h-0"
-            onClick={() => {
-              const rows = leaderboard.map((r, idx) => ({
-                rank: idx + 1,
-                customerName: r.customerName || '',
-                customerMobile: r.customerMobile || '',
-                totalOrders: r.totalOrders ?? 0,
-                totalSpent: r.totalSpent ?? 0,
-                lastOrderDate: r.lastOrderDate || '',
-              }));
-              const header = [
-                'Rank',
-                'Customer Name',
-                'Mobile Number',
-                'Total Orders',
-                'Total Spent',
-                'Last Order Date',
-              ];
-              const escape = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-              const csv = [
-                header.join(','),
-                ...rows.map(r =>
-                  [
-                    r.rank,
-                    r.customerName,
-                    r.customerMobile,
-                    r.totalOrders,
-                    r.totalSpent,
-                    r.lastOrderDate,
-                  ]
-                    .map(escape)
-                    .join(',')
-                ),
-              ].join('\n');
-              const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = `customer-leads-${new Date().toISOString().slice(0, 10)}.csv`;
-              document.body.appendChild(a);
-              a.click();
-              a.remove();
-              setTimeout(() => URL.revokeObjectURL(url), 1000);
+            onClick={async () => {
+              if (!token) return;
+              setLeaderboardCsvLoading(true);
+              try {
+                const params = new URLSearchParams({
+                  limit: '50000',
+                  sortBy: leaderboardSortBy,
+                });
+                const res = await fetch(`${apiBase}/orders/customer-leaderboard?${params}`, {
+                  headers: { Authorization: `Bearer ${token}` },
+                });
+                if (!res.ok) {
+                  toast({
+                    title: 'Export failed',
+                    description: 'Could not load leaderboard for download.',
+                    variant: 'destructive',
+                  });
+                  return;
+                }
+                const data = await res.json();
+                const full: typeof leaderboard = data.leaderboard ?? [];
+                if (full.length === 0) {
+                  toast({
+                    title: 'Nothing to export',
+                    description: 'No customer rows returned.',
+                  });
+                  return;
+                }
+                const rows = full.map((r, idx) => ({
+                  rank: idx + 1,
+                  customerName: r.customerName || '',
+                  customerMobile: r.customerMobile || '',
+                  totalOrders: r.totalOrders ?? 0,
+                  totalSpent: r.totalSpent ?? 0,
+                  lastOrderDate: r.lastOrderDate || '',
+                }));
+                const header = [
+                  'Rank',
+                  'Customer Name',
+                  'Mobile Number',
+                  'Total Orders',
+                  'Total Spent',
+                  'Last Order Date',
+                ];
+                const escape = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+                const csvBody = [
+                  header.join(','),
+                  ...rows.map(r =>
+                    [
+                      r.rank,
+                      r.customerName,
+                      r.customerMobile,
+                      r.totalOrders,
+                      r.totalSpent,
+                      r.lastOrderDate,
+                    ]
+                      .map(escape)
+                      .join(',')
+                  ),
+                ].join('\n');
+                const csv = `\uFEFF${csvBody}`;
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `customer-leads-${new Date().toISOString().slice(0, 10)}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+              } catch {
+                toast({
+                  title: 'Export failed',
+                  description: 'Network error while downloading.',
+                  variant: 'destructive',
+                });
+              } finally {
+                setLeaderboardCsvLoading(false);
+              }
             }}
           >
-            Download Excel (CSV)
+            {leaderboardCsvLoading ? (
+              <>
+                <RefreshCw className="mr-1 h-4 w-4 animate-spin" />
+                Preparing…
+              </>
+            ) : (
+              'Download Excel (CSV)'
+            )}
           </Button>
         </div>
       </div>

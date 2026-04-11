@@ -5975,66 +5975,62 @@ const AdminDashboard = () => {
       {/* KPI Cards */}
       <KPICards />
 
-      {/* Current month sales target vs paid revenue (calendar month) */}
-      <Card className="overflow-hidden border border-violet-200 bg-gradient-to-br from-violet-50/80 to-white shadow-sm">
-        <CardHeader className="pb-2">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 shrink-0 text-violet-600" />
-              <CardTitle className="text-lg">This month&apos;s sales target</CardTitle>
-            </div>
-            <Badge variant="outline" className="w-fit border-violet-200 text-violet-800">
-              {monthlyTargetInfo?.monthLabel ||
-                new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
-            </Badge>
+      {/* Current month sales target — compact matrix (primary: % of target reached) */}
+      <Card className="max-w-md overflow-hidden border border-violet-200/90 bg-gradient-to-br from-violet-50/90 to-white p-3 shadow-sm">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5">
+            <TrendingUp className="h-4 w-4 shrink-0 text-violet-600" />
+            <span className="text-sm font-semibold text-slate-800">Sales target</span>
           </div>
-          <CardDescription>
-            Paid orders this calendar month vs the target you set under Revenue.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {monthlyTargetInfo?.targetSet ? (
-            <>
-              <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
-                <span className="text-muted-foreground">
-                  Achieved{' '}
-                  <span className="font-semibold text-slate-900">
-                    {formatINR(monthlyTargetInfo.achievedAmount ?? 0)}
-                  </span>
-                  <span className="text-muted-foreground"> of </span>
-                  <span className="font-semibold text-slate-900">
-                    {formatINR(monthlyTargetInfo.targetAmount ?? 0)}
-                  </span>
-                </span>
-                <span className="font-semibold text-violet-700">
-                  {Math.round((monthlyTargetInfo.achievedPct ?? 0) * 10) / 10}%
-                </span>
+          <span className="text-muted-foreground max-w-[140px] truncate text-right text-[11px] leading-tight">
+            {monthlyTargetInfo?.monthLabel ||
+              new Date().toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
+          </span>
+        </div>
+        {monthlyTargetInfo?.targetSet ? (
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-md border border-violet-100 bg-white/95 px-2 py-2 text-center shadow-sm">
+              <p className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wide">
+                Reached
+              </p>
+              <p className="tabular-nums text-2xl font-bold leading-none text-violet-700 sm:text-3xl">
+                {Math.round((monthlyTargetInfo.achievedPct ?? 0) * 10) / 10}
+                <span className="text-lg font-bold sm:text-xl">%</span>
+              </p>
+            </div>
+            <div className="grid grid-rows-2 gap-1.5">
+              <div className="rounded-md border border-slate-200/80 bg-white/90 px-2 py-1.5">
+                <p className="text-muted-foreground text-[9px] font-medium uppercase">Status</p>
+                <p className="truncate text-xs font-semibold text-slate-800">
+                  {monthlyTargetInfo.status === 'ON_TRACK'
+                    ? 'On track'
+                    : monthlyTargetInfo.status === 'NEED_TO_PUSH'
+                      ? 'Push sales'
+                      : monthlyTargetInfo.status === 'CRITICAL'
+                        ? 'Critical'
+                        : '—'}
+                </p>
               </div>
+              <div className="rounded-md border border-slate-200/80 bg-white/90 px-2 py-1.5">
+                <p className="text-muted-foreground text-[9px] font-medium uppercase">Days left</p>
+                <p className="tabular-nums text-xs font-semibold text-slate-800">
+                  {monthlyTargetInfo.daysLeft ?? 0}
+                </p>
+              </div>
+            </div>
+            <div className="col-span-2 rounded-md border border-violet-50 bg-violet-50/50 px-2 py-1">
               <Progress
-                className="h-2.5 bg-violet-100"
+                className="h-1.5 bg-violet-100"
                 value={Math.min(100, Math.max(0, monthlyTargetInfo.achievedPct ?? 0))}
               />
-              <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-2 text-xs">
-                <span>
-                  {monthlyTargetInfo.status === 'ON_TRACK'
-                    ? 'On track for the month'
-                    : monthlyTargetInfo.status === 'NEED_TO_PUSH'
-                      ? 'Behind pace — push sales'
-                      : monthlyTargetInfo.status === 'CRITICAL'
-                        ? 'Well behind target'
-                        : 'Status —'}
-                </span>
-                <span>{monthlyTargetInfo.daysLeft ?? 0} day(s) left</span>
-              </div>
-            </>
-          ) : (
-            <p className="text-muted-foreground text-sm">
-              No target set for this month yet. Open{' '}
-              <span className="font-medium text-slate-800">Revenue</span> in the sidebar, enter an
-              amount, and click <span className="font-medium">Set target</span>.
-            </p>
-          )}
-        </CardContent>
+            </div>
+          </div>
+        ) : (
+          <p className="text-muted-foreground text-xs leading-snug">
+            No target set — open <span className="font-medium text-slate-700">Revenue</span> to set
+            this month&apos;s goal.
+          </p>
+        )}
       </Card>
 
       {/* Overtime alert – employees working > 10h */}
@@ -9893,6 +9889,9 @@ const AdminDashboard = () => {
     updateLeaveStatus,
     employees,
     autoRefreshEnabled,
+    monthlyTargetInput,
+    monthlyTargetInfo,
+    savingMonthlyTarget,
   ]);
 
   if (!ready || !token) {

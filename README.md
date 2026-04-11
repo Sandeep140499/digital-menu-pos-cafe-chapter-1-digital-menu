@@ -94,10 +94,15 @@ Nothing in application code is hard‑wired to Railway, Render, or AWS. You swit
 
 ### A. Railway (API + Postgres)
 
-1. Create Postgres plugin → copy `DATABASE_URL`.
-2. Deploy Node service from `backend/` root; set start command `npm run start` (runs `prestart` migrate + `node dist/index.js` after `npm run build`).
-3. Set all env vars from `.env.example`.
-4. Deploy frontend separately (Railway static, Vercel, S3+CloudFront, etc.) with `VITE_API_BASE_URL` pointing to Railway API URL + `/api`.
+This repo is a **monorepo** (`backend/` + `Digital-Menu-GN/`). Railway must build the **API service from `backend`**, not from the repository root.
+
+1. **Postgres:** create the plugin → copy `DATABASE_URL` into the **backend** service variables.
+2. **Service root directory (critical):** in the Railway service → **Settings** → **Root Directory** set to **`backend`**. If this is empty or `.`, builds can fail or never pick up `backend/package.json` and `backend/railway.toml`.
+3. **GitHub connection:** **Settings** → **Source** → connect the correct repo and branch (usually **`main`**). After connecting, pushes to that branch should create a new **Deployment** (see the **Deployments** tab).
+4. **If pushes do not trigger a deploy:** open **Deployments** → confirm the latest run is from your latest commit SHA. Use **Deploy** → **Redeploy** once to verify. In **Settings**, turn off **“Wait for CI”** unless you intentionally use a GitHub Action that Railway waits for (otherwise deploys can appear stuck or skipped).
+5. **If deploy runs but the API looks old:** open the failed/successful deploy **Build logs** and **Deploy logs** — fix env or build errors (e.g. `prisma migrate` against wrong `DATABASE_URL`).
+6. **Config as code:** this repo includes **`backend/railway.toml`** (Nixpacks build + `npm start` + `/api/health` healthcheck). It is only used when the service root is **`backend`**.
+7. Deploy the frontend separately (Vercel, etc.) with `VITE_API_BASE_URL` pointing at your Railway URL + **`/api`**.
 
 ### B. Render (Web service + Postgres)
 

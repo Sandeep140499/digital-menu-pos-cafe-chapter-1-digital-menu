@@ -5,6 +5,13 @@ import { prisma } from '../../config/prisma.js';
 import { authenticate, requireRole } from '../../middleware/auth.js';
 import { incrementPublicMenuViews } from '../../services/publicTraffic.js';
 import { dedupePublicMenuCategories } from '../../utils/publicMenuDedupe.js';
+import {
+  applyPercentDiscount,
+  bestActiveDiscountForItem,
+  buildHappyHourBanner,
+} from '../../services/happyHourEngine.js';
+import { loadActiveHappyHourRules } from '../../services/happyHourRulesLoader.js';
+import { getDefaultPublicBranchId } from '../../utils/defaultPublicBranch.js';
 
 function createSlug(name: string): string {
   return name
@@ -31,6 +38,10 @@ const upsertCategorySchema = z.object({
   highlightAsNewLaunch: z.boolean().optional(),
   /** When false, category is hidden from the public customer menu (admin only). */
   showOnMenu: z.boolean().optional(),
+});
+
+const createMenuCategorySchema = upsertCategorySchema.extend({
+  branchId: z.number().int().positive(),
 });
 
 // Accept empty, or any reasonable-length string (avoids hard failures on partial/relative URLs).
@@ -124,17 +135,43 @@ const patchMenuItemSchema = z
 
 export const menuRouter = Router();
 
-type PublicMenuResponse = { categories: any[]; bestSellerItemIds: number[] };
+type PublicMenuResponse = { categories: any[]; bestSellerItemIds: number[]; happyHourBanner?: unknown };
 
-// Simple in-memory cache to protect DB under high traffic.
+// Simple in-memory cache to protect DB under high traffic (one entry per branch).
 // - categories change rarely; best-sellers can lag a little.
 // - If DB temporarily fails, we serve last known good menu instead of crashing customer UX.
-let publicMenuCache: { data: PublicMenuResponse; ts: number; bestTs: number } | null = null;
+const publicMenuCacheByBranch = new Map<number, { data: PublicMenuResponse; ts: number; bestTs: number }>();
 const MENU_CACHE_MS = 15_000;
 const BEST_SELLER_CACHE_MS = 5 * 60_000;
 
-function invalidatePublicMenuCache() {
-  publicMenuCache = null;
+export function invalidatePublicMenuCache() {
+  publicMenuCacheByBranch.clear();
+}
+
+type MenuBranchResolve =
+  | { type: 'branch'; branchId: number }
+  | { type: 'error'; status: 400 | 404; message: string }
+  | { type: 'empty' };
+
+/** Public + admin: `?branchId=` / `?branch=` or default lowest-id branch. */
+async function resolveMenuBranchIdFromRequest(
+  query: Record<string, unknown>
+): Promise<MenuBranchResolve> {
+  const raw = query.branchId ?? query.branch;
+  if (raw !== undefined && raw !== '') {
+    const n = Number.parseInt(String(raw), 10);
+    if (!Number.isFinite(n) || n < 1) {
+      return { type: 'error', status: 400, message: 'Invalid branchId' };
+    }
+    const b = await prisma.branch.findUnique({ where: { id: n }, select: { id: true } });
+    if (!b) {
+      return { type: 'error', status: 404, message: 'Branch not found' };
+    }
+    return { type: 'branch', branchId: n };
+  }
+  const id = await getDefaultPublicBranchId();
+  if (id == null) return { type: 'empty' };
+  return { type: 'branch', branchId: id };
 }
 
 // Rolling 7 days for best-seller ranking (weekly demand)
@@ -147,12 +184,35 @@ function getRolling7DayRange(): { start: Date; end: Date } {
 }
 
 // Public: get menu for QR customer (only active items) + bestSellerItemIds (top 5 by last-7-days demand)
-menuRouter.get('/', async (_req, res) => {
+menuRouter.get('/', async (req, res) => {
   incrementPublicMenuViews();
-  const now = Date.now();
-  if (publicMenuCache && now - publicMenuCache.ts < MENU_CACHE_MS) {
+  const requestTs = Date.now();
+
+  const resolved = await resolveMenuBranchIdFromRequest(req.query as Record<string, unknown>);
+  if (resolved.type === 'error') {
+    return res.status(resolved.status).json({
+      message: resolved.message,
+      categories: [],
+      bestSellerItemIds: [],
+    });
+  }
+  if (resolved.type === 'empty') {
+    const { rules, tz } = await loadActiveHappyHourRules();
+    const hhNow = new Date();
+    const happyHourBanner = buildHappyHourBanner(rules, hhNow, tz);
+    return res.json({ categories: [], bestSellerItemIds: [], happyHourBanner });
+  }
+  const menuBranchId = resolved.branchId;
+
+  const branchCache = publicMenuCacheByBranch.get(menuBranchId) ?? null;
+  if (
+    branchCache &&
+    requestTs - branchCache.ts < MENU_CACHE_MS &&
+    branchCache.data &&
+    (branchCache.data as { happyHourBanner?: unknown }).happyHourBanner !== undefined
+  ) {
     res.setHeader('Cache-Control', 'public, max-age=5, stale-while-revalidate=30');
-    const d = publicMenuCache.data;
+    const d = branchCache.data;
     return res.json({
       ...d,
       bestSellerItemIds: [...new Set(d.bestSellerItemIds ?? [])].slice(0, 5),
@@ -160,7 +220,7 @@ menuRouter.get('/', async (_req, res) => {
   }
   try {
     const categoriesRaw = await prisma.menuCategory.findMany({
-      where: { showOnMenu: true },
+      where: { branchId: menuBranchId, showOnMenu: true },
       orderBy: { createdAt: 'asc' },
       select: {
         id: true,
@@ -218,8 +278,36 @@ menuRouter.get('/', async (_req, res) => {
         .filter(cat => Array.isArray(cat.items) && cat.items.length > 0)
     );
 
-    let bestSellerItemIds: number[] = publicMenuCache?.data.bestSellerItemIds ?? [];
-    const bestStale = !publicMenuCache || now - publicMenuCache.bestTs > BEST_SELLER_CACHE_MS;
+    const { rules, tz } = await loadActiveHappyHourRules();
+    const hhNow = new Date();
+    const happyHourBanner = buildHappyHourBanner(rules, hhNow, tz);
+
+    const categoriesWithHappyHour = categories.map(cat => ({
+      ...cat,
+      items: cat.items.map((it: any) => {
+        const disc = bestActiveDiscountForItem(rules, hhNow, tz, it.id, it.categoryId);
+        if (!disc) return { ...it, happyHour: null };
+        const originalFull = Number(it.basePrice);
+        const discountedFull = applyPercentDiscount(originalFull, disc.discountPercent);
+        const hh: Record<string, unknown> = {
+          discountPercent: disc.discountPercent,
+          offerName: disc.offerName,
+          offerId: disc.offerId,
+          originalFullPrice: originalFull,
+          discountedFullPrice: discountedFull,
+        };
+        if (it.hasHalf && it.halfPrice != null) {
+          const hp = Number(it.halfPrice);
+          hh.originalHalfPrice = hp;
+          hh.discountedHalfPrice = applyPercentDiscount(hp, disc.discountPercent);
+        }
+        return { ...it, happyHour: hh };
+      }),
+    }));
+
+    let bestSellerItemIds: number[] = branchCache?.data.bestSellerItemIds ?? [];
+    const bestStale =
+      !branchCache || requestTs - branchCache.bestTs > BEST_SELLER_CACHE_MS;
     if (bestStale) {
       const { start, end } = getRolling7DayRange();
       const lastWeekOrderItems = await prisma.orderItem.groupBy({
@@ -227,6 +315,7 @@ menuRouter.get('/', async (_req, res) => {
         where: {
           menuItemId: { not: null },
           order: {
+            branchId: menuBranchId,
             createdAt: { gte: start, lte: end },
           },
         },
@@ -242,7 +331,11 @@ menuRouter.get('/', async (_req, res) => {
       // with active items so UI still has a consistent "top 5" section.
       if (bestSellerItemIds.length < 5) {
         const fillers = await prisma.menuItem.findMany({
-          where: { isActive: true, id: { notIn: bestSellerItemIds } },
+          where: {
+            isActive: true,
+            id: { notIn: bestSellerItemIds },
+            category: { branchId: menuBranchId },
+          },
           orderBy: { createdAt: 'desc' },
           select: { id: true },
           take: 5 - bestSellerItemIds.length,
@@ -254,12 +347,17 @@ menuRouter.get('/', async (_req, res) => {
     // At most 5 unique IDs for the customer "Best Sellers" row (fresh or cached).
     bestSellerItemIds = [...new Set(bestSellerItemIds)].slice(0, 5);
 
-    const data: PublicMenuResponse = { categories, bestSellerItemIds };
-    publicMenuCache = {
-      data,
-      ts: now,
-      bestTs: bestStale ? now : (publicMenuCache?.bestTs ?? now),
+    const data: PublicMenuResponse = {
+      categories: categoriesWithHappyHour,
+      bestSellerItemIds,
+      happyHourBanner,
     };
+    const prev = publicMenuCacheByBranch.get(menuBranchId);
+    publicMenuCacheByBranch.set(menuBranchId, {
+      data,
+      ts: requestTs,
+      bestTs: bestStale ? requestTs : (prev?.bestTs ?? requestTs),
+    });
     res.setHeader('Cache-Control', 'public, max-age=5, stale-while-revalidate=30');
     return res.json(data);
   } catch (err) {
@@ -271,10 +369,18 @@ menuRouter.get('/', async (_req, res) => {
       e?.name === 'PrismaClientInitializationError';
     console.error('Menu API error:', err);
     // Serve last known good menu to avoid customer-facing crash.
-    if (publicMenuCache?.data) {
+    const staleEntry = publicMenuCacheByBranch.get(menuBranchId);
+    if (staleEntry?.data) {
       res.setHeader('X-Menu-Cache', 'stale');
       res.setHeader('Cache-Control', 'public, max-age=2, stale-while-revalidate=30');
-      return res.json(publicMenuCache.data);
+      return res.json(staleEntry.data);
+    }
+    for (const v of publicMenuCacheByBranch.values()) {
+      if (v?.data) {
+        res.setHeader('X-Menu-Cache', 'stale');
+        res.setHeader('Cache-Control', 'public, max-age=2, stale-while-revalidate=30');
+        return res.json(v.data);
+      }
     }
     return res.status(isDbDown ? 503 : 500).json({
       message: isDbDown
@@ -287,11 +393,22 @@ menuRouter.get('/', async (_req, res) => {
 });
 
 // Admin: get full menu with all items (for live/pending counts)
-menuRouter.get('/admin', authenticate, requireRole('ADMIN'), async (_req, res) => {
+menuRouter.get('/admin', authenticate, requireRole('ADMIN'), async (req, res) => {
+  const resolved = await resolveMenuBranchIdFromRequest(req.query as Record<string, unknown>);
+  if (resolved.type === 'error') {
+    return res.status(resolved.status).json({ message: resolved.message });
+  }
+  if (resolved.type === 'empty') {
+    return res.json([]);
+  }
+  const menuBranchId = resolved.branchId;
+
   const categories = await prisma.menuCategory.findMany({
+    where: { branchId: menuBranchId },
     orderBy: { createdAt: 'asc' },
     select: {
       id: true,
+      branchId: true,
       name: true,
       slug: true,
       imageUrl: true,
@@ -321,24 +438,43 @@ menuRouter.get('/admin', authenticate, requireRole('ADMIN'), async (_req, res) =
 
 // Admin: create category
 menuRouter.post('/categories', authenticate, requireRole('ADMIN'), async (req, res) => {
-  const parsed = upsertCategorySchema.safeParse(req.body);
+  const parsed = createMenuCategorySchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ message: 'Invalid input', errors: parsed.error.issues });
   }
 
-  const slug = parsed.data.slug?.trim() || createSlug(parsed.data.name);
-  const category = await prisma.menuCategory.create({
-    data: {
-      name: parsed.data.name,
-      slug,
-      imageUrl: parsed.data.imageUrl ?? undefined,
-      highlightNewUntil: parsed.data.highlightAsNewLaunch ? highlightUntilFromNow() : null,
-      showOnMenu: parsed.data.showOnMenu ?? true,
-    },
+  const branchOk = await prisma.branch.findUnique({
+    where: { id: parsed.data.branchId },
+    select: { id: true },
   });
+  if (!branchOk) {
+    return res.status(400).json({ message: 'Invalid branchId' });
+  }
 
-  invalidatePublicMenuCache();
-  return res.status(201).json(category);
+  const slug = parsed.data.slug?.trim() || createSlug(parsed.data.name);
+  try {
+    const category = await prisma.menuCategory.create({
+      data: {
+        branchId: parsed.data.branchId,
+        name: parsed.data.name,
+        slug,
+        imageUrl: parsed.data.imageUrl ?? undefined,
+        highlightNewUntil: parsed.data.highlightAsNewLaunch ? highlightUntilFromNow() : null,
+        showOnMenu: parsed.data.showOnMenu ?? true,
+      },
+    });
+
+    invalidatePublicMenuCache();
+    return res.status(201).json(category);
+  } catch (err: unknown) {
+    const code = (err as { code?: string })?.code;
+    if (code === 'P2002') {
+      return res.status(409).json({
+        message: 'A category with this slug already exists for this branch. Rename or change slug.',
+      });
+    }
+    throw err;
+  }
 });
 
 // Admin: update category (PATCH or PUT)
@@ -410,9 +546,29 @@ menuRouter.post('/items', authenticate, requireRole('ADMIN'), async (req, res) =
   let broadcast: { message: string; mobileCount: number; mobiles: string[] } | undefined;
   if (notifyCustomers) {
     const { buildNewItemBroadcast } = await import('../../services/whatsapp.js');
-    const branch = await prisma.branch.findFirst({
-      select: { name: true, location: true, phone: true, googleReviewUrl: true },
-    });
+    let broadcastBranchId: number | null = null;
+    if (itemData.categoryId) {
+      const cat = await prisma.menuCategory.findUnique({
+        where: { id: itemData.categoryId },
+        select: { branchId: true },
+      });
+      broadcastBranchId = cat?.branchId ?? null;
+    }
+    let branch = broadcastBranchId
+      ? await prisma.branch.findUnique({
+          where: { id: broadcastBranchId },
+          select: { name: true, location: true, phone: true, googleReviewUrl: true },
+        })
+      : null;
+    if (!branch) {
+      const defaultId = await getDefaultPublicBranchId();
+      branch = defaultId
+        ? await prisma.branch.findUnique({
+            where: { id: defaultId },
+            select: { name: true, location: true, phone: true, googleReviewUrl: true },
+          })
+        : null;
+    }
     const message = buildNewItemBroadcast({
       itemNames: [item.name],
       itemDetails: item.description ?? undefined,

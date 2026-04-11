@@ -197,7 +197,16 @@ app.use(
 );
 app.use(cookieParser());
 // Compression significantly reduces payload size for menu + dashboards (mobile networks).
-app.use(compression());
+// Avoid compressing PDF streams (some proxies/clients mishandle binary + gzip).
+app.use(
+  compression({
+    filter: (req, res) => {
+      const p = req.path || '';
+      if (p.includes('invoice-pdf')) return false;
+      return compression.filter(req, res);
+    },
+  })
+);
 
 // Body parsing limits: prevents huge payloads from exhausting memory/CPU.
 const JSON_BODY_LIMIT = (process.env.JSON_BODY_LIMIT || '1mb').trim();

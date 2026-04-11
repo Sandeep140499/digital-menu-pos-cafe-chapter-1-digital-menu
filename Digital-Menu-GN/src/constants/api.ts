@@ -10,6 +10,46 @@ export const API_BASE_URL =
   // in production because it breaks on customer devices.
   (import.meta.env.DEV ? '/api' : '/api');
 
+function parsePositiveBranchId(value: string | null | undefined): number | null {
+  if (value == null || value === '') return null;
+  const n = Number.parseInt(String(value).trim(), 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * Branch id baked into the build (e.g. Katwaria menu on a separate Vercel project).
+ * Set `VITE_PUBLIC_BRANCH_ID` in that project's env to the Prisma `Branch.id`.
+ */
+export function getCustomerBranchIdFromEnv(): number | null {
+  const v = import.meta.env.VITE_PUBLIC_BRANCH_ID;
+  if (v == null || v === '') return null;
+  return parsePositiveBranchId(String(v));
+}
+
+/** Parse `?branch=` or `?branchId=` from a query string (with or without leading `?`). */
+export function getCustomerBranchIdFromSearch(search: string): number | null {
+  const q = search.startsWith('?') ? search.slice(1) : search;
+  const params = new URLSearchParams(q);
+  return parsePositiveBranchId(params.get('branch') || params.get('branchId'));
+}
+
+/**
+ * Which branch the public customer menu should use for contact, ordering, and checkout.
+ * URL query wins (useful for testing); then `VITE_PUBLIC_BRANCH_ID`; then null (server default).
+ */
+export function resolveCustomerPublicBranchId(): number | null {
+  if (typeof window !== 'undefined') {
+    const fromUrl = getCustomerBranchIdFromSearch(window.location.search);
+    if (fromUrl != null) return fromUrl;
+  }
+  return getCustomerBranchIdFromEnv();
+}
+
+/** `?branchId=n` for public config APIs, or empty string when using server default. */
+export function publicBranchQuery(publicBranchId: number | null): string {
+  return publicBranchId != null ? `?branchId=${publicBranchId}` : '';
+}
+
 /** Default request timeout (ms). Prevents UI from hanging when backend is slow. */
 export const API_TIMEOUT_MS = 25000;
 

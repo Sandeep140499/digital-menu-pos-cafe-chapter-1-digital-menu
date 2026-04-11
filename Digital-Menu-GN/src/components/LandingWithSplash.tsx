@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import SplashScreen from '@/components/SplashScreen';
 import Index from '@/pages/common/Index';
-import { API_BASE_URL } from '@/constants';
+import { API_BASE_URL, publicBranchQuery, resolveCustomerPublicBranchId } from '@/constants';
 
 /**
  * Customer landing: splash (logo full screen + greet, branch, quote) then menu. No welcome/visiting page.
@@ -11,7 +11,8 @@ export default function LandingWithSplash() {
   const [branchName, setBranchName] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`${API_BASE_URL}/config/branch-contact`)
+    const branchId = resolveCustomerPublicBranchId();
+    fetch(`${API_BASE_URL}/config/branch-contact${publicBranchQuery(branchId)}`)
       .then(res => (res.ok ? res.json() : null))
       .then(data => data?.name && setBranchName(data.name))
       .catch(() => {});

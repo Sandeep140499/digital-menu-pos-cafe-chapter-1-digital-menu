@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
+import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   MapPin,
@@ -18,6 +19,7 @@ import {
   CheckCircle2,
   FileDown,
   RefreshCw,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -33,18 +35,35 @@ import { AnimatePresence, motion } from 'framer-motion';
 import QRCodeGenerator from '@/components/QRCodeGenerator';
 import LocationMap from '@/components/LocationMap';
 import { useToast } from '@/hooks/use-toast';
-import { API_BASE_URL, API_TIMEOUT_MS, fetchWithTimeout, readApiErrorMessage } from '@/constants';
+import {
+  API_BASE_URL,
+  API_TIMEOUT_MS,
+  fetchWithTimeout,
+  publicBranchQuery,
+  readApiErrorMessage,
+  resolveCustomerPublicBranchId,
+} from '@/constants';
 import { dedupeCustomerMenuCategories } from '@/utils/menuDedupe';
 import { useOrderStatusStream } from '@/hooks/useOrderStatusStream';
 import cafeLogo from '@/assets/logo.png';
 
 type CartItem = {
   id: string;
+  menuItemId?: number;
   name: string;
   price: number;
   quantity: number;
   variant?: 'HALF' | 'FULL';
   category?: string;
+};
+
+type HappyHourBannerPayload = {
+  visible: boolean;
+  headline: string;
+  body: string;
+  maxDiscountPercent: number;
+  timeLabel: string;
+  activeOfferIds: number[];
 };
 
 const PC_VARIANT_MARKER_RE = /\(\s*5pc\s*\/\s*8pc\s*\)/i;
@@ -384,7 +403,8 @@ const MenuCategoriesSection = memo(function MenuCategoriesSection({
     itemName: string,
     price: number,
     variant?: 'HALF' | 'FULL',
-    category?: string
+    category?: string,
+    menuItemId?: number
   ) => void;
   isLoadingMenu: boolean;
   menuLoadError: string | null;
@@ -413,6 +433,7 @@ const MenuCategoriesSection = memo(function MenuCategoriesSection({
               hasHalf: item.hasHalf,
               menuItemId: item.id,
               isNewLaunch: !!itemNew,
+              happyHour: item.happyHour ?? null,
             };
           })
         : [];
@@ -711,7 +732,8 @@ function MenuCategoryItemsPanel({
     itemName: string,
     price: number,
     variant?: 'HALF' | 'FULL',
-    category?: string
+    category?: string,
+    menuItemId?: number
   ) => void;
 }) {
   return (
@@ -781,13 +803,58 @@ function MenuCategoryItemsPanel({
             } else {
               fullPrice = Number(priceText.replace('₹', '').trim());
             }
+            const hh = item.happyHour as
+              | {
+                  discountPercent: number;
+                  offerName?: string;
+                  discountedHalfPrice?: number;
+                  discountedFullPrice: number;
+                  originalHalfPrice?: number;
+                  originalFullPrice: number;
+                }
+              | null
+              | undefined;
+            if (hh && hasHalfFull && halfPrice != null) {
+              halfPrice = Number(hh.discountedHalfPrice ?? halfPrice);
+              fullPrice = Number(hh.discountedFullPrice ?? fullPrice);
+            } else if (hh && !hasHalfFull) {
+              fullPrice = Number(hh.discountedFullPrice ?? fullPrice);
+            }
             const priceDisplay = priceText.startsWith('₹') ? priceText : `₹${priceText}`;
+            let priceDisplayNode: ReactNode = priceDisplay;
+            if (hh && hasHalfFull && hh.originalHalfPrice != null) {
+              priceDisplayNode = (
+                <span className="inline-flex flex-col leading-tight sm:block">
+                  <span className="text-amber-950">
+                    ₹{Math.round(Number(hh.discountedHalfPrice))} / ₹
+                    {Math.round(Number(hh.discountedFullPrice))}
+                  </span>
+                  <span className="text-[11px] font-medium text-slate-500 line-through">
+                    ₹{Math.round(Number(hh.originalHalfPrice))} / ₹
+                    {Math.round(Number(hh.originalFullPrice))}
+                  </span>
+                </span>
+              );
+            } else if (hh && !hasHalfFull) {
+              priceDisplayNode = (
+                <span className="inline-flex flex-col leading-tight">
+                  <span className="text-amber-950">₹{Math.round(Number(hh.discountedFullPrice))}</span>
+                  <span className="text-[11px] font-medium text-slate-500 line-through">
+                    ₹{Math.round(Number(hh.originalFullPrice))}
+                  </span>
+                </span>
+              );
+            }
             const priceBadgeClass = [
               'shrink-0 rounded-full px-3 py-1 text-sm font-extrabold',
-              isAddon ? 'bg-amber-100 text-amber-900' : 'bg-olive-100 text-olive-900',
+              isAddon ? 'bg-amber-100 text-amber-900' : hh ? 'bg-amber-100 text-amber-950' : 'bg-olive-100 text-olive-900',
             ].join(' ');
             const newRowTint =
               !isAddon && item.isNewLaunch ? 'bg-violet-50/55 hover:bg-violet-50/80' : '';
+            const hhGlow =
+              !isAddon && hh
+                ? 'border border-amber-300/80 bg-gradient-to-r from-amber-50/95 via-yellow-50/40 to-amber-50/30 shadow-[0_0_22px_rgba(234,179,8,0.22)]'
+                : '';
 
             if (hasHalfFull && halfPrice != null) {
               return (
@@ -795,7 +862,7 @@ function MenuCategoryItemsPanel({
                   key={rowKey}
                   className={[
                     'flex w-full min-w-0 flex-wrap items-center gap-2 overflow-hidden px-4 py-3 transition sm:gap-4',
-                    isAddon ? 'bg-amber-50/70' : newRowTint || 'hover:bg-olive-50/60',
+                    isAddon ? 'bg-amber-50/70' : newRowTint || hhGlow || 'hover:bg-olive-50/60',
                   ].join(' ')}
                 >
                   <div className="flex min-w-0 flex-1 basis-full flex-col gap-1.5 sm:basis-0">
@@ -812,14 +879,19 @@ function MenuCategoryItemsPanel({
                           New
                         </Badge>
                       )}
+                      {!isAddon && hh && (
+                        <Badge className="shrink-0 border-amber-400 bg-gradient-to-r from-amber-400 to-yellow-500 px-2 py-0 text-[10px] font-bold text-amber-950 shadow-sm">
+                          Happy Hour
+                        </Badge>
+                      )}
                     </div>
                     <span
                       className={[
                         'w-fit shrink-0 rounded-full px-3 py-1 text-sm font-extrabold',
-                        isAddon ? 'bg-amber-100 text-amber-900' : 'bg-olive-100 text-olive-900',
+                        isAddon ? 'bg-amber-100 text-amber-900' : hh ? 'bg-amber-100/90 text-amber-950' : 'bg-olive-100 text-olive-900',
                       ].join(' ')}
                     >
-                      {priceDisplay}
+                      {priceDisplayNode}
                     </span>
                   </div>
                   {/* QA: Flexible width on small devices so buttons don't force overflow; fixed min only from sm up. */}
@@ -828,7 +900,9 @@ function MenuCategoryItemsPanel({
                       variant="outline"
                       size="sm"
                       className="min-h-[44px] min-w-0 flex-1 touch-manipulation border-emerald-600 px-3 text-emerald-700 hover:bg-emerald-50 sm:min-w-[72px] sm:flex-initial"
-                      onClick={() => addToCart(item.name, halfPrice!, 'HALF', section.title)}
+                      onClick={() =>
+                        addToCart(item.name, halfPrice!, 'HALF', section.title, item.menuItemId)
+                      }
                     >
                       {halfBtnLabel}
                     </Button>
@@ -836,7 +910,9 @@ function MenuCategoryItemsPanel({
                       variant="outline"
                       size="sm"
                       className="min-h-[44px] min-w-0 flex-1 touch-manipulation border-emerald-700 bg-emerald-600 px-3 text-white hover:bg-emerald-700 sm:min-w-[72px] sm:flex-initial"
-                      onClick={() => addToCart(item.name, fullPrice, 'FULL', section.title)}
+                      onClick={() =>
+                        addToCart(item.name, fullPrice, 'FULL', section.title, item.menuItemId)
+                      }
                     >
                       {fullBtnLabel}
                     </Button>
@@ -850,7 +926,7 @@ function MenuCategoryItemsPanel({
                 key={rowKey}
                 className={[
                   'flex w-full min-w-0 items-center justify-between gap-2 overflow-hidden px-4 py-3 transition sm:gap-3',
-                  isAddon ? 'bg-amber-50/70' : newRowTint || 'hover:bg-olive-50/60',
+                  isAddon ? 'bg-amber-50/70' : newRowTint || hhGlow || 'hover:bg-olive-50/60',
                 ].join(' ')}
               >
                 <span
@@ -866,14 +942,21 @@ function MenuCategoryItemsPanel({
                       New
                     </Badge>
                   )}
+                  {!isAddon && hh && (
+                    <Badge className="shrink-0 border-amber-400 bg-gradient-to-r from-amber-400 to-yellow-500 px-2 py-0 text-[10px] font-bold text-amber-950 shadow-sm">
+                      Happy Hour
+                    </Badge>
+                  )}
                 </span>
                 <div className="flex shrink-0 items-center gap-2">
-                  <span className={priceBadgeClass}>{priceDisplay}</span>
+                  <span className={priceBadgeClass}>{priceDisplayNode}</span>
                   <Button
                     variant="outline"
                     size="sm"
                     className="min-h-[44px] min-w-0 touch-manipulation border-emerald-700 bg-emerald-600 px-3 text-white hover:bg-emerald-700 sm:min-w-0"
-                    onClick={() => addToCart(item.name, fullPrice, 'FULL', section.title)}
+                    onClick={() =>
+                      addToCart(item.name, fullPrice, 'FULL', section.title, item.menuItemId)
+                    }
                   >
                     Add
                   </Button>
@@ -898,6 +981,8 @@ const Index = () => {
   );
   const [menuCategories, setMenuCategories] = useState<any[]>([]);
   const [bestSellerItemIds, setBestSellerItemIds] = useState<number[]>([]);
+  const [happyHourBanner, setHappyHourBanner] = useState<HappyHourBannerPayload | null>(null);
+  const [happyHourWelcomeOpen, setHappyHourWelcomeOpen] = useState(false);
   const [isLoadingMenu, setIsLoadingMenu] = useState(true);
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [lastOrderId, setLastOrderId] = useState<number | null>(null);
@@ -994,22 +1079,38 @@ const Index = () => {
   }, []);
 
   const [menuLoadError, setMenuLoadError] = useState<string | null>(null);
-  const MENU_CACHE_KEY = 'dm_public_menu_cache_v1';
+  const [publicBranchId] = useState<number | null>(() =>
+    typeof window !== 'undefined' ? resolveCustomerPublicBranchId() : null
+  );
+  /** Set when `?branchId=` / env points to a missing or invalid branch (public config API). */
+  const [pinnedBranchContactError, setPinnedBranchContactError] = useState<string | null>(null);
+  const effectiveMenuBranchId = useMemo(
+    () => publicBranchId ?? branchContact?.id ?? null,
+    [publicBranchId, branchContact?.id]
+  );
+  const menuCacheKey = useMemo(
+    () => `dm_public_menu_cache_v2_b_${effectiveMenuBranchId ?? 'default'}`,
+    [effectiveMenuBranchId]
+  );
   const MENU_CACHE_TTL_MS = 5 * 60_000; // 5 minutes
 
   // Hydrate from last saved menu immediately (fast first paint), then refresh from server.
   useEffect(() => {
     try {
-      const raw = window.localStorage.getItem(MENU_CACHE_KEY);
+      const raw = window.localStorage.getItem(menuCacheKey);
       if (!raw) return;
       const parsed = JSON.parse(raw) as {
         ts?: number;
         categories?: any[];
         bestSellerItemIds?: number[];
+        happyHourBanner?: HappyHourBannerPayload;
       };
       // If cache is very old, don't show it (avoid "stale menu" UX).
       const ts = typeof parsed.ts === 'number' ? parsed.ts : 0;
       if (ts && Date.now() - ts > MENU_CACHE_TTL_MS) return;
+      if (parsed.happyHourBanner && typeof parsed.happyHourBanner === 'object') {
+        setHappyHourBanner(parsed.happyHourBanner);
+      }
       if (Array.isArray(parsed.categories) && parsed.categories.length > 0) {
         menuCategoriesRef.current = parsed.categories;
         setMenuCategories(parsed.categories);
@@ -1021,7 +1122,7 @@ const Index = () => {
     } catch {
       // ignore
     }
-  }, []);
+  }, [menuCacheKey]);
 
   const fetchMenu = useCallback(
     async (opts?: { silent?: boolean }) => {
@@ -1031,7 +1132,7 @@ const Index = () => {
       }
       const hasCachedCategories = (() => {
         try {
-          const raw = window.localStorage.getItem(MENU_CACHE_KEY);
+          const raw = window.localStorage.getItem(menuCacheKey);
           if (!raw) return false;
           const p = JSON.parse(raw) as { categories?: unknown[] };
           return Array.isArray(p.categories) && p.categories.length > 0;
@@ -1047,7 +1148,11 @@ const Index = () => {
         setIsLoadingMenu(true);
       }
       try {
-        const res = await fetchWithTimeout(`${apiBase}/menu`);
+        const menuUrl =
+          effectiveMenuBranchId != null
+            ? `${apiBase}/menu?branchId=${effectiveMenuBranchId}`
+            : `${apiBase}/menu`;
+        const res = await fetchWithTimeout(menuUrl);
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           const isWarmingUp = res.status === 502 || res.status === 503 || res.status === 504;
@@ -1063,6 +1168,7 @@ const Index = () => {
           }
           setMenuCategories(prev => (prev.length ? prev : []));
           setBestSellerItemIds(prev => (prev.length ? prev : []));
+          if (!hadMenu) setHappyHourBanner(null);
           if (isWarmingUp) {
             const attempts = (retryRef.current.menuAttempts ?? 0) + 1;
             retryRef.current.menuAttempts = attempts;
@@ -1083,13 +1189,21 @@ const Index = () => {
         const ids = Array.isArray(data)
           ? []
           : [...new Set((data?.bestSellerItemIds ?? []) as number[])].slice(0, 5);
+        const bannerRaw = Array.isArray(data) ? null : (data?.happyHourBanner ?? null);
+        const banner =
+          bannerRaw &&
+          typeof bannerRaw === 'object' &&
+          typeof (bannerRaw as HappyHourBannerPayload).visible === 'boolean'
+            ? (bannerRaw as HappyHourBannerPayload)
+            : null;
         setMenuCategories(categories);
         setBestSellerItemIds(ids);
+        setHappyHourBanner(banner);
         setMenuLoadError(null);
         try {
           window.localStorage.setItem(
-            MENU_CACHE_KEY,
-            JSON.stringify({ ts: Date.now(), categories, bestSellerItemIds: ids })
+            menuCacheKey,
+            JSON.stringify({ ts: Date.now(), categories, bestSellerItemIds: ids, happyHourBanner: banner })
           );
         } catch {
           // ignore
@@ -1098,18 +1212,20 @@ const Index = () => {
         const isTimeout = error instanceof Error && error.name === 'AbortError';
         let usedCache = false;
         try {
-          const raw = window.localStorage.getItem(MENU_CACHE_KEY);
+          const raw = window.localStorage.getItem(menuCacheKey);
           if (raw) {
             const parsed = JSON.parse(raw) as {
               ts?: number;
               categories?: any[];
               bestSellerItemIds?: number[];
+              happyHourBanner?: HappyHourBannerPayload;
             };
             if (Array.isArray(parsed.categories) && parsed.categories.length > 0) {
               setMenuCategories(parsed.categories);
               setBestSellerItemIds(
                 Array.isArray(parsed.bestSellerItemIds) ? parsed.bestSellerItemIds : []
               );
+              if (parsed.happyHourBanner) setHappyHourBanner(parsed.happyHourBanner);
               usedCache = true;
             }
           }
@@ -1139,12 +1255,30 @@ const Index = () => {
         setIsLoadingMenu(false);
       }
     },
-    [apiBase]
+    [apiBase, menuCacheKey, effectiveMenuBranchId]
   );
 
   useEffect(() => {
     void fetchMenu({ silent: false });
   }, [fetchMenu]);
+
+  const prevMenuBranchRef = useRef<number | null | undefined>(undefined);
+  useEffect(() => {
+    if (prevMenuBranchRef.current === undefined) {
+      prevMenuBranchRef.current = effectiveMenuBranchId;
+      return;
+    }
+    const prev = prevMenuBranchRef.current;
+    const next = effectiveMenuBranchId;
+    if (prev === next) return;
+    // Only clear cart on a real branch switch (e.g. user changed ?branch=). Do not clear when
+    // branch id appears for the first time after contact loads — same behaviour as before.
+    if (prev != null && next != null && prev !== next) {
+      setCart([]);
+      setCartOpen(false);
+    }
+    prevMenuBranchRef.current = next;
+  }, [effectiveMenuBranchId]);
 
   const branchContactRef = useRef(branchContact);
   useEffect(() => {
@@ -1157,10 +1291,32 @@ const Index = () => {
         setBranchContactLoading(true);
       }
       try {
-        const res = await fetchWithTimeout(`${apiBase}/config/branch-contact`);
+        const res = await fetchWithTimeout(
+          `${apiBase}/config/branch-contact${publicBranchQuery(publicBranchId)}`
+        );
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           const isWarmingUp = res.status === 502 || res.status === 503 || res.status === 504;
+          const isBadBranchPin = res.status === 404 || res.status === 400;
+          if (isBadBranchPin) {
+            const msg =
+              typeof (data as { message?: string }).message === 'string'
+                ? (data as { message: string }).message
+                : 'This menu link is not valid. Ask staff for the correct QR code.';
+            setPinnedBranchContactError(msg);
+            setBranchContact({
+              id: null,
+              name: 'CAFE CHAPTER 1 RESTRO',
+              phone: null,
+              location: null,
+              googleReviewUrl: null,
+              logoUrl: null,
+              showTotalAmountToCustomers: true,
+              orderingOpen: false,
+            });
+            setBranchContactResolved(true);
+            return;
+          }
           if (!branchContactRef.current) {
             setBranchContact({
               id: null,
@@ -1186,6 +1342,7 @@ const Index = () => {
           return;
         }
 
+        setPinnedBranchContactError(null);
         setBranchContact({
           id: data.id ?? null,
           name: data.name || 'CAFE CHAPTER 1 RESTRO',
@@ -1228,7 +1385,7 @@ const Index = () => {
         }
       }
     },
-    [apiBase]
+    [apiBase, publicBranchId]
   );
 
   useEffect(() => {
@@ -1265,14 +1422,42 @@ const Index = () => {
 
   // No welcome/visiting page — splash only, then straight to menu
 
+  useEffect(() => {
+    if (!happyHourBanner?.visible) {
+      setHappyHourWelcomeOpen(false);
+      return;
+    }
+    const ids = (happyHourBanner.activeOfferIds || []).join('-') || 'offers';
+    const key = `dm_hh_welcome_${ids}`;
+    try {
+      if (sessionStorage.getItem(key)) {
+        setHappyHourWelcomeOpen(false);
+        return;
+      }
+    } catch {
+      /* ignore */
+    }
+    const t = window.setTimeout(() => setHappyHourWelcomeOpen(true), 500);
+    return () => window.clearTimeout(t);
+  }, [happyHourBanner]);
+
   const addToCart = useCallback(
-    (itemName: string, price: number, variant?: 'HALF' | 'FULL', category?: string) => {
+    (
+      itemName: string,
+      price: number,
+      variant?: 'HALF' | 'FULL',
+      category?: string,
+      menuItemId?: number
+    ) => {
       // Generate a unique ID using timestamp + random to avoid collisions with special characters in item names
       const id = `${itemName}-${variant ?? 'FULL'}-${category ?? ''}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
       setCart(prev => {
-        // Check for existing item with same name, variant, and category (not just ID)
         const existingIndex = prev.findIndex(
-          i => i.name === itemName && i.variant === variant && i.category === category
+          i =>
+            i.name === itemName &&
+            i.variant === variant &&
+            i.category === category &&
+            i.menuItemId === menuItemId
         );
         if (existingIndex >= 0) {
           return prev.map((i, idx) =>
@@ -1283,6 +1468,7 @@ const Index = () => {
           ...prev,
           {
             id,
+            menuItemId,
             name: itemName,
             price,
             quantity: 1,
@@ -1380,6 +1566,7 @@ const Index = () => {
               unitPrice: item.price,
               quantity: item.quantity,
               variant: item.variant,
+              menuItemId: item.menuItemId,
             })),
           }),
         });
@@ -1472,6 +1659,56 @@ const Index = () => {
 
   return (
     <>
+      <Dialog
+        open={happyHourWelcomeOpen}
+        onOpenChange={open => {
+          if (!open && happyHourBanner?.visible) {
+            const ids = (happyHourBanner.activeOfferIds || []).join('-') || 'offers';
+            try {
+              sessionStorage.setItem(`dm_hh_welcome_${ids}`, '1');
+            } catch {
+              /* ignore */
+            }
+          }
+          setHappyHourWelcomeOpen(open);
+        }}
+      >
+        <DialogContent className="max-w-md border-amber-200 bg-gradient-to-b from-amber-50 to-white shadow-2xl sm:rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl font-bold text-amber-950">
+              <Sparkles className="h-6 w-6 shrink-0 text-amber-500" />
+              {happyHourBanner?.headline || 'Happy Hours'}
+            </DialogTitle>
+            <DialogDescription className="text-left text-base leading-relaxed text-slate-700">
+              {happyHourBanner?.body}
+              {happyHourBanner?.timeLabel ? (
+                <span className="mt-3 block text-sm font-semibold text-amber-900">
+                  Today&apos;s window: {happyHourBanner.timeLabel}
+                </span>
+              ) : null}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              type="button"
+              className="bg-amber-600 text-white hover:bg-amber-700"
+              onClick={() => {
+                if (happyHourBanner?.visible) {
+                  const ids = (happyHourBanner.activeOfferIds || []).join('-') || 'offers';
+                  try {
+                    sessionStorage.setItem(`dm_hh_welcome_${ids}`, '1');
+                  } catch {
+                    /* ignore */
+                  }
+                }
+                setHappyHourWelcomeOpen(false);
+              }}
+            >
+              View menu
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <AnimatePresence>
         {orderSuccess && (
           <motion.div
@@ -1670,6 +1907,15 @@ const Index = () => {
           {/* Categories - memoized so cart/dialog updates do not re-render menu (stops blink). QA: Fixed pb reserves space for fixed cart bar so content never overlaps on iPhone when Safari UI changes. */}
           <main className="mx-auto w-full max-w-6xl min-w-0 overflow-x-hidden px-4 py-8 pb-[7.5rem] sm:py-10 sm:pb-10">
             <div className="space-y-6">
+              {pinnedBranchContactError ? (
+                <div
+                  role="alert"
+                  className="flex gap-3 rounded-xl border border-amber-200/80 bg-amber-50 px-4 py-3 text-sm text-amber-950 shadow-sm"
+                >
+                  <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" aria-hidden />
+                  <p className="leading-snug">{pinnedBranchContactError}</p>
+                </div>
+              ) : null}
               <MenuCategoriesSection
                 menuCategories={menuCategories}
                 categoryQuery={categoryQuery}

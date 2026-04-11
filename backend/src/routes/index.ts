@@ -20,6 +20,7 @@ import { attendanceRouter } from './modules/attendance.routes.js';
 import { metricsRouter } from './modules/metrics.routes.js';
 import { monthlyTargetsRouter } from './modules/monthlyTargets.routes.js';
 import { autoShiftRouter } from './modules/autoShift.routes.js';
+import { happyHourRouter } from './modules/happyHour.routes.js';
 
 export const router = Router();
 
@@ -47,3 +48,4 @@ router.use('/metrics', metricsRouter);
 router.use('/leaves', leaveRouter);
 router.use('/attendance', attendanceRouter);
 router.use('/monthly-targets', monthlyTargetsRouter);
+router.use('/happy-hours', happyHourRouter);

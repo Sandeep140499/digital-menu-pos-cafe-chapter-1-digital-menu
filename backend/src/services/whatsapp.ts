@@ -192,6 +192,29 @@ export function buildQueryResolvedMessage(params: {
   return `Hello ${customerName} 👋\n\nYour query regarding order ${orderIdStr} has been resolved.\n\nThank you for your patience ❤️\n\nContact us if needed.`;
 }
 
+/** Happy Hours / promotional offer — used with wa.me broadcast links. */
+export function buildHappyHourBroadcast(params: {
+  customerName: string;
+  discountPercent: number;
+  startTime: string;
+  endTime: string;
+  menuLink: string;
+  branch?: BranchInfo | null;
+}): string {
+  const name = params.branch?.name || RESTAURANT_NAME;
+  const discount = Math.round(Number(params.discountPercent) || 0);
+  const menuLink = params.menuLink || MENU_BASE_URL || 'Visit our menu online';
+  const cn = (params.customerName || 'there').trim() || 'there';
+  let msg = `Hi ${cn} 👋\n\n`;
+  msg += `🎉 Good news from ${name}!\n\n`;
+  msg += `We've just launched our Happy Hours 🎊\n`;
+  msg += `Enjoy ${discount}% OFF on selected items.\n\n`;
+  msg += `⏰ Time: ${params.startTime} – ${params.endTime}\n\n`;
+  msg += `👉 View Menu & Order:\n${menuLink}\n\n`;
+  msg += `We look forward to serving you 😊`;
+  return msg;
+}
+
 /** New item launch broadcast – details + menu URL. */
 export function buildNewItemBroadcast(params: {
   itemNames: string[];

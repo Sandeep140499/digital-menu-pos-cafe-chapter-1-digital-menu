@@ -36,6 +36,10 @@ async function main() {
     },
   });
 
+  await prisma.menuCategory.updateMany({
+    data: { branchId: branch.id },
+  });
+
   const employeePassword = 'employee@123';
   const employeeHash = await bcrypt.hash(employeePassword, 10);
 

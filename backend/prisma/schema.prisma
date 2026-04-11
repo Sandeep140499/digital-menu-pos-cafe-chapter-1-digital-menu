@@ -41,6 +41,7 @@ model Branch {
   customerQueries CustomerQuery[]
   directorVerifications   DirectorVerification[]
   directorRemovalRequests DirectorRemovalRequest[]
+  menuCategories          MenuCategory[]
 }
 
 model DirectorVerification {
@@ -258,8 +259,10 @@ model Table {
 
 model MenuCategory {
   id        Int          @id @default(autoincrement())
+  branchId  Int
+  branch    Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
   name      String
-  slug      String?      @unique
+  slug      String?
   imageUrl  String?      @map("image_url")
   /// When set and in the future, customer menu shows this category as “New launch” (admin-controlled).
   highlightNewUntil DateTime? @map("highlight_new_until")
@@ -268,6 +271,10 @@ model MenuCategory {
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
   items     MenuItem[]
+  happyHourCategoryLinks HappyHourCategory[]
+
+  @@unique([branchId, slug])
+  @@index([branchId])
 }
 
 model MenuItem {
@@ -285,6 +292,8 @@ model MenuItem {
   category    MenuCategory? @relation(fields: [categoryId], references: [id])
   createdAt   DateTime     @default(now())
   orderItems  OrderItem[]
+  happyHourItemLinks      HappyHourItem[]
+  happyHourExcludedLinks  HappyHourExcludedItem[]
 }
 
 model ErrorLog {
@@ -522,4 +531,95 @@ model DailyRevenueEntry {
 
   @@unique([businessDate])
   @@index([businessDate])
+}
+
+enum HappyHourApplyMode {
+  ALL_ITEMS
+  CATEGORIES
+  ITEMS
+}
+
+enum HappyHourStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum HappyHourNotificationPref {
+  NONE
+  SEND_ON_CREATE
+  SEND_MANUAL
+}
+
+enum HappyHourNotificationStatus {
+  NOT_APPLICABLE
+  PENDING
+  SENT
+  FAILED
+}
+
+enum HappyHourNotifyAudience {
+  ALL_CUSTOMERS
+  LEADERS
+  SELECTED
+}
+
+/// Time-based discount offers (Happy Hours) with optional WhatsApp broadcast metadata.
+model HappyHour {
+  id                   Int                         @id @default(autoincrement())
+  name                 String
+  discountPercent      Float
+  dateStart            DateTime                    @db.Date
+  dateEnd              DateTime                    @db.Date
+  /// Local time start, 24h "HH:mm" (branch timezone).
+  timeStart            String
+  /// Local time end, 24h "HH:mm". If end < start on clock, treated as overnight window.
+  timeEnd              String
+  /// JSON number[] weekday 0=Sunday .. 6=Saturday; null or empty = all days.
+  daysOfWeek           Json?
+  status               HappyHourStatus             @default(ACTIVE)
+  applyMode            HappyHourApplyMode
+
+  notificationPref     HappyHourNotificationPref   @default(NONE)
+  notificationStatus   HappyHourNotificationStatus @default(NOT_APPLICABLE)
+  sentAt               DateTime?
+  notifyAudience       HappyHourNotifyAudience?
+  /// JSON string[] of 10-digit mobiles when notifyAudience = SELECTED
+  selectedMobiles      Json?
+
+  categoryLinks        HappyHourCategory[]
+  itemLinks            HappyHourItem[]
+  excludedItemLinks    HappyHourExcludedItem[]
+
+  createdAt            DateTime                    @default(now())
+  updatedAt            DateTime                    @updatedAt
+
+  @@index([status, dateStart, dateEnd])
+}
+
+model HappyHourCategory {
+  happyHourId Int
+  happyHour   HappyHour    @relation(fields: [happyHourId], references: [id], onDelete: Cascade)
+  categoryId  Int
+  category    MenuCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([happyHourId, categoryId])
+}
+
+model HappyHourItem {
+  happyHourId Int
+  happyHour   HappyHour @relation(fields: [happyHourId], references: [id], onDelete: Cascade)
+  menuItemId  Int
+  menuItem    MenuItem  @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+
+  @@id([happyHourId, menuItemId])
+}
+
+/// Items excluded when applyMode = CATEGORIES (still in category but not on offer).
+model HappyHourExcludedItem {
+  happyHourId Int
+  happyHour   HappyHour @relation(fields: [happyHourId], references: [id], onDelete: Cascade)
+  menuItemId  Int
+  menuItem    MenuItem  @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+
+  @@id([happyHourId, menuItemId])
 }

@@ -3,6 +3,7 @@ import React from 'react';
 import { io, type Socket } from 'socket.io-client';
 import DashboardShell from '@/components/dashboard/DashboardShell';
 import MonthlyTargetSetup from '@/components/MonthlyTargetSetup';
+import { HappyHoursAdminSection } from '@/components/admin/HappyHoursAdminSection';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { PageLoader, InlineLoader, LoadingButton } from '@/components/shared';
@@ -38,6 +39,7 @@ import {
   Trophy,
   FileText,
   Star,
+  Sparkles,
   Package,
   Bell,
   ChevronLeft,
@@ -122,6 +124,7 @@ import {
   MENU_SORT_OPTIONS,
   STATUS_BUTTON_ACTIVE,
 } from '@/constants';
+import { downloadOrderInvoicePdf } from '@/utils/downloadOrderInvoicePdf';
 import { formatHours } from '@/utils/timeFormatter';
 import { calculateLate } from '@/utils/lateCalculator';
 import { getBusinessDateString } from '@/utils/businessDate';
@@ -311,6 +314,7 @@ function buildPayslipPrintHtmlModule(data: {
 // Types
 type MenuCategory = {
   id: number;
+  branchId?: number;
   name: string;
   slug?: string;
   imageUrl?: string;
@@ -383,6 +387,7 @@ function mergeMenuItemFromServerIntoCategories(
 const CategoryMenuDialog = memo(function CategoryMenuDialog({
   open,
   editingCategory,
+  menuBranchId,
   onOpenChange,
   onCreated,
   onUpdated,
@@ -390,6 +395,8 @@ const CategoryMenuDialog = memo(function CategoryMenuDialog({
 }: {
   open: boolean;
   editingCategory: MenuCategory | null;
+  /** Branch this category belongs to (new categories only). */
+  menuBranchId: number | null;
   onOpenChange: (open: boolean) => void;
   onCreated: (cat: MenuCategory) => void;
   onUpdated: (cat: MenuCategory) => void;
@@ -424,6 +431,14 @@ const CategoryMenuDialog = memo(function CategoryMenuDialog({
 
   const handleSubmit = async () => {
     if (!token || !name.trim()) return;
+    if (!editingCategory && (menuBranchId == null || menuBranchId < 1)) {
+      toast({
+        title: 'Choose a branch',
+        description: 'Select a branch in Menu (dropdown above) before creating a category.',
+        variant: 'destructive',
+      });
+      return;
+    }
     setSaving(true);
     try {
       if (editingCategory) {
@@ -454,6 +469,7 @@ const CategoryMenuDialog = memo(function CategoryMenuDialog({
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
+            branchId: menuBranchId,
             name: name.trim(),
             imageUrl: imageUrl.trim() || undefined,
             highlightAsNewLaunch,
@@ -826,6 +842,7 @@ const adminSidebarSections = [
     items: [
       { key: 'all-orders', label: 'All Orders', icon: ShoppingCart },
       { key: 'menu', label: 'Menu', icon: ChefHat },
+      { key: 'happy-hours', label: 'Happy Hour Offers', icon: Sparkles },
       {
         key: 'customer-leaderboard',
         label: 'Customer Leaderboard',
@@ -3569,6 +3586,7 @@ const AdminDashboard = () => {
     'overview',
     'performance',
     'menu',
+    'happy-hours',
     'employees',
     'all-orders',
     'customer-leaderboard',
@@ -4182,7 +4200,15 @@ const AdminDashboard = () => {
       };
       const businessDate = getBusinessDateString();
       const requests = [
-        { key: 'menu', url: `${apiBase}/menu/admin` },
+        {
+          key: 'menu',
+          url: (() => {
+            const menuBid = Number((branch as { id?: number })?.id ?? (branches[0] as { id?: number })?.id);
+            return Number.isFinite(menuBid) && menuBid > 0
+              ? `${apiBase}/menu/admin?branchId=${menuBid}`
+              : `${apiBase}/menu/admin`;
+          })(),
+        },
         { key: 'employees', url: `${apiBase}/employees` },
         // Dashboard "Today" uses business day (04:00 → 03:59), not live/unpaid orders.
         { key: 'orders', url: `${apiBase}/orders/all?date=${encodeURIComponent(businessDate)}` },
@@ -4489,6 +4515,31 @@ const AdminDashboard = () => {
       stopGlobalLoading();
     }
   };
+
+  // When the admin switches branch on the Menu tab, reload categories for that branch only.
+  useEffect(() => {
+    if (!token) return;
+    const bid = Number((branch as { id?: number })?.id);
+    if (!Number.isFinite(bid) || bid < 1) return;
+    if (activeSection !== 'menu') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetchWithTimeout(`${apiBase}/menu/admin?branchId=${bid}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          timeout: API_TIMEOUT_MS,
+        });
+        if (cancelled || !res.ok) return;
+        const data = await res.json();
+        if (Array.isArray(data)) setCategories(data);
+      } catch {
+        // ignore; user can refresh
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, (branch as { id?: number })?.id, activeSection, apiBase]);
 
   // When salary slip dialog opens, refresh employees so the dropdown has the latest active list
   useEffect(() => {
@@ -6044,63 +6095,164 @@ const AdminDashboard = () => {
       {/* KPI Cards */}
       <KPICards />
 
-      {/* Current month sales target — compact matrix (primary: % of target reached) */}
-      <Card className="max-w-md overflow-hidden border border-violet-200/90 bg-gradient-to-br from-violet-50/90 to-white p-3 shadow-sm">
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5">
-            <TrendingUp className="h-4 w-4 shrink-0 text-violet-600" />
-            <span className="text-sm font-semibold text-slate-800">Sales target</span>
-          </div>
-          <span className="text-muted-foreground max-w-[140px] truncate text-right text-[11px] leading-tight">
-            {monthlyTargetInfo?.monthLabel ||
-              new Date().toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
-          </span>
-        </div>
-        {monthlyTargetInfo?.targetSet ? (
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-md border border-violet-100 bg-white/95 px-2 py-2 text-center shadow-sm">
-              <p className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wide">
-                Reached
-              </p>
-              <p className="tabular-nums text-2xl font-bold leading-none text-violet-700 sm:text-3xl">
-                {Math.round((monthlyTargetInfo.achievedPct ?? 0) * 10) / 10}
-                <span className="text-lg font-bold sm:text-xl">%</span>
-              </p>
-            </div>
-            <div className="grid grid-rows-2 gap-1.5">
-              <div className="rounded-md border border-slate-200/80 bg-white/90 px-2 py-1.5">
-                <p className="text-muted-foreground text-[9px] font-medium uppercase">Status</p>
-                <p className="truncate text-xs font-semibold text-slate-800">
-                  {monthlyTargetInfo.status === 'ON_TRACK'
-                    ? 'On track'
-                    : monthlyTargetInfo.status === 'NEED_TO_PUSH'
-                      ? 'Push sales'
-                      : monthlyTargetInfo.status === 'CRITICAL'
-                        ? 'Critical'
-                        : '—'}
-                </p>
+      {/* Current month sales target — status colours + daily pace hint */}
+      {monthlyTargetInfo?.targetSet ? (
+        (() => {
+          const mt = monthlyTargetInfo;
+          const targetAmt = mt.targetAmount ?? 0;
+          const achievedAmt = mt.achievedAmount ?? 0;
+          const remaining = Math.max(0, targetAmt - achievedAmt);
+          const dLeft = mt.daysLeft ?? 0;
+          const dailyNeeded =
+            remaining <= 0 ? null : dLeft > 0 ? remaining / dLeft : remaining;
+          const st = mt.status;
+          const cardTone =
+            st === 'CRITICAL'
+              ? 'border-2 border-red-300 bg-gradient-to-br from-red-50/95 to-white shadow-sm shadow-red-100/40'
+              : st === 'NEED_TO_PUSH'
+                ? 'border-2 border-amber-300 bg-gradient-to-br from-amber-50/95 to-white shadow-sm shadow-amber-100/40'
+                : 'border-2 border-emerald-300 bg-gradient-to-br from-emerald-50/90 to-white shadow-sm shadow-emerald-100/30';
+          const statusBox =
+            st === 'CRITICAL'
+              ? 'border-red-300 bg-red-100/90 text-red-900'
+              : st === 'NEED_TO_PUSH'
+                ? 'border-amber-300 bg-amber-100/90 text-amber-950'
+                : 'border-emerald-300 bg-emerald-100/90 text-emerald-950';
+          const reachedTone =
+            st === 'CRITICAL'
+              ? 'border-red-200 text-red-800'
+              : st === 'NEED_TO_PUSH'
+                ? 'border-amber-200 text-amber-900'
+                : 'border-emerald-200 text-emerald-900';
+          const progressTrack =
+            st === 'CRITICAL' ? 'bg-red-100' : st === 'NEED_TO_PUSH' ? 'bg-amber-100' : 'bg-emerald-100';
+          const progressIndicator =
+            st === 'CRITICAL'
+              ? 'bg-red-600'
+              : st === 'NEED_TO_PUSH'
+                ? 'bg-amber-500'
+                : 'bg-emerald-600';
+          const headerIcon =
+            st === 'CRITICAL'
+              ? 'text-red-600'
+              : st === 'NEED_TO_PUSH'
+                ? 'text-amber-600'
+                : 'text-emerald-600';
+
+          return (
+            <Card className={`max-w-lg overflow-hidden p-3 ${cardTone}`}>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <TrendingUp className={`h-4 w-4 shrink-0 ${headerIcon}`} />
+                  <span className="text-sm font-semibold text-slate-800">Sales target</span>
+                </div>
+                <span className="text-muted-foreground max-w-[140px] truncate text-right text-[11px] leading-tight">
+                  {mt.monthLabel ||
+                    new Date().toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
+                </span>
               </div>
-              <div className="rounded-md border border-slate-200/80 bg-white/90 px-2 py-1.5">
-                <p className="text-muted-foreground text-[9px] font-medium uppercase">Days left</p>
-                <p className="tabular-nums text-xs font-semibold text-slate-800">
-                  {monthlyTargetInfo.daysLeft ?? 0}
-                </p>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="col-span-2 grid grid-cols-2 gap-2">
+                  <div className="rounded-md border border-emerald-200/90 bg-white/95 px-2 py-2 shadow-sm">
+                    <p className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wide">
+                      Target amount
+                    </p>
+                    <p className="mt-0.5 truncate text-sm font-bold tabular-nums text-emerald-900 sm:text-base">
+                      {formatINR(targetAmt)}
+                    </p>
+                  </div>
+                  <div className="rounded-md border border-slate-200/90 bg-white/95 px-2 py-2 shadow-sm">
+                    <p className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wide">
+                      Collected
+                    </p>
+                    <p className="mt-0.5 truncate text-sm font-bold tabular-nums text-slate-900 sm:text-base">
+                      {formatINR(achievedAmt)}
+                    </p>
+                  </div>
+                </div>
+                <div
+                  className={`rounded-md border bg-white/95 px-2 py-2 text-center shadow-sm ${reachedTone}`}
+                >
+                  <p className="text-[10px] font-semibold uppercase tracking-wide opacity-80">
+                    Reached
+                  </p>
+                  <p className="tabular-nums text-2xl font-bold leading-none sm:text-3xl">
+                    {Math.round((mt.achievedPct ?? 0) * 10) / 10}
+                    <span className="text-lg font-bold sm:text-xl">%</span>
+                  </p>
+                </div>
+                <div className="grid grid-rows-2 gap-1.5">
+                  <div className={`rounded-md border px-2 py-1.5 shadow-sm ${statusBox}`}>
+                    <p className="text-[9px] font-bold uppercase opacity-90">Status</p>
+                    <p className="truncate text-xs font-bold">
+                      {st === 'ON_TRACK'
+                        ? 'On track'
+                        : st === 'NEED_TO_PUSH'
+                          ? 'Push sales'
+                          : st === 'CRITICAL'
+                            ? 'Critical'
+                            : '—'}
+                    </p>
+                  </div>
+                  <div className="rounded-md border border-slate-200/80 bg-white/90 px-2 py-1.5">
+                    <p className="text-muted-foreground text-[9px] font-medium uppercase">Days left</p>
+                    <p className="tabular-nums text-xs font-semibold text-slate-800">{dLeft}</p>
+                  </div>
+                </div>
+                <div className="col-span-2 rounded-md border border-slate-200/60 bg-white/80 px-2 py-2">
+                  <p className="text-muted-foreground mb-1 text-[10px] font-semibold uppercase tracking-wide">
+                    To reach goal (paid sales)
+                  </p>
+                  {remaining <= 0 ? (
+                    <p className="text-sm font-semibold text-emerald-700">
+                      Target met for this month — great work.
+                    </p>
+                  ) : dailyNeeded != null && Number.isFinite(dailyNeeded) ? (
+                    <p className="text-sm leading-snug text-slate-800">
+                      <span className="font-bold tabular-nums text-slate-900">
+                        ~{formatINR(Math.ceil(dailyNeeded))}
+                      </span>{' '}
+                      <span className="text-muted-foreground">
+                        per day on average over the next{' '}
+                        <span className="font-semibold text-slate-800">
+                          {dLeft > 0 ? dLeft : 1}
+                        </span>{' '}
+                        calendar day{dLeft === 1 ? '' : 's'} (linear pace).
+                      </span>
+                    </p>
+                  ) : (
+                    <p className="text-sm text-slate-700">—</p>
+                  )}
+                </div>
+                <div className={`col-span-2 rounded-md px-2 py-1 ${progressTrack}`}>
+                  <Progress
+                    className={`h-1.5 ${progressTrack}`}
+                    indicatorClassName={progressIndicator}
+                    value={Math.min(100, Math.max(0, mt.achievedPct ?? 0))}
+                  />
+                </div>
               </div>
+            </Card>
+          );
+        })()
+      ) : (
+        <Card className="max-w-lg overflow-hidden border border-violet-200/90 bg-gradient-to-br from-violet-50/90 to-white p-3 shadow-sm">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              <TrendingUp className="h-4 w-4 shrink-0 text-violet-600" />
+              <span className="text-sm font-semibold text-slate-800">Sales target</span>
             </div>
-            <div className="col-span-2 rounded-md border border-violet-50 bg-violet-50/50 px-2 py-1">
-              <Progress
-                className="h-1.5 bg-violet-100"
-                value={Math.min(100, Math.max(0, monthlyTargetInfo.achievedPct ?? 0))}
-              />
-            </div>
+            <span className="text-muted-foreground max-w-[140px] truncate text-right text-[11px] leading-tight">
+              {monthlyTargetInfo?.monthLabel ||
+                new Date().toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
+            </span>
           </div>
-        ) : (
           <p className="text-muted-foreground text-xs leading-snug">
             No target set — open <span className="font-medium text-slate-700">Revenue</span> to set
             this month&apos;s goal.
           </p>
-        )}
-      </Card>
+        </Card>
+      )}
 
       {/* Overtime alert – employees working > 10h */}
       {overtimeSummary.overtimeRunningCount > 0 && (
@@ -6413,19 +6565,46 @@ const AdminDashboard = () => {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <h2 className="text-lg font-bold sm:text-xl">Menu Categories</h2>
-              <p className="text-muted-foreground text-sm">Manage categories and their items</p>
+              <p className="text-muted-foreground text-sm">
+                Manage categories and their items for the selected branch.
+              </p>
             </div>
-            <Button
-              size="sm"
-              onClick={() => {
-                setEditingCategory(null);
-                setIsCategoryDialogOpen(true);
-              }}
-              className="min-h-[44px] w-full shrink-0 sm:min-h-0 sm:w-auto"
-            >
-              <Plus className="mr-1 h-4 w-4" />
-              Add Category
-            </Button>
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-end sm:justify-end">
+              {branches.length > 1 ? (
+                <div className="flex min-w-0 flex-col gap-1 sm:mr-2 sm:w-56">
+                  <Label className="text-muted-foreground text-xs">Branch menu</Label>
+                  <Select
+                    value={String((branch as { id?: number })?.id ?? branches[0]?.id ?? '')}
+                    onValueChange={v => {
+                      const b = branches.find(x => x.id === Number(v));
+                      if (b) setBranch(b);
+                    }}
+                  >
+                    <SelectTrigger className="min-h-[44px] w-full sm:min-h-9">
+                      <SelectValue placeholder="Select branch" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {branches.map(b => (
+                        <SelectItem key={b.id} value={String(b.id)}>
+                          {b.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
+              <Button
+                size="sm"
+                onClick={() => {
+                  setEditingCategory(null);
+                  setIsCategoryDialogOpen(true);
+                }}
+                className="min-h-[44px] w-full shrink-0 sm:min-h-0 sm:w-auto"
+              >
+                <Plus className="mr-1 h-4 w-4" />
+                Add Category
+              </Button>
+            </div>
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row">
@@ -6495,7 +6674,9 @@ const AdminDashboard = () => {
                         <TableCell colSpan={6} className="text-muted-foreground py-8 text-center">
                           {menuSearchQuery
                             ? 'No categories found matching your search'
-                            : 'No categories yet. Create your first category!'}
+                            : branches.length > 1
+                              ? `No menu for "${(branch as { name?: string })?.name || 'this branch'}" yet. Use Branch menu above to open the outlet that still has your dishes, or add categories here for this location.`
+                              : 'No categories yet. Create your first category!'}
                         </TableCell>
                       </TableRow>
                     )}
@@ -9897,6 +10078,8 @@ const AdminDashboard = () => {
         return <PerformanceSection />;
       case 'menu':
         return <MenuSection />;
+      case 'happy-hours':
+        return <HappyHoursAdminSection apiBase={apiBase} token={token} toast={toast} />;
       case 'employees':
         return <EmployeesSection />;
       case 'all-orders':
@@ -10254,14 +10437,7 @@ const AdminDashboard = () => {
                         size="sm"
                         className="gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
                         onClick={() => {
-                          const url = `${apiBase}/orders/${displayOrder.id}/invoice-pdf`;
-                          const a = document.createElement('a');
-                          a.href = url;
-                          a.target = '_blank';
-                          a.rel = 'noopener noreferrer';
-                          document.body.appendChild(a);
-                          a.click();
-                          a.remove();
+                          void downloadOrderInvoicePdf(apiBase, displayOrder.id);
                         }}
                       >
                         <Download className="h-4 w-4" />
@@ -10376,6 +10552,13 @@ const AdminDashboard = () => {
       <CategoryMenuDialog
         open={isCategoryDialogOpen}
         editingCategory={editingCategory}
+        menuBranchId={
+          Number((branch as { id?: number })?.id) > 0
+            ? Number((branch as { id?: number }).id)
+            : Number((branches[0] as { id?: number })?.id) > 0
+              ? Number((branches[0] as { id?: number }).id)
+              : null
+        }
         onOpenChange={open => {
           if (!open) setEditingCategory(null);
           setIsCategoryDialogOpen(open);

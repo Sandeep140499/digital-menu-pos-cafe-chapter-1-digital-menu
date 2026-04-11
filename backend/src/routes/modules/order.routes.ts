@@ -5,7 +5,11 @@ import { prisma } from '../../config/prisma.js';
 import { getBusinessDayRange as getBusinessDayRangeForDate } from '../../utils/businessDay.js';
 import { authenticate, requireRole } from '../../middleware/auth.js';
 import { buildOrderInvoice, buildStatusMessage, getWaMeLink } from '../../services/whatsapp.js';
-import { generateOrderInvoicePdf, getInvoiceFileName } from '../../services/invoicePdf.js';
+import {
+  buildInvoicePdfPublicUrl,
+  generateOrderInvoicePdf,
+  getInvoiceFileName,
+} from '../../services/invoicePdf.js';
 import { isMailConfigured, sendEmail } from '../../config/mailer.js';
 import { onOrderStatus, publishOrderStatus } from '../../utils/orderStatusEvents.js';
 import {
@@ -14,6 +18,8 @@ import {
 } from '../../services/orderNotifications.js';
 import { logger } from '../../utils/logger.js';
 import { filterOrderItemsForReceipt } from '../../utils/orderItemsFilter.js';
+import { resolveExpectedUnitPrice } from '../../services/happyHourEngine.js';
+import { loadActiveHappyHourRules } from '../../services/happyHourRulesLoader.js';
 
 const mobileRegex = /^[6-9]\d{9}$/;
 
@@ -41,6 +47,7 @@ const createOrderSchema = z
           unitPrice: z.number().nonnegative(),
           quantity: z.number().int().min(1),
           variant: z.enum(['HALF', 'FULL']).optional(),
+          menuItemId: z.number().int().positive().optional(),
         })
       )
       .min(1),
@@ -213,19 +220,90 @@ orderRouter.post('/', async (req, res) => {
   const normalizeItemName = (name: string) =>
     (name || '').replace(/\s*\(5pc\s*\/\s*8pc\)\s*/gi, '').trim() || name;
 
+  const { rules: happyHourRules, tz: happyHourTz } = await loadActiveHappyHourRules();
+  const happyHourNow = new Date();
+
+  async function resolveMenuItemForLine(item: (typeof items)[0]) {
+    const select = {
+      id: true,
+      name: true,
+      basePrice: true,
+      halfPrice: true,
+      hasHalf: true,
+      categoryId: true,
+      isActive: true,
+    } as const;
+    const branchMenuWhere = {
+      isActive: true,
+      category: { branchId },
+    } as const;
+
+    if (item.menuItemId) {
+      return prisma.menuItem.findFirst({
+        where: { id: item.menuItemId, ...branchMenuWhere },
+        select,
+      });
+    }
+    const baseName = normalizeItemName(item.name);
+    let mi = await prisma.menuItem.findFirst({
+      where: { name: baseName, ...branchMenuWhere },
+      select,
+    });
+    if (!mi && baseName !== (item.name || '').trim()) {
+      mi = await prisma.menuItem.findFirst({
+        where: { name: (item.name || '').trim(), ...branchMenuWhere },
+        select,
+      });
+    }
+    return mi;
+  }
+
   let totalAmount = 0;
-  const orderItemsData = items.map(item => {
+  const orderItemsData: Array<{
+    name: string;
+    quantity: number;
+    price: number;
+    variant?: string;
+    menuItemId?: number;
+  }> = [];
+
+  for (const item of items) {
+    const mi = await resolveMenuItemForLine(item);
+    if (!mi) {
+      return res.status(400).json({
+        success: false,
+        message: `This dish is not available to order: ${item.name}. Please refresh the menu.`,
+      });
+    }
+    const expected = resolveExpectedUnitPrice({
+      basePrice: Number(mi.basePrice),
+      halfPrice: mi.halfPrice != null ? Number(mi.halfPrice) : null,
+      hasHalf: !!mi.hasHalf,
+      variant: item.variant,
+      menuItemId: mi.id,
+      categoryId: mi.categoryId,
+      rules: happyHourRules,
+      now: happyHourNow,
+      tz: happyHourTz,
+    });
+    if (Math.abs(expected - item.unitPrice) > 0.051) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'Menu or offer pricing has changed. Please close this page, refresh the menu, and try again.',
+      });
+    }
     const price = item.unitPrice;
     totalAmount += price * item.quantity;
     const baseName = normalizeItemName(item.name);
-
-    return {
+    orderItemsData.push({
       name: baseName,
       quantity: item.quantity,
       price,
       variant: item.variant ?? undefined,
-    };
-  });
+      menuItemId: mi.id,
+    });
+  }
 
   // Take away is already shown via orderType TAKE_AWAY — do not add a separate "Packaging" line
   // (it cluttered order cards, emails, and receipts at ₹0).
@@ -491,10 +569,7 @@ orderRouter.get('/:id/whatsapp-invoice', async (req, res) => {
   const acceptedBy = order.employee
     ? { name: order.employee.name, role: order.employee.role ?? 'Counter Staff' }
     : undefined;
-  const apiBase = process.env.PUBLIC_API_BASE_URL || '';
-  const invoicePdfUrl = apiBase
-    ? `${apiBase.replace(/\/$/, '')}/api/orders/${order.id}/invoice-pdf`
-    : undefined;
+  const invoicePdfUrl = buildInvoicePdfPublicUrl(order.id);
   const invoiceMessage = buildOrderInvoice({
     orderId: order.id,
     customerName: order.customerName,

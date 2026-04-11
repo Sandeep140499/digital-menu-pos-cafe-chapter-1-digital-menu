@@ -260,7 +260,7 @@ async function seedMenu() {
   console.log("Starting menu seed...");
   
   // Get the first branch
-  const branch = await prisma.branch.findFirst();
+  const branch = await prisma.branch.findFirst({ orderBy: { id: "asc" } });
   
   if (!branch) {
     console.error("No branch found! Please create a branch first.");
@@ -276,20 +276,23 @@ async function seedMenu() {
         : null;
 
     let category = slug
-      ? await prisma.menuCategory.findUnique({ where: { slug } })
+      ? await prisma.menuCategory.findUnique({
+          where: { branchId_slug: { branchId: branch.id, slug } },
+        })
       : null;
     if (!category) {
       category = await prisma.menuCategory.findFirst({
-        where: { name: categoryData.name },
+        where: { name: categoryData.name, branchId: branch.id },
       });
     }
 
     if (!category) {
       const catPayload: {
+        branchId: number;
         name: string;
         imageUrl?: string;
         slug?: string;
-      } = { name: categoryData.name };
+      } = { branchId: branch.id, name: categoryData.name };
       if ("imageUrl" in categoryData && categoryData.imageUrl) {
         catPayload.imageUrl = categoryData.imageUrl;
       }

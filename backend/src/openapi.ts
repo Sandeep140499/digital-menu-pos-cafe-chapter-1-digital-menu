@@ -269,10 +269,21 @@ export const openApiSpec = {
       get: {
         tags: ['Config'],
         summary: 'Public branch contact info',
+        description:
+          'Optional query `branchId` or `branch` (positive integer) returns that branch; omit for legacy default (first branch).',
+        parameters: [
+          {
+            name: 'branchId',
+            in: 'query',
+            schema: { type: 'integer', minimum: 1 },
+          },
+        ],
         responses: {
           '200': {
             description: 'Contact info used on the customer menu page.',
           },
+          '400': { description: 'Invalid branch id.' },
+          '404': { description: 'Branch not found.' },
         },
       },
     },

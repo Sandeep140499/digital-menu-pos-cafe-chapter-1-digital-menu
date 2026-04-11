@@ -11,6 +11,7 @@ import {
   sendEmail,
   verifyMailConnection,
 } from '../../config/mailer.js';
+import { getDefaultPublicBranchId } from '../../utils/defaultPublicBranch.js';
 
 type CustomerQueryRecord = {
   id: number;
@@ -131,19 +132,50 @@ configRouter.get('/public-traffic', authenticate, requireRole('ADMIN'), (_req, r
 });
 
 // Public: branch contact for menu (Call / WhatsApp) and branch id for placing orders
+// Optional `?branchId=` (or `?branch=`) pins a physical menu / QR deployment to one branch.
 // Cache briefly: reduces DB load under customer traffic while keeping "orderingOpen" responsive.
-configRouter.get('/branch-contact', cacheMiddleware(10, ['public', 'branch-contact']), async (_req, res) => {
-  const branch = await prisma.branch.findFirst({
-    select: {
-      id: true,
-      name: true,
-      phone: true,
-      location: true,
-      googleReviewUrl: true,
-      logoUrl: true,
-      showTotalAmountToCustomers: true,
-    },
-  });
+configRouter.get('/branch-contact', cacheMiddleware(10, ['public', 'branch-contact']), async (req, res) => {
+  const raw = req.query.branchId ?? req.query.branch;
+  let requestedId: number | null = null;
+  if (raw !== undefined && raw !== '') {
+    const n = Number.parseInt(String(raw), 10);
+    if (!Number.isFinite(n) || n < 1) {
+      return res.status(400).json({ message: 'Invalid branchId' });
+    }
+    requestedId = n;
+  }
+
+  const branchSelect = {
+    id: true,
+    name: true,
+    phone: true,
+    location: true,
+    googleReviewUrl: true,
+    logoUrl: true,
+    showTotalAmountToCustomers: true,
+  } as const;
+
+  let branch = null;
+  if (requestedId) {
+    branch = await prisma.branch.findUnique({
+      where: { id: requestedId },
+      select: branchSelect,
+    });
+  } else {
+    const defaultId = await getDefaultPublicBranchId();
+    branch = defaultId
+      ? await prisma.branch.findUnique({
+          where: { id: defaultId },
+          select: branchSelect,
+        })
+      : null;
+  }
+
+  if (requestedId && !branch) {
+    return res.status(404).json({
+      message: 'Branch not found. Check the menu link or ask staff for the correct QR code.',
+    });
+  }
 
   let orderingOpen = false;
   if (branch?.id) {
@@ -216,9 +248,13 @@ configRouter.get('/employee-settings', authenticate, requireRole('EMPLOYEE'), as
 // Public: lightweight settings for customer UI
 // Cache: branch setting changes rarely; safe to cache longer.
 configRouter.get('/public-settings', cacheMiddleware(300, ['public', 'public-settings']), async (_req, res) => {
-  const branch = await prisma.branch.findFirst({
-    select: { showTotalAmountToCustomers: true },
-  });
+  const defaultId = await getDefaultPublicBranchId();
+  const branch = defaultId
+    ? await prisma.branch.findUnique({
+        where: { id: defaultId },
+        select: { showTotalAmountToCustomers: true },
+      })
+    : null;
   return res.json({
     showTotalAmountToCustomers: branch?.showTotalAmountToCustomers ?? true,
   });
@@ -240,9 +276,13 @@ configRouter.get(
       return res.status(400).json({ message: 'itemNames required (comma-separated)' });
     }
     const { buildNewItemBroadcast } = await import('../../services/whatsapp.js');
-    const branch = await prisma.branch.findFirst({
-      select: { name: true, location: true, phone: true, googleReviewUrl: true },
-    });
+    const defaultId = await getDefaultPublicBranchId();
+    const branch = defaultId
+      ? await prisma.branch.findUnique({
+          where: { id: defaultId },
+          select: { name: true, location: true, phone: true, googleReviewUrl: true },
+        })
+      : null;
     const message = buildNewItemBroadcast({
       itemNames,
       itemDetails,
@@ -254,15 +294,23 @@ configRouter.get(
 
 // Admin: get first branch (backward compat) or by query ?branchId=
 configRouter.get('/branch', authenticate, requireRole('ADMIN'), async (req, res) => {
-  const branchId = req.query.branchId ? Number(req.query.branchId) : null;
-  const branch = branchId
-    ? await prisma.branch.findUnique({
-        where: { id: branchId },
-        include: { _count: { select: { employees: true, tables: true } } },
-      })
-    : await prisma.branch.findFirst({
-        include: { _count: { select: { employees: true, tables: true } } },
-      });
+  const q = req.query.branchId ? Number(req.query.branchId) : null;
+  const branchId = q != null && Number.isFinite(q) && q > 0 ? q : null;
+  let branch = null;
+  if (branchId) {
+    branch = await prisma.branch.findUnique({
+      where: { id: branchId },
+      include: { _count: { select: { employees: true, tables: true } } },
+    });
+  } else {
+    const defaultId = await getDefaultPublicBranchId();
+    branch = defaultId
+      ? await prisma.branch.findUnique({
+          where: { id: defaultId },
+          include: { _count: { select: { employees: true, tables: true } } },
+        })
+      : null;
+  }
   return res.json(branch);
 });
 

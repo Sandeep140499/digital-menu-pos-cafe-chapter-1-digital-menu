@@ -150,9 +150,14 @@ const categories: { slug: string; name: string; imageUrl: string }[] = [
 
 async function main() {
   console.log('Migrating menu categories (slug, name, image_url)...');
+  const branch = await prisma.branch.findFirst({ orderBy: { id: 'asc' } });
+  if (!branch) {
+    console.error('No Branch row — create a branch first.');
+    process.exit(1);
+  }
   for (const row of categories) {
-    const existing = await prisma.menuCategory.findUnique({
-      where: { slug: row.slug },
+    const existing = await prisma.menuCategory.findFirst({
+      where: { slug: row.slug, branchId: branch.id },
     });
     if (existing) {
       await prisma.menuCategory.update({
@@ -162,7 +167,7 @@ async function main() {
       console.log(`Updated: ${row.slug} -> ${row.name}`);
     } else {
       await prisma.menuCategory.create({
-        data: { slug: row.slug, name: row.name, imageUrl: row.imageUrl },
+        data: { branchId: branch.id, slug: row.slug, name: row.name, imageUrl: row.imageUrl },
       });
       console.log(`Created: ${row.slug} -> ${row.name}`);
     }

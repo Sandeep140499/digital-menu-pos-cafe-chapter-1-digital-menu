@@ -78,6 +78,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatHours } from '@/utils/timeFormatter';
 import { filterOrderItemsForDisplay } from '@/utils/orderDisplay';
+import { downloadOrderInvoicePdf } from '@/utils/downloadOrderInvoicePdf';
 import {
   API_BASE_URL,
   fetchWithTimeout,
@@ -1013,14 +1014,7 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    const url = `${apiBase}/orders/${displayOrder.id}/invoice-pdf`;
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.target = '_blank';
-                    a.rel = 'noopener noreferrer';
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
+                    void downloadOrderInvoicePdf(apiBase, displayOrder.id);
                   }}
                 >
                   <Download className="mr-1 h-4 w-4" />
@@ -1051,14 +1045,7 @@ const OrderPopupDialogView = memo(function OrderPopupDialogView(props: {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    const url = `${apiBase}/orders/${displayOrder.id}/invoice-pdf`;
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.target = '_blank';
-                    a.rel = 'noopener noreferrer';
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
+                    void downloadOrderInvoicePdf(apiBase, displayOrder.id);
                   }}
                 >
                   <Download className="mr-1 h-4 w-4" />
@@ -1291,14 +1278,7 @@ function AddOrderSection({
             size="sm"
             className="gap-2"
             onClick={() => {
-              const url = `${apiBase}/orders/${lastOrderId}/invoice-pdf`;
-              const a = document.createElement('a');
-              a.href = url;
-              a.target = '_blank';
-              a.rel = 'noopener noreferrer';
-              document.body.appendChild(a);
-              a.click();
-              a.remove();
+              if (lastOrderId) void downloadOrderInvoicePdf(apiBase, lastOrderId);
             }}
           >
             <Download className="h-4 w-4" />

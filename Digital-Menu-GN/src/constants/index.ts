@@ -4,8 +4,12 @@ export {
   describeFetchFailure,
   fetchWithTimeout,
   fetchWithTimeoutRetry,
+  getCustomerBranchIdFromEnv,
+  getCustomerBranchIdFromSearch,
   getFrontendUrl,
+  publicBranchQuery,
   readApiErrorMessage,
+  resolveCustomerPublicBranchId,
 } from './api';
 export { APP_NAME, ORDER_STATUS_COLORS, STATUS_BUTTON_ACTIVE, STATUS_STYLES } from './theme';
 export {

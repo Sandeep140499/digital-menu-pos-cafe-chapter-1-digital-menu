@@ -49,6 +49,39 @@ export function getInvoiceFileName(orderId: number): string {
   return `INV-${year}-${padded}.pdf`;
 }
 
+/**
+ * pdf-lib StandardFonts use PDF WinAnsi — characters like ₹ (U+20B9) and emoji throw
+ * "WinAnsi cannot encode …" and abort the whole PDF. Strip/replace so invoices always render.
+ */
+export function pdfWinAnsiSafe(input: string | null | undefined, maxLen = 220): string {
+  let s = String(input ?? '')
+    .replace(/\u20B9/g, 'Rs.')
+    .replace(/\r\n/g, ' ')
+    .replace(/[\r\n\t]/g, ' ');
+  s = s.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '');
+  let out = '';
+  for (let i = 0; i < s.length && out.length < maxLen; i++) {
+    const c = s[i]!;
+    const code = c.charCodeAt(0);
+    if (code >= 32 && code <= 126) out += c;
+    else out += ' ';
+  }
+  return out.replace(/\s+/g, ' ').trim() || '-';
+}
+
+function rs(amount: number): string {
+  return `Rs. ${Number(amount).toFixed(0)}`;
+}
+
+/** Absolute URL for customers to open the PDF (WhatsApp / SMS). Handles PUBLIC_API_BASE_URL with or without `/api`. */
+export function buildInvoicePdfPublicUrl(orderId: number): string | undefined {
+  const raw = (process.env.PUBLIC_API_BASE_URL || '').trim();
+  if (!raw) return undefined;
+  const base = raw.replace(/\/+$/, '');
+  if (/\/api$/i.test(base)) return `${base}/orders/${orderId}/invoice-pdf`;
+  return `${base}/api/orders/${orderId}/invoice-pdf`;
+}
+
 export async function generateOrderInvoicePdf(order: OrderForPdf): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
@@ -61,11 +94,11 @@ export async function generateOrderInvoicePdf(order: OrderForPdf): Promise<Uint8
   const lineHeightSmall = 10;
   let y = height - margin;
 
-  const name = order.branch?.name || RESTAURANT_NAME;
-  const location = order.branch?.location || DEFAULT_ADDRESS;
-  const phone = order.branch?.phone || '';
-  const gstin = RESTAURANT_GSTIN;
-  const reviewUrl = order.branch?.googleReviewUrl || GOOGLE_REVIEW_URL;
+  const name = pdfWinAnsiSafe(order.branch?.name || RESTAURANT_NAME, 120);
+  const location = pdfWinAnsiSafe(order.branch?.location || DEFAULT_ADDRESS, 200);
+  const phone = pdfWinAnsiSafe(order.branch?.phone || '', 20);
+  const gstin = pdfWinAnsiSafe(RESTAURANT_GSTIN, 24);
+  const reviewUrl = pdfWinAnsiSafe(order.branch?.googleReviewUrl || GOOGLE_REVIEW_URL, 240);
 
   const drawLine = () => {
     page.drawLine({
@@ -125,11 +158,11 @@ export async function generateOrderInvoicePdf(order: OrderForPdf): Promise<Uint8
   drawTextCenter(name.toUpperCase(), 16, true);
   y -= 2;
   drawTextCenter(location, 10);
-  if (phone) {
+  if (phone && phone !== '-') {
     page.drawText(`Phone: +91 ${phone}`, { x: margin, y, size: 9, font: fontSmall });
     y -= lineHeightSmall;
   }
-  if (gstin) {
+  if (gstin && gstin !== '-') {
     page.drawText(`GSTIN: ${gstin}`, { x: margin, y, size: 9, font: fontSmall });
     y -= lineHeightSmall;
   }
@@ -151,20 +184,29 @@ export async function generateOrderInvoicePdf(order: OrderForPdf): Promise<Uint8
     hour: '2-digit',
     minute: '2-digit',
   });
-  page.drawText(`Date: ${dateStr}`, { x: margin, y, size: 10, font: font });
-  page.drawText(`Time: ${timeStr}`, { x: width - margin - 60, y, size: 10, font: font });
+  page.drawText(`Date: ${pdfWinAnsiSafe(dateStr, 40)}`, { x: margin, y, size: 10, font: font });
+  page.drawText(`Time: ${pdfWinAnsiSafe(timeStr, 20)}`, { x: width - margin - 60, y, size: 10, font: font });
   y -= lineHeight;
-  page.drawText(`Customer: ${order.customerName || '-'}`, { x: margin, y, size: 10, font: font });
+  page.drawText(
+    `Customer: ${pdfWinAnsiSafe(order.customerName || '-', 80)}`,
+    { x: margin, y, size: 10, font: font }
+  );
   y -= lineHeight;
-  page.drawText(`Mobile: ${order.customerMobile || '-'}`, { x: margin, y, size: 10, font: font });
+  page.drawText(
+    `Mobile: ${pdfWinAnsiSafe(order.customerMobile || '-', 14)}`,
+    { x: margin, y, size: 10, font: font }
+  );
   y -= lineHeight;
-  page.drawText(`Order Type: ${order.orderType}`, { x: margin, y, size: 10, font: font });
-  page.drawText(`Table: ${order.tableNumber}`, { x: width - margin - 80, y, size: 10, font: font });
+  page.drawText(`Order Type: ${pdfWinAnsiSafe(order.orderType, 40)}`, { x: margin, y, size: 10, font: font });
+  page.drawText(`Table: ${pdfWinAnsiSafe(order.tableNumber, 24)}`, { x: width - margin - 80, y, size: 10, font: font });
   y -= lineHeight;
   if (order.acceptedBy?.name) {
-    const acceptedLabel = order.acceptedBy.role
-      ? `Accepted by: ${order.acceptedBy.name} (${order.acceptedBy.role})`
-      : `Accepted by: ${order.acceptedBy.name}`;
+    const acceptedLabel = pdfWinAnsiSafe(
+      order.acceptedBy.role
+        ? `Accepted by: ${order.acceptedBy.name} (${order.acceptedBy.role})`
+        : `Accepted by: ${order.acceptedBy.name}`,
+      120
+    );
     page.drawText(acceptedLabel, { x: margin, y, size: 9, font: fontSmall });
     y -= lineHeightSmall;
   }
@@ -209,42 +251,43 @@ export async function generateOrderInvoicePdf(order: OrderForPdf): Promise<Uint8
     const suffix = variantLabel(baseName, item.variant);
     const label = suffix ? `${baseName} (${suffix})` : baseName;
     const total = item.price * item.quantity;
-    const labelShort = label.length > 32 ? label.slice(0, 29) + '...' : label;
+    const labelSafe = pdfWinAnsiSafe(label, 80);
+    const labelShort = labelSafe.length > 32 ? labelSafe.slice(0, 29) + '...' : labelSafe;
     page.drawText(labelShort, { x: colItem, y, size: 9, font: fontSmall });
     page.drawText(String(item.quantity), { x: colQty, y, size: 9, font: fontSmall });
-    page.drawText(`₹${item.price.toFixed(0)}`, { x: colPrice, y, size: 9, font: fontSmall });
-    page.drawText(`₹${total.toFixed(0)}`, { x: colTotal, y, size: 9, font: fontSmall });
+    page.drawText(rs(item.price), { x: colPrice, y, size: 9, font: fontSmall });
+    page.drawText(rs(total), { x: colTotal, y, size: 9, font: fontSmall });
     y -= lineHeightSmall;
   }
   y -= 6;
   drawLine();
 
   page.drawText('Subtotal:', { x: colPrice - 40, y, size: 10, font: font });
-  page.drawText(`₹${order.totalAmount.toFixed(0)}`, { x: colTotal, y, size: 10, font: font });
+  page.drawText(rs(order.totalAmount), { x: colTotal, y, size: 10, font: font });
   y -= lineHeight;
   page.drawText('GST: Included', { x: colPrice - 40, y, size: 9, font: fontSmall });
   y -= lineHeight;
   page.drawText('Total Amount:', { x: margin, y, size: 11, font: fontBold });
-  page.drawText(`₹${order.totalAmount.toFixed(0)}`, { x: colTotal, y, size: 11, font: fontBold });
+  page.drawText(rs(order.totalAmount), { x: colTotal, y, size: 11, font: fontBold });
   y -= lineHeight + 4;
   drawLine();
 
-  page.drawText(`Payment Status: ${order.paymentStatus}`, { x: margin, y, size: 10, font: font });
+  page.drawText(`Payment Status: ${pdfWinAnsiSafe(order.paymentStatus, 40)}`, { x: margin, y, size: 10, font: font });
   y -= lineHeight;
-  page.drawText(`Order Status: ${order.status}`, { x: margin, y, size: 10, font: font });
+  page.drawText(`Order Status: ${pdfWinAnsiSafe(order.status, 40)}`, { x: margin, y, size: 10, font: font });
   y -= 12;
   drawLine();
 
   // Footer
   drawTextCenter('Thank you for visiting', 11);
-  drawTextCenter(`${name} ❤️`, 11, true);
+  drawTextCenter(`${name} - Thank you`, 11, true);
   drawTextCenter('Visit Again', 10);
   y -= 8;
   if (MENU_BASE_URL) {
-    page.drawText(`Menu: ${MENU_BASE_URL}`, { x: margin, y, size: 8, font: fontSmall });
+    page.drawText(`Menu: ${pdfWinAnsiSafe(MENU_BASE_URL, 200)}`, { x: margin, y, size: 8, font: fontSmall });
     y -= lineHeightSmall;
   }
-  if (reviewUrl) {
+  if (reviewUrl && reviewUrl !== '-') {
     page.drawText(`Review us: ${reviewUrl}`, { x: margin, y, size: 8, font: fontSmall });
     y -= lineHeightSmall;
   }

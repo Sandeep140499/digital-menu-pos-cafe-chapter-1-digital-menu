@@ -3,20 +3,39 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Copy, Download, QrCode } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { getCustomerBranchIdFromEnv, getFrontendUrl, resolveCustomerPublicBranchId } from '@/constants';
 
 const CAFE_NAME = 'Cafe Chapter 1';
+
+/** URL encoded in the QR: branch-pinned menu link when using `?branch=` or a separate deployment env. */
+function buildMenuPageUrlForQr(): string {
+  const base = getFrontendUrl();
+  if (typeof window === 'undefined') return base;
+  const pinned = resolveCustomerPublicBranchId();
+  if (pinned == null) return base;
+  const fromEnv = getCustomerBranchIdFromEnv();
+  // Separate Vercel project per branch: env pins branch; QR only needs the site origin.
+  if (fromEnv != null && fromEnv === pinned) return base;
+  try {
+    const u = new URL(base);
+    u.searchParams.set('branch', String(pinned));
+    return u.toString();
+  } catch {
+    return `${base.replace(/\/?$/, '')}/?branch=${pinned}`;
+  }
+}
 
 const QRCodeGenerator = () => {
   const { toast } = useToast();
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const currentUrl = typeof window !== 'undefined' ? window.location.origin : '';
+  const menuPageUrl = useMemo(() => buildMenuPageUrlForQr(), []);
   const qrCodeUrl = useMemo(
     () =>
-      currentUrl
-        ? `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(currentUrl)}`
+      menuPageUrl
+        ? `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(menuPageUrl)}`
         : '',
-    [currentUrl]
+    [menuPageUrl]
   );
 
   // Draws cafe name + QR code on a canvas for download
@@ -71,7 +90,7 @@ const QRCodeGenerator = () => {
 
   const copyToClipboard = async () => {
     try {
-      await navigator.clipboard.writeText(currentUrl);
+      await navigator.clipboard.writeText(menuPageUrl);
       toast({
         title: 'URL Copied!',
         description: 'Menu URL has been copied to clipboard.',
@@ -126,7 +145,7 @@ const QRCodeGenerator = () => {
         <div className="rounded-xl bg-gray-50 p-4">
           <p className="mb-2 text-sm text-gray-600">Menu URL:</p>
           <p className="rounded border bg-white p-2 font-mono text-xs break-all text-gray-800">
-            {currentUrl}
+            {menuPageUrl}
           </p>
         </div>
 

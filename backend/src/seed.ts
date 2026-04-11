@@ -197,19 +197,27 @@ async function main() {
 
   for (const row of categoryRows) {
     await prisma.menuCategory.upsert({
-      where: { slug: row.slug },
+      where: { branchId_slug: { branchId: branch.id, slug: row.slug } },
       update: { name: row.name, imageUrl: row.imageUrl },
-      create: { slug: row.slug, name: row.name, imageUrl: row.imageUrl },
+      create: { branchId: branch.id, slug: row.slug, name: row.name, imageUrl: row.imageUrl },
     });
   }
 
-  const coldCoffee = await prisma.menuCategory.findUnique({ where: { slug: 'cold-coffee' } });
-  const freshSmoothies = await prisma.menuCategory.findUnique({ where: { slug: 'fresh-smoothies' } });
-  const milkshake = await prisma.menuCategory.findUnique({ where: { slug: 'milkshake' } });
-  const chai = await prisma.menuCategory.findUnique({ where: { slug: 'chai' } });
-  const pizza = await prisma.menuCategory.findUnique({ where: { slug: 'pizza' } });
-  const burger = await prisma.menuCategory.findUnique({ where: { slug: 'burger' } });
-  const rice = await prisma.menuCategory.findUnique({ where: { slug: 'rice' } });
+  const coldCoffee = await prisma.menuCategory.findFirst({
+    where: { slug: 'cold-coffee', branchId: branch.id },
+  });
+  const freshSmoothies = await prisma.menuCategory.findFirst({
+    where: { slug: 'fresh-smoothies', branchId: branch.id },
+  });
+  const milkshake = await prisma.menuCategory.findFirst({
+    where: { slug: 'milkshake', branchId: branch.id },
+  });
+  const chai = await prisma.menuCategory.findFirst({ where: { slug: 'chai', branchId: branch.id } });
+  const pizza = await prisma.menuCategory.findFirst({ where: { slug: 'pizza', branchId: branch.id } });
+  const burger = await prisma.menuCategory.findFirst({
+    where: { slug: 'burger', branchId: branch.id },
+  });
+  const rice = await prisma.menuCategory.findFirst({ where: { slug: 'rice', branchId: branch.id } });
 
   const sampleItems: {
     name: string;
@@ -303,7 +311,10 @@ async function main() {
   }
 
   const itemCount = await prisma.menuItem.count();
-  const firstCategory = await prisma.menuCategory.findFirst();
+  const firstCategory = await prisma.menuCategory.findFirst({
+    where: { branchId: branch.id },
+    orderBy: { id: 'asc' },
+  });
   if (firstCategory && itemCount === 0) {
     await prisma.menuItem.createMany({
       data: [

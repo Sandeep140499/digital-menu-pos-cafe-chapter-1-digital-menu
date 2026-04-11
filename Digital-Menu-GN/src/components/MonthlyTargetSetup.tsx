@@ -41,6 +41,15 @@ export default function MonthlyTargetSetup({
             ? '—'
             : 'Target not set';
 
+  const statusBoxClass =
+    info?.status === 'CRITICAL'
+      ? 'border-red-300 bg-red-50 text-red-900'
+      : info?.status === 'NEED_TO_PUSH'
+        ? 'border-amber-300 bg-amber-50 text-amber-950'
+        : info?.status === 'ON_TRACK'
+          ? 'border-emerald-300 bg-emerald-50 text-emerald-950'
+          : 'border-slate-200 bg-white text-slate-900';
+
   return (
     <Card className="w-full min-w-0 overflow-hidden rounded-xl border border-slate-200 shadow-sm">
       <CardHeader className="px-3 pb-2 sm:px-6">
@@ -77,16 +86,48 @@ export default function MonthlyTargetSetup({
                 : 'Target not set'}
             </p>
           </div>
-          <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-            <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-              Status
-            </p>
-            <p className="mt-0.5 text-base font-semibold text-slate-900">{statusLabel}</p>
+          <div className={`rounded-lg border px-3 py-2.5 ${statusBoxClass}`}>
+            <p className="text-[11px] font-bold tracking-wide uppercase opacity-80">Status</p>
+            <p className="mt-0.5 text-base font-bold">{statusLabel}</p>
             {info?.targetSet ? (
-              <p className="text-muted-foreground mt-1 text-xs">{info.daysLeft ?? 0} day(s) left</p>
+              <p className="mt-1 text-xs opacity-90">{info.daysLeft ?? 0} day(s) left</p>
             ) : null}
           </div>
         </div>
+        {info?.targetSet ? (
+          <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2.5 text-sm text-slate-800">
+            <p className="text-muted-foreground mb-1 text-xs font-semibold uppercase tracking-wide">
+              To reach goal (paid sales, linear pace)
+            </p>
+            {(() => {
+              const targetAmt = info.targetAmount ?? 0;
+              const achievedAmt = info.achievedAmount ?? 0;
+              const remaining = Math.max(0, targetAmt - achievedAmt);
+              const dLeft = info.daysLeft ?? 0;
+              const daily =
+                remaining <= 0 ? null : dLeft > 0 ? remaining / dLeft : remaining;
+              if (remaining <= 0) {
+                return (
+                  <p className="font-semibold text-emerald-700">Target met for this month.</p>
+                );
+              }
+              if (daily != null && Number.isFinite(daily)) {
+                return (
+                  <p>
+                    Aim about{' '}
+                    <span className="font-bold tabular-nums text-slate-900">
+                      {formatINR(Math.ceil(daily))}
+                    </span>{' '}
+                    per day on average over the next{' '}
+                    <span className="font-semibold">{dLeft > 0 ? dLeft : 1}</span> day
+                    {dLeft === 1 ? '' : 's'}.
+                  </p>
+                );
+              }
+              return null;
+            })()}
+          </div>
+        ) : null}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <Input
             type="text"

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { OrderStatus as OrderStatusEnum } from '@prisma/client';
+import { OrderStatus as OrderStatusEnum, Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma.js';
 import { getBusinessDayRange as getBusinessDayRangeForDate } from '../../utils/businessDay.js';
 import { authenticate, requireRole } from '../../middleware/auth.js';
@@ -20,6 +20,7 @@ import { logger } from '../../utils/logger.js';
 import { filterOrderItemsForReceipt } from '../../utils/orderItemsFilter.js';
 import { resolveExpectedUnitPrice } from '../../services/happyHourEngine.js';
 import { loadActiveHappyHourRules } from '../../services/happyHourRulesLoader.js';
+import { normalizeIndianMobile } from '../../utils/indianMobile.js';
 
 const mobileRegex = /^[6-9]\d{9}$/;
 
@@ -37,8 +38,7 @@ const createOrderSchema = z
       .optional()
       .transform(s => {
         if (s == null || s === undefined) return null;
-        const digits = String(s).replace(/\D/g, '').slice(-10);
-        return digits.length === 10 && /^[6-9]/.test(digits) ? digits : null;
+        return normalizeIndianMobile(String(s));
       }),
     items: z
       .array(
@@ -72,14 +72,14 @@ const updateStatusSchema = z.object({
 
 const updateOrderCustomerSchema = z.object({
   customerName: z.string().min(1).optional(),
+  /** Accept pasted formats; canonical 10-digit or null when empty. */
   customerMobile: z
-    .union([z.string().regex(mobileRegex), z.literal('')])
+    .union([z.string(), z.literal('')])
     .optional()
-    .transform(s => {
-      const raw = (s ?? '').trim();
-      if (!raw) return null;
-      const digits = raw.replace(/\D/g, '').slice(-10);
-      return digits.length === 10 && /^[6-9]/.test(digits) ? digits : null;
+    .transform((s): string | null | undefined => {
+      if (s === undefined) return undefined;
+      if (s === '') return null;
+      return normalizeIndianMobile(s);
     }),
 });
 
@@ -180,7 +180,7 @@ orderRouter.post('/', async (req, res) => {
     customerMobile: rawMobile,
   } = parsed.data;
   const tableNumber = orderType === 'TAKE_AWAY' ? 'TAKE_AWAY' : (rawTableNumber || '').trim();
-  const customerMobile = rawMobile ?? null;
+  const customerMobile = normalizeIndianMobile(rawMobile ?? null);
   const customerName = (rawName || '').trim().toUpperCase() || (rawName || '').trim();
 
   const branchExists = await prisma.branch.findUnique({
@@ -1262,17 +1262,52 @@ orderRouter.patch('/:id/customer', authenticate, async (req, res) => {
     return res.status(400).json({ message: 'Invalid input', errors: parsed.error.issues });
   }
   const id = Number(req.params.id);
+  if (!Number.isFinite(id)) {
+    return res.status(400).json({ message: 'Invalid order id' });
+  }
+
+  const body = req.body as Record<string, unknown>;
+  const mobileProvided = Object.prototype.hasOwnProperty.call(body, 'customerMobile');
+
+  const existing = await prisma.order.findUnique({
+    where: { id },
+    select: { customerMobile: true, customerName: true },
+  });
+  if (!existing) {
+    return res.status(404).json({ message: 'Order not found' });
+  }
+
   const customerName = parsed.data.customerName
     ? (parsed.data.customerName || '').trim().toUpperCase() || undefined
     : undefined;
-  const order = await prisma.order.update({
-    where: { id },
-    data: {
-      customerMobile: parsed.data.customerMobile ?? null,
-      ...(customerName ? { customerName } : {}),
-    },
-    include: { items: true, table: true },
-  });
+
+  const data: Prisma.OrderUpdateInput = {};
+  if (mobileProvided) {
+    data.customerMobile = parsed.data.customerMobile ?? null;
+  } else if (existing.customerMobile) {
+    const norm = normalizeIndianMobile(existing.customerMobile);
+    if (norm && norm !== existing.customerMobile) {
+      data.customerMobile = norm;
+    }
+  }
+  if (customerName) {
+    data.customerName = customerName;
+  }
+
+  const order =
+    Object.keys(data).length === 0
+      ? await prisma.order.findUnique({
+          where: { id },
+          include: { items: true, table: true },
+        })
+      : await prisma.order.update({
+          where: { id },
+          data,
+          include: { items: true, table: true },
+        });
+  if (!order) {
+    return res.status(404).json({ message: 'Order not found' });
+  }
   req.app.locals.io?.emit('order:updated', order);
   return res.json(order);
 });
@@ -1290,18 +1325,22 @@ orderRouter.delete('/customer-leads/:mobile', authenticate, async (req, res) => 
   if (raw.length !== 10 || !/^[6-9]/.test(raw)) {
     return res.status(400).json({ message: 'Valid 10-digit mobile number required' });
   }
-  const result = await prisma.order.updateMany({
-    where: { customerMobile: raw },
-    data: { customerMobile: null },
-  });
+  const result = await prisma.$executeRaw(
+    Prisma.sql`
+      UPDATE "Order"
+      SET "customerMobile" = NULL
+      WHERE right(regexp_replace(COALESCE("customerMobile", ''), '[^0-9]', '', 'g'), 10) = ${raw}
+    `
+  );
+  const clearedCount = typeof result === 'number' ? result : 0;
   try {
     await prisma.adminNotification.create({
       data: {
         type: 'CUSTOMER_LEAD_DELETED',
-        message: `Customer lead mobile deleted (${raw}) — cleared from ${result.count} order(s).`,
+        message: `Customer lead mobile deleted (${raw}) — cleared from ${clearedCount} order(s).`,
         meta: {
           mobile: raw,
-          clearedCount: result.count,
+          clearedCount,
           actorRole: role,
           actorId: user?.id ?? null,
         },
@@ -1310,7 +1349,7 @@ orderRouter.delete('/customer-leads/:mobile', authenticate, async (req, res) => 
   } catch {
     // ignore audit logging failures
   }
-  return res.json({ ok: true, clearedCount: result.count });
+  return res.json({ ok: true, clearedCount });
 });
 
 // Employee: modify order by removing unavailable items

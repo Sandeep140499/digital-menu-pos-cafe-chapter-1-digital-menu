@@ -2533,7 +2533,9 @@ const EmployeeDashboard = () => {
     setAddedItemsCart([]);
     setPendingQtyByOrderItemId({});
     setPopupCustomerName(order.customerName ?? '');
-    setPopupCustomerMobile(order.customerMobile ?? '');
+    setPopupCustomerMobile(
+      (order.customerMobile ?? '').replace(/\D/g, '').slice(-10)
+    );
     setIsOrderPopupOpen(true);
   }, []);
 

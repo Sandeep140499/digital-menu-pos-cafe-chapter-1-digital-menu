@@ -1,13 +1,8 @@
 import { prisma } from '../config/prisma.js';
+import { normalizeIndianMobile } from '../utils/indianMobile.js';
 import { buildHappyHourBroadcast, getWaMeLink, type BranchInfo } from './whatsapp.js';
 
 const MOBILE_SAFETY_CAP = 100_000;
-
-function normalizeTenDigit(mobile: string): string | null {
-  const digits = mobile.replace(/\D/g, '').slice(-10);
-  if (digits.length !== 10 || !/^[6-9]/.test(digits)) return null;
-  return digits;
-}
 
 /** Distinct customer mobiles from order history (same strategy as new-item broadcast). */
 export async function collectAllCustomerMobiles(): Promise<string[]> {
@@ -21,7 +16,7 @@ export async function collectAllCustomerMobiles(): Promise<string[]> {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const o of orders) {
-    const n = normalizeTenDigit(String(o.customerMobile || ''));
+    const n = normalizeIndianMobile(String(o.customerMobile || ''));
     if (n && !seen.has(n)) {
       seen.add(n);
       out.push(n);
@@ -49,7 +44,7 @@ export async function collectLeaderMobiles(limit: number): Promise<string[]> {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const t of top) {
-    const n = normalizeTenDigit(t.mobile);
+    const n = normalizeIndianMobile(t.mobile);
     if (n && !seen.has(n)) {
       seen.add(n);
       out.push(n);
@@ -84,7 +79,7 @@ export async function buildHappyHourWaBroadcast(params: {
     const raw = params.selectedMobiles || [];
     const seen = new Set<string>();
     for (const m of raw) {
-      const n = normalizeTenDigit(String(m));
+      const n = normalizeIndianMobile(String(m));
       if (n && !seen.has(n)) {
         seen.add(n);
         mobiles.push(n);

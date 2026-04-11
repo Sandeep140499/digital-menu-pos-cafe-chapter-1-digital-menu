@@ -29,6 +29,8 @@ const upsertCategorySchema = z.object({
   slug: z.string().min(1).optional(),
   /** When true, sets highlight for 7 days from save; when false, clears highlight. Omit to leave unchanged (PATCH only). */
   highlightAsNewLaunch: z.boolean().optional(),
+  /** When false, category is hidden from the public customer menu (admin only). */
+  showOnMenu: z.boolean().optional(),
 });
 
 // Accept empty, or any reasonable-length string (avoids hard failures on partial/relative URLs).
@@ -158,6 +160,7 @@ menuRouter.get('/', async (_req, res) => {
   }
   try {
     const categoriesRaw = await prisma.menuCategory.findMany({
+      where: { showOnMenu: true },
       orderBy: { createdAt: 'asc' },
       select: {
         id: true,
@@ -203,7 +206,12 @@ menuRouter.get('/', async (_req, res) => {
             imageUrl: cat.imageUrl,
             createdAt: cat.createdAt,
             isNewLaunch,
-            items: cat.items.map(({ highlightNewUntil: _omit, ...it }) => it),
+            items: cat.items.map(it => {
+              const itemLaunch =
+                it.highlightNewUntil != null && new Date(it.highlightNewUntil) > nowDate;
+              const { highlightNewUntil: _omit, ...rest } = it;
+              return { ...rest, isNewLaunch: itemLaunch };
+            }),
           };
         })
         // Customer menu: omit categories with no active items (avoids empty "Rice" / ghost sections).
@@ -289,6 +297,7 @@ menuRouter.get('/admin', authenticate, requireRole('ADMIN'), async (_req, res) =
       imageUrl: true,
       createdAt: true,
       highlightNewUntil: true,
+      showOnMenu: true,
       items: {
         orderBy: { createdAt: 'asc' },
         select: {
@@ -324,6 +333,7 @@ menuRouter.post('/categories', authenticate, requireRole('ADMIN'), async (req, r
       slug,
       imageUrl: parsed.data.imageUrl ?? undefined,
       highlightNewUntil: parsed.data.highlightAsNewLaunch ? highlightUntilFromNow() : null,
+      showOnMenu: parsed.data.showOnMenu ?? true,
     },
   });
 
@@ -344,6 +354,7 @@ async function updateCategory(req: import('express').Request, res: import('expre
     imageUrl?: string | null;
     slug?: string;
     highlightNewUntil?: Date | null;
+    showOnMenu?: boolean;
   } = {};
   if (parsed.data.name !== undefined) data.name = parsed.data.name;
   if (parsed.data.imageUrl !== undefined)
@@ -353,6 +364,7 @@ async function updateCategory(req: import('express').Request, res: import('expre
     data.slug = createSlug(parsed.data.name);
   if (parsed.data.highlightAsNewLaunch === true) data.highlightNewUntil = highlightUntilFromNow();
   if (parsed.data.highlightAsNewLaunch === false) data.highlightNewUntil = null;
+  if (parsed.data.showOnMenu !== undefined) data.showOnMenu = parsed.data.showOnMenu;
 
   const category = await prisma.menuCategory.update({
     where: { id },

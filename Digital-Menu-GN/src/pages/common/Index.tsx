@@ -20,6 +20,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
@@ -392,25 +393,42 @@ const MenuCategoriesSection = memo(function MenuCategoriesSection({
 }) {
   const displayCategories = useMemo(() => {
     const uniqueCats = dedupeCustomerMenuCategories(menuCategories);
-    return uniqueCats.map((cat: any) => ({
-      key: String(cat.id),
-      title: cat.name || 'Category',
-      image: cat.imageUrl && cat.imageUrl.trim() ? cat.imageUrl : DEFAULT_CATEGORY_IMAGE,
-      isNewLaunch: !!cat.isNewLaunch,
-      items: Array.isArray(cat.items)
-        ? cat.items.map((item: any) => ({
-            name: item.name,
-            price:
-              item.hasHalf && item.halfPrice
-                ? `₹${item.halfPrice} / ₹${item.basePrice}`
-                : `₹${item.basePrice}`,
-            basePrice: item.basePrice,
-            halfPrice: item.halfPrice,
-            hasHalf: item.hasHalf,
-            menuItemId: item.id,
-          }))
-        : [],
-    }));
+    return uniqueCats.map((cat: any) => {
+      const categoryNew =
+        !!cat.isNewLaunch ||
+        (!!cat.highlightNewUntil && new Date(cat.highlightNewUntil) > new Date());
+      const mappedItems = Array.isArray(cat.items)
+        ? cat.items.map((item: any) => {
+            const itemNew =
+              item.isNewLaunch === true ||
+              (!!item.highlightNewUntil && new Date(item.highlightNewUntil) > new Date());
+            return {
+              name: item.name,
+              price:
+                item.hasHalf && item.halfPrice
+                  ? `₹${item.halfPrice} / ₹${item.basePrice}`
+                  : `₹${item.basePrice}`,
+              basePrice: item.basePrice,
+              halfPrice: item.halfPrice,
+              hasHalf: item.hasHalf,
+              menuItemId: item.id,
+              isNewLaunch: !!itemNew,
+            };
+          })
+        : [];
+      const items = [...mappedItems].sort(
+        (a, b) => Number(!!b.isNewLaunch) - Number(!!a.isNewLaunch)
+      );
+      const hasNewItemsInside = !categoryNew && items.some((it: { isNewLaunch?: boolean }) => it.isNewLaunch);
+      return {
+        key: String(cat.id),
+        title: cat.name || 'Category',
+        image: cat.imageUrl && cat.imageUrl.trim() ? cat.imageUrl : DEFAULT_CATEGORY_IMAGE,
+        isNewLaunch: categoryNew,
+        hasNewItemsInside,
+        items,
+      };
+    });
   }, [menuCategories]);
 
   const filteredCategories = useMemo(() => {
@@ -424,8 +442,9 @@ const MenuCategoriesSection = memo(function MenuCategoriesSection({
     // New launch first (including cards that are both new launch + best seller — one card, both badges).
     const tier = (s: (typeof filtered)[0]) => {
       if (s.isNewLaunch) return 0;
-      if (hasBestSeller(s)) return 1;
-      return 2;
+      if (s.hasNewItemsInside) return 1;
+      if (hasBestSeller(s)) return 2;
+      return 3;
     };
     return [...filtered].sort((a, b) => {
       const d = tier(a) - tier(b);
@@ -500,6 +519,7 @@ const MenuCategoriesSection = memo(function MenuCategoriesSection({
             bestSellerItemIds.includes(it.menuItemId)
           );
           const isNewLaunch = section.isNewLaunch;
+          const hasNewItemsInside = section.hasNewItemsInside;
           return (
             <div key={categoryKey} className="contents">
               <LazyInView
@@ -517,6 +537,7 @@ const MenuCategoriesSection = memo(function MenuCategoriesSection({
                   isSelected={isOpen}
                   isBestSeller={isBestSeller}
                   isNewLaunch={isNewLaunch}
+                  hasNewItemsInside={hasNewItemsInside}
                   setOpenCategoryKeys={setOpenCategoryKeys}
                   lastToggledKeyRef={lastToggledKeyRef}
                 />
@@ -547,14 +568,23 @@ function MenuCategoryCard({
   isSelected,
   isBestSeller,
   isNewLaunch,
+  hasNewItemsInside,
   setOpenCategoryKeys,
   lastToggledKeyRef,
 }: {
   categoryKey: string;
-  section: { key: string; title: string; image: string; items: any[]; isNewLaunch?: boolean };
+  section: {
+    key: string;
+    title: string;
+    image: string;
+    items: any[];
+    isNewLaunch?: boolean;
+    hasNewItemsInside?: boolean;
+  };
   isSelected: boolean;
   isBestSeller: boolean;
   isNewLaunch: boolean;
+  hasNewItemsInside: boolean;
   setOpenCategoryKeys: React.Dispatch<React.SetStateAction<string[]>>;
   lastToggledKeyRef: React.MutableRefObject<string | null>;
 }) {
@@ -562,8 +592,10 @@ function MenuCategoryCard({
     ? 'shadow-lg ring-2 shadow-violet-200/40 ring-violet-500 focus-visible:ring-violet-600'
     : isNewLaunch
       ? 'shadow-lg ring-2 shadow-violet-200/40 ring-violet-500 focus-visible:ring-violet-600'
-      : isBestSeller
-        ? 'shadow-lg ring-2 shadow-amber-200/50 ring-amber-400 focus-visible:ring-amber-500'
+        : isBestSeller
+          ? 'shadow-lg ring-2 shadow-amber-200/50 ring-amber-400 focus-visible:ring-amber-500'
+        : hasNewItemsInside
+          ? 'ring-2 ring-violet-300/90 shadow-md shadow-violet-100/40 focus-visible:ring-violet-500'
         : '';
 
   const selectedRing =
@@ -574,7 +606,9 @@ function MenuCategoryCard({
         ? 'ring-2 ring-violet-600'
         : isBestSeller
           ? 'ring-2 ring-amber-500'
-          : 'ring-2 ring-emerald-600');
+          : hasNewItemsInside
+            ? 'ring-2 ring-violet-500'
+            : 'ring-2 ring-emerald-600');
 
   const footerBar =
     isNewLaunch && isBestSeller
@@ -602,17 +636,22 @@ function MenuCategoryCard({
           ? selectedRing
             ? `-translate-y-0.5 ${selectedRing}`
             : '-translate-y-0.5 ring-2 ring-emerald-600'
-          : isNewLaunch || isBestSeller
+          : isNewLaunch || isBestSeller || hasNewItemsInside
             ? 'hover:-translate-y-0.5'
             : 'ring-1 ring-black/5 hover:-translate-y-0.5',
       ].join(' ')}
       aria-pressed={isSelected}
     >
-      {(isNewLaunch || isBestSeller) && (
+      {(isNewLaunch || isBestSeller || hasNewItemsInside) && (
         <div className="absolute top-2 left-2 z-10 flex max-w-[calc(100%-1rem)] flex-row flex-wrap items-center gap-1">
           {isNewLaunch && (
             <div className="w-fit rounded-full bg-violet-500 px-2.5 py-0.5 text-[10px] font-bold text-white shadow sm:text-[11px]">
               New launch
+            </div>
+          )}
+          {hasNewItemsInside && !isNewLaunch && (
+            <div className="w-fit rounded-full border border-violet-400/80 bg-white/95 px-2.5 py-0.5 text-[10px] font-bold text-violet-800 shadow sm:text-[11px]">
+              New inside
             </div>
           )}
           {isBestSeller && (
@@ -659,7 +698,13 @@ function MenuCategoryItemsPanel({
   setOpenCategoryKeys,
   addToCart,
 }: {
-  section: { key: string; title: string; image: string; items: any[] };
+  section: {
+    key: string;
+    title: string;
+    image: string;
+    items: any[];
+    hasNewItemsInside?: boolean;
+  };
   categoryKey: string;
   setOpenCategoryKeys: React.Dispatch<React.SetStateAction<string[]>>;
   addToCart: (
@@ -688,6 +733,11 @@ function MenuCategoryItemsPanel({
                   {section.title || categoryKey}
                 </div>
                 <div className="text-xs text-olive-900/65">{section.items.length} items</div>
+                {section.hasNewItemsInside && (
+                  <p className="mt-1 text-[11px] text-violet-800/90">
+                    Dishes marked <span className="font-semibold">New</span> were recently added.
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -706,6 +756,10 @@ function MenuCategoryItemsPanel({
       <div className="max-h-[80dvh] w-full max-w-full min-w-0 overflow-x-hidden overflow-y-auto px-4 py-3 sm:px-5 sm:py-4">
         <ul className="w-full max-w-full min-w-0 divide-y divide-black/5 rounded-xl bg-white ring-1 ring-black/5">
           {section.items.map((item: any, idx: number) => {
+            const rowKey =
+              typeof item.menuItemId === 'number' && Number.isFinite(item.menuItemId)
+                ? `mi-${item.menuItemId}`
+                : `row-${idx}`;
             const isAddon = item.name.toLowerCase().startsWith('add-on');
             const priceText = String(item.price);
             const hasHalfFull = priceText.includes('/');
@@ -732,25 +786,32 @@ function MenuCategoryItemsPanel({
               'shrink-0 rounded-full px-3 py-1 text-sm font-extrabold',
               isAddon ? 'bg-amber-100 text-amber-900' : 'bg-olive-100 text-olive-900',
             ].join(' ');
+            const newRowTint =
+              !isAddon && item.isNewLaunch ? 'bg-violet-50/55 hover:bg-violet-50/80' : '';
 
             if (hasHalfFull && halfPrice != null) {
               return (
                 <li
-                  key={idx}
+                  key={rowKey}
                   className={[
                     'flex w-full min-w-0 flex-wrap items-center gap-2 overflow-hidden px-4 py-3 transition sm:gap-4',
-                    isAddon ? 'bg-amber-50/70' : 'hover:bg-olive-50/60',
+                    isAddon ? 'bg-amber-50/70' : newRowTint || 'hover:bg-olive-50/60',
                   ].join(' ')}
                 >
                   <div className="flex min-w-0 flex-1 basis-full flex-col gap-1.5 sm:basis-0">
                     <div
                       className={[
-                        'min-w-0 truncate text-sm font-semibold break-words sm:text-base',
+                        'flex min-w-0 items-center gap-2 truncate text-sm font-semibold break-words sm:text-base',
                         isAddon ? 'text-amber-900' : 'text-emerald-900',
                       ].join(' ')}
                       title={item.name}
                     >
-                      {item.name}
+                      <span className="min-w-0 truncate">{item.name}</span>
+                      {!isAddon && item.isNewLaunch && (
+                        <Badge className="shrink-0 border-violet-300 bg-violet-100 px-2 py-0 text-[10px] font-bold text-violet-900">
+                          New
+                        </Badge>
+                      )}
                     </div>
                     <span
                       className={[
@@ -786,20 +847,25 @@ function MenuCategoryItemsPanel({
 
             return (
               <li
-                key={idx}
+                key={rowKey}
                 className={[
                   'flex w-full min-w-0 items-center justify-between gap-2 overflow-hidden px-4 py-3 transition sm:gap-3',
-                  isAddon ? 'bg-amber-50/70' : 'hover:bg-olive-50/60',
+                  isAddon ? 'bg-amber-50/70' : newRowTint || 'hover:bg-olive-50/60',
                 ].join(' ')}
               >
                 <span
                   className={[
-                    'line-clamp-2 min-w-0 flex-1 text-sm font-semibold break-words sm:text-base',
+                    'flex min-w-0 flex-1 items-center gap-2 text-sm font-semibold break-words sm:text-base',
                     isAddon ? 'text-amber-900' : 'text-emerald-900',
                   ].join(' ')}
                   title={item.name}
                 >
-                  {item.name}
+                  <span className="line-clamp-2 min-w-0 flex-1">{item.name}</span>
+                  {!isAddon && item.isNewLaunch && (
+                    <Badge className="shrink-0 border-violet-300 bg-violet-100 px-2 py-0 text-[10px] font-bold text-violet-900">
+                      New
+                    </Badge>
+                  )}
                 </span>
                 <div className="flex shrink-0 items-center gap-2">
                   <span className={priceBadgeClass}>{priceDisplay}</span>

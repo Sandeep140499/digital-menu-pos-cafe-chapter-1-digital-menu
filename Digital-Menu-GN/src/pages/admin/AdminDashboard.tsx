@@ -317,6 +317,8 @@ type MenuCategory = {
   createdAt: string;
   updatedAt?: string;
   highlightNewUntil?: string | null;
+  /** When false, category is hidden from the public customer menu. */
+  showOnMenu?: boolean;
   items: MenuItem[];
 };
 
@@ -398,6 +400,7 @@ const CategoryMenuDialog = memo(function CategoryMenuDialog({
   const [imageUrl, setImageUrl] = useState('');
   const [imagePreview, setImagePreview] = useState('');
   const [highlightAsNewLaunch, setHighlightAsNewLaunch] = useState(true);
+  const [showOnMenu, setShowOnMenu] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -408,11 +411,13 @@ const CategoryMenuDialog = memo(function CategoryMenuDialog({
         setImagePreview(editingCategory.imageUrl || '');
         const u = editingCategory.highlightNewUntil;
         setHighlightAsNewLaunch(!!(u && new Date(u) > new Date()));
+        setShowOnMenu(editingCategory.showOnMenu !== false);
       } else {
         setName('');
         setImageUrl('');
         setImagePreview('');
         setHighlightAsNewLaunch(true);
+        setShowOnMenu(true);
       }
     }
   }, [open, editingCategory]);
@@ -432,6 +437,7 @@ const CategoryMenuDialog = memo(function CategoryMenuDialog({
             name: name.trim(),
             imageUrl: imageUrl.trim() || undefined,
             highlightAsNewLaunch,
+            showOnMenu,
           }),
         });
         const data = await res.json();
@@ -451,6 +457,7 @@ const CategoryMenuDialog = memo(function CategoryMenuDialog({
             name: name.trim(),
             imageUrl: imageUrl.trim() || undefined,
             highlightAsNewLaunch,
+            showOnMenu,
           }),
         });
         const data = await res.json();
@@ -528,6 +535,17 @@ const CategoryMenuDialog = memo(function CategoryMenuDialog({
             <Label htmlFor="cat-highlight-new" className="text-sm leading-snug font-medium">
               Highlight category as <span className="text-violet-700">New launch</span> on customer
               menu (7 days from save). Uncheck to clear the highlight.
+            </Label>
+          </div>
+          <div className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+            <Checkbox
+              id="cat-show-on-menu"
+              checked={showOnMenu}
+              onCheckedChange={c => setShowOnMenu(!!c)}
+            />
+            <Label htmlFor="cat-show-on-menu" className="text-sm leading-snug font-medium">
+              Show this category on the <span className="text-emerald-800">customer menu</span>.
+              Turn off to hide the whole category from guests (items stay in admin).
             </Label>
           </div>
         </div>
@@ -3627,6 +3645,7 @@ const AdminDashboard = () => {
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [editingCategory, setEditingCategory] = useState<MenuCategory | null>(null);
   const [togglingMenuItemId, setTogglingMenuItemId] = useState<number | null>(null);
+  const [togglingCategoryMenuId, setTogglingCategoryMenuId] = useState<number | null>(null);
   const [itemForm, setItemForm] = useState({
     name: '',
     description: '',
@@ -3942,7 +3961,8 @@ const AdminDashboard = () => {
     const totalItems = category.items?.length || 0;
     const liveItems = category.items?.filter((item: any) => item.isActive).length || 0;
     const pendingItems = totalItems - liveItems;
-    return { totalItems, liveItems, pendingItems };
+    const hiddenFromCustomerMenu = category.showOnMenu === false;
+    return { totalItems, liveItems, pendingItems, hiddenFromCustomerMenu };
   };
 
   // Filtered and sorted categories for menu search
@@ -4661,19 +4681,29 @@ const AdminDashboard = () => {
 
   const handleDeleteItem = async (id: number) => {
     if (!token) return;
+    if (
+      !window.confirm(
+        'Remove this dish from the customer menu? It will no longer appear for guests.'
+      )
+    ) {
+      return;
+    }
     try {
       const res = await fetch(`${apiBase}/menu/items/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
-        toast({ title: 'Success', description: 'Menu item deleted' });
+        toast({ title: 'Removed', description: 'This item no longer appears on the customer menu.' });
         loadDashboardData();
+      } else {
+        const description = await readApiErrorMessage(res);
+        toast({ title: 'Error', description, variant: 'destructive' });
       }
     } catch (error) {
       toast({
         title: 'Error',
-        description: 'Failed to delete item',
+        description: 'Failed to remove item from menu',
         variant: 'destructive',
       });
     }
@@ -4715,6 +4745,45 @@ const AdminDashboard = () => {
       });
     } finally {
       setTogglingMenuItemId(null);
+    }
+  };
+
+  const handleToggleCategoryShowOnMenu = async (category: MenuCategory, show: boolean) => {
+    if (!token) return;
+    setTogglingCategoryMenuId(category.id);
+    try {
+      const res = await fetch(`${apiBase}/menu/categories/${category.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ showOnMenu: show }),
+      });
+      if (res.ok) {
+        toast({
+          title: show ? 'Visible on menu' : 'Hidden from menu',
+          description: show
+            ? 'Guests can see this category on the digital menu.'
+            : 'This category is hidden from the customer menu.',
+        });
+        loadDashboardData();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast({
+          title: 'Error',
+          description: (err as { message?: string }).message || 'Could not update category',
+          variant: 'destructive',
+        });
+      }
+    } catch {
+      toast({
+        title: 'Error',
+        description: 'Could not update category',
+        variant: 'destructive',
+      });
+    } finally {
+      setTogglingCategoryMenuId(null);
     }
   };
 
@@ -6323,6 +6392,8 @@ const AdminDashboard = () => {
                               variant="ghost"
                               size="sm"
                               className="h-8 w-8 p-0 text-red-500"
+                              title="Remove from customer menu"
+                              aria-label="Remove dish from customer menu"
                               onClick={() => handleDeleteItem(item.id)}
                             >
                               <Trash2 className="h-4 w-4" />
@@ -6401,7 +6472,7 @@ const AdminDashboard = () => {
                 className="overflow-x-auto overflow-y-visible"
                 style={{ overflowAnchor: 'auto' }}
               >
-                <Table className="min-w-[720px]">
+                <Table className="min-w-[820px]">
                   <TableHeader>
                     <TableRow className="bg-slate-50">
                       <TableHead className="sticky left-0 z-10 min-w-[100px] border-r bg-slate-50 whitespace-nowrap">
@@ -6412,6 +6483,7 @@ const AdminDashboard = () => {
                       </TableHead>
                       <TableHead className="min-w-[90px] whitespace-nowrap">Items</TableHead>
                       <TableHead className="min-w-[120px] whitespace-nowrap">Status</TableHead>
+                      <TableHead className="min-w-[100px] whitespace-nowrap">Guest menu</TableHead>
                       <TableHead className="sticky right-0 z-10 min-w-[200px] border-l bg-slate-50 text-right whitespace-nowrap">
                         Actions
                       </TableHead>
@@ -6420,7 +6492,7 @@ const AdminDashboard = () => {
                   <TableBody>
                     {filteredCategories.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-muted-foreground py-8 text-center">
+                        <TableCell colSpan={6} className="text-muted-foreground py-8 text-center">
                           {menuSearchQuery
                             ? 'No categories found matching your search'
                             : 'No categories yet. Create your first category!'}
@@ -6460,6 +6532,11 @@ const AdminDashboard = () => {
                           </TableCell>
                           <TableCell className="min-w-[120px]">
                             <div className="flex flex-wrap items-center gap-1">
+                              {status.hiddenFromCustomerMenu && (
+                                <Badge className="border-slate-300 bg-slate-200 px-1.5 py-0 text-[11px] text-slate-800">
+                                  Category hidden
+                                </Badge>
+                              )}
                               {status.liveItems > 0 && (
                                 <Badge className="border-green-200 bg-green-100 px-1.5 py-0 text-[11px] text-green-800">
                                   {status.liveItems} Live
@@ -6474,6 +6551,18 @@ const AdminDashboard = () => {
                                 <span className="text-muted-foreground text-xs">—</span>
                               )}
                             </div>
+                          </TableCell>
+                          <TableCell className="min-w-[100px]">
+                            <Switch
+                              checked={category.showOnMenu !== false}
+                              disabled={togglingCategoryMenuId === category.id}
+                              onCheckedChange={v => handleToggleCategoryShowOnMenu(category, v)}
+                              aria-label={
+                                category.showOnMenu === false
+                                  ? 'Show category on customer menu'
+                                  : 'Hide category from customer menu'
+                              }
+                            />
                           </TableCell>
                           <TableCell className="sticky right-0 z-10 border-l bg-white text-right">
                             <div className="flex flex-wrap justify-end gap-1.5">

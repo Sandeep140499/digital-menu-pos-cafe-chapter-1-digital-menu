@@ -10,13 +10,23 @@ export function normalizeMenuNameKey(name: string | null | undefined): string {
     .replace(/\s+/g, ' ');
 }
 
-export function dedupePublicMenuItems<T extends { id?: number; name?: string }>(items: T[]): T[] {
+export function dedupePublicMenuItems<T extends { id?: number; name?: string; isNewLaunch?: boolean }>(
+  items: T[]
+): T[] {
   const out: T[] = [];
   const seenId = new Set<number>();
   const seenName = new Set<string>();
   for (const it of items) {
     if (it && typeof it.id === 'number' && Number.isFinite(it.id)) {
-      if (seenId.has(it.id)) continue;
+      if (seenId.has(it.id)) {
+        const idx = out.findIndex(o => (o as { id?: number }).id === it.id);
+        if (idx >= 0) {
+          const cur = out[idx] as { isNewLaunch?: boolean };
+          const next = it as { isNewLaunch?: boolean };
+          cur.isNewLaunch = !!(cur.isNewLaunch || next.isNewLaunch);
+        }
+        continue;
+      }
       seenId.add(it.id);
       out.push(it);
       continue;

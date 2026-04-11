@@ -263,6 +263,8 @@ model MenuCategory {
   imageUrl  String?      @map("image_url")
   /// When set and in the future, customer menu shows this category as “New launch” (admin-controlled).
   highlightNewUntil DateTime? @map("highlight_new_until")
+  /// When false, the whole category is hidden from the public customer menu (admin).
+  showOnMenu Boolean @default(true) @map("show_on_menu")
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
   items     MenuItem[]

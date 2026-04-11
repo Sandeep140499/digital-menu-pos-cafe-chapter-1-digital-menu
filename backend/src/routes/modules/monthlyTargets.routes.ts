@@ -14,9 +14,9 @@ import {
 export const monthlyTargetsRouter = Router();
 
 const setTargetSchema = z.object({
-  year: z.number().int().min(2000).max(2100),
-  month: z.number().int().min(1).max(12),
-  targetAmount: z.union([z.number(), z.string()]).transform(v => Number(v) || 0),
+  year: z.coerce.number().int().min(2000).max(2100),
+  month: z.coerce.number().int().min(1).max(12),
+  targetAmount: z.coerce.number().min(0),
 });
 
 function featureEnabled(): boolean {

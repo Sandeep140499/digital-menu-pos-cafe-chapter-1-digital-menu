@@ -105,6 +105,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Separator } from '@/components/ui/separator';
+import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { LoaderButton, StatusBadge } from '@/components/shared';
 import {
@@ -331,6 +332,50 @@ type MenuItem = {
   categoryId?: number;
   highlightNewUntil?: string | null;
 };
+
+/** Merge PATCH /menu/items/:id response into categories so the table updates even if a later menu fetch fails. */
+function mergeMenuItemFromServerIntoCategories(
+  prev: MenuCategory[],
+  raw: Record<string, unknown>
+): MenuCategory[] {
+  const updated: MenuItem = {
+    id: Number(raw.id),
+    name: String(raw.name ?? ''),
+    description:
+      raw.description == null || raw.description === ''
+        ? undefined
+        : String(raw.description),
+    imageUrl:
+      raw.imageUrl == null || raw.imageUrl === '' ? undefined : String(raw.imageUrl),
+    basePrice: Number(raw.basePrice ?? 0),
+    hasHalf: Boolean(raw.hasHalf),
+    halfPrice:
+      raw.halfPrice == null || raw.halfPrice === '' ? undefined : Number(raw.halfPrice),
+    isActive: Boolean(raw.isActive),
+    categoryId:
+      raw.categoryId == null || raw.categoryId === ''
+        ? undefined
+        : Number(raw.categoryId),
+    highlightNewUntil:
+      typeof raw.highlightNewUntil === 'string'
+        ? raw.highlightNewUntil
+        : raw.highlightNewUntil != null
+          ? String(raw.highlightNewUntil)
+          : null,
+  };
+
+  const cid = updated.categoryId;
+  const stripped = prev.map(cat => ({
+    ...cat,
+    items: (cat.items || []).filter(it => it.id !== updated.id),
+  }));
+  if (cid == null || !Number.isFinite(cid) || cid <= 0) {
+    return stripped;
+  }
+  return stripped.map(cat =>
+    cat.id !== cid ? cat : { ...cat, items: [...(cat.items || []), updated] }
+  );
+}
 
 // Category dialog – module-level so it does not remount on every dashboard render (avoids stuck overlay / scroll lock).
 const CategoryMenuDialog = memo(function CategoryMenuDialog({
@@ -3595,6 +3640,7 @@ const AdminDashboard = () => {
     /** Saves as 7-day “New launch” highlight on customer category cards */
     highlightAsNewLaunch: true,
   });
+  const [itemDialogSaving, setItemDialogSaving] = useState(false);
 
   const [isEmployeeDialogOpen, setIsEmployeeDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
@@ -4472,6 +4518,14 @@ const AdminDashboard = () => {
 
   const handleCreateItem = async () => {
     if (!token || !itemForm.name.trim() || itemForm.basePrice <= 0) return;
+    if (!itemForm.categoryId || itemForm.categoryId <= 0) {
+      toast({
+        title: 'Check form',
+        description: 'Choose a category for this item.',
+        variant: 'destructive',
+      });
+      return;
+    }
     try {
       const { notifyCustomers, ...payload } = itemForm;
       const res = await fetch(`${apiBase}/menu/items`, {
@@ -4510,10 +4564,10 @@ const AdminDashboard = () => {
           });
         }
       } else {
-        const err = await res.json().catch(() => ({}));
+        const description = await readApiErrorMessage(res);
         toast({
           title: 'Error',
-          description: (err as { message?: string }).message || 'Failed to create item',
+          description,
           variant: 'destructive',
         });
       }
@@ -4528,8 +4582,39 @@ const AdminDashboard = () => {
 
   const handleUpdateItem = async () => {
     if (!token || !editingItem) return;
+    const name = itemForm.name.trim();
+    const basePrice = Number(itemForm.basePrice);
+    if (!name || !Number.isFinite(basePrice) || basePrice <= 0) {
+      toast({
+        title: 'Check form',
+        description: 'Enter a name and a valid full price greater than zero.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (!itemForm.categoryId || itemForm.categoryId <= 0) {
+      toast({
+        title: 'Check form',
+        description: 'Choose a category for this item.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (itemForm.hasHalf) {
+      const hp = Number(itemForm.halfPrice);
+      if (!Number.isFinite(hp) || hp <= 0) {
+        toast({
+          title: 'Check form',
+          description: 'Enter a half price greater than zero, or turn off “Has half portion”.',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+    setItemDialogSaving(true);
     try {
       const { notifyCustomers: _omitNotify, ...rest } = itemForm;
+      const halfPriceNum = Number(rest.halfPrice);
       const res = await fetch(`${apiBase}/menu/items/${editingItem.id}`, {
         method: 'PATCH',
         headers: {
@@ -4537,27 +4622,29 @@ const AdminDashboard = () => {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          name: rest.name,
-          description: rest.description?.trim() ? rest.description : undefined,
+          name,
+          description: rest.description?.trim() ? rest.description.trim() : undefined,
           imageUrl: rest.imageUrl?.trim() || undefined,
-          basePrice: rest.basePrice,
+          basePrice,
           hasHalf: rest.hasHalf,
-          halfPrice: rest.hasHalf ? rest.halfPrice : undefined,
+          halfPrice: rest.hasHalf && Number.isFinite(halfPriceNum) ? halfPriceNum : undefined,
           isActive: rest.isActive,
           categoryId: rest.categoryId,
           highlightAsNewLaunch: rest.highlightAsNewLaunch,
         }),
       });
       if (res.ok) {
+        const server = (await res.json()) as Record<string, unknown>;
+        setCategories(prev => mergeMenuItemFromServerIntoCategories(prev, server));
         toast({ title: 'Success', description: 'Menu item updated' });
         setEditingItem(null);
         setIsItemDialogOpen(false);
-        loadDashboardData();
+        void loadDashboardData({ background: true });
       } else {
-        const err = await res.json().catch(() => ({}));
+        const description = await readApiErrorMessage(res);
         toast({
           title: 'Error',
-          description: (err as { message?: string }).message || 'Failed to update item',
+          description,
           variant: 'destructive',
         });
       }
@@ -4567,6 +4654,8 @@ const AdminDashboard = () => {
         description: 'Failed to update item',
         variant: 'destructive',
       });
+    } finally {
+      setItemDialogSaving(false);
     }
   };
 
@@ -5885,6 +5974,68 @@ const AdminDashboard = () => {
 
       {/* KPI Cards */}
       <KPICards />
+
+      {/* Current month sales target vs paid revenue (calendar month) */}
+      <Card className="overflow-hidden border border-violet-200 bg-gradient-to-br from-violet-50/80 to-white shadow-sm">
+        <CardHeader className="pb-2">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 shrink-0 text-violet-600" />
+              <CardTitle className="text-lg">This month&apos;s sales target</CardTitle>
+            </div>
+            <Badge variant="outline" className="w-fit border-violet-200 text-violet-800">
+              {monthlyTargetInfo?.monthLabel ||
+                new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
+            </Badge>
+          </div>
+          <CardDescription>
+            Paid orders this calendar month vs the target you set under Revenue.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {monthlyTargetInfo?.targetSet ? (
+            <>
+              <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+                <span className="text-muted-foreground">
+                  Achieved{' '}
+                  <span className="font-semibold text-slate-900">
+                    {formatINR(monthlyTargetInfo.achievedAmount ?? 0)}
+                  </span>
+                  <span className="text-muted-foreground"> of </span>
+                  <span className="font-semibold text-slate-900">
+                    {formatINR(monthlyTargetInfo.targetAmount ?? 0)}
+                  </span>
+                </span>
+                <span className="font-semibold text-violet-700">
+                  {Math.round((monthlyTargetInfo.achievedPct ?? 0) * 10) / 10}%
+                </span>
+              </div>
+              <Progress
+                className="h-2.5 bg-violet-100"
+                value={Math.min(100, Math.max(0, monthlyTargetInfo.achievedPct ?? 0))}
+              />
+              <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span>
+                  {monthlyTargetInfo.status === 'ON_TRACK'
+                    ? 'On track for the month'
+                    : monthlyTargetInfo.status === 'NEED_TO_PUSH'
+                      ? 'Behind pace — push sales'
+                      : monthlyTargetInfo.status === 'CRITICAL'
+                        ? 'Well behind target'
+                        : 'Status —'}
+                </span>
+                <span>{monthlyTargetInfo.daysLeft ?? 0} day(s) left</span>
+              </div>
+            </>
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              No target set for this month yet. Open{' '}
+              <span className="font-medium text-slate-800">Revenue</span> in the sidebar, enter an
+              amount, and click <span className="font-medium">Set target</span>.
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Overtime alert – employees working > 10h */}
       {overtimeSummary.overtimeRunningCount > 0 && (
@@ -8931,30 +9082,38 @@ const AdminDashboard = () => {
 
   const RevenueSection = () => {
     const now = new Date();
-    const fallbackYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const activeYm = monthlyTargetInfo?.yearMonth || fallbackYm;
-    const [targetYear, targetMonth] = activeYm.split('-').map(Number);
-    const statusLabel =
-      monthlyTargetInfo?.status === 'ON_TRACK'
-        ? '✓ ON TRACK'
-        : monthlyTargetInfo?.status === 'NEED_TO_PUSH'
-          ? '⚠️ NEED TO PUSH'
-          : monthlyTargetInfo?.status === 'CRITICAL'
-            ? '🔴 CRITICAL'
-            : monthlyTargetInfo?.targetSet
-              ? '—'
-              : 'Target not set';
 
     const saveMonthlyTarget = async () => {
       if (!token) return;
-      const amount = Number(monthlyTargetInput);
-      if (!Number.isFinite(amount) || amount < 0) {
+      const raw = monthlyTargetInput.trim().replace(/,/g, '');
+      if (!raw) {
         toast({
-          title: 'Invalid amount',
-          description: 'Please enter a valid non-negative target amount.',
+          title: 'Amount required',
+          description: 'Type a target amount in rupees (digits only), then click Set target.',
           variant: 'destructive',
         });
         return;
+      }
+      const amount = Number(raw);
+      if (!Number.isFinite(amount) || amount < 0) {
+        toast({
+          title: 'Invalid amount',
+          description: 'Use a valid number (e.g. 500000).',
+          variant: 'destructive',
+        });
+        return;
+      }
+      let targetYear = now.getFullYear();
+      let targetMonth = now.getMonth() + 1;
+      const ym = (monthlyTargetInfo?.yearMonth || '').trim();
+      if (/^\d{4}-\d{2}$/.test(ym)) {
+        const [ys, ms] = ym.split('-');
+        const y = Number(ys);
+        const m = Number(ms);
+        if (Number.isFinite(y) && Number.isFinite(m) && m >= 1 && m <= 12) {
+          targetYear = y;
+          targetMonth = m;
+        }
       }
       setSavingMonthlyTarget(true);
       try {
@@ -8970,14 +9129,16 @@ const AdminDashboard = () => {
             targetAmount: amount,
           }),
         });
-        const data = await res.json().catch(() => null);
         if (!res.ok) {
-          const msg =
-            data && typeof data === 'object' && 'message' in data
-              ? String((data as any).message)
-              : 'Failed to save monthly target';
-          throw new Error(msg);
+          const description = await readApiErrorMessage(res);
+          toast({
+            title: 'Could not save target',
+            description,
+            variant: 'destructive',
+          });
+          return;
         }
+        const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
         setMonthlyTargetInput('');
         await loadDashboardData();
         toast({
@@ -8985,8 +9146,7 @@ const AdminDashboard = () => {
           description:
             data &&
             typeof data === 'object' &&
-            'directorNotification' in data &&
-            (data as any).directorNotification === 'sent'
+            data.directorNotification === 'sent'
               ? 'Directors were notified by email.'
               : 'Saved successfully.',
         });
@@ -10180,20 +10340,41 @@ const AdminDashboard = () => {
                 onChange={e => setItemForm(f => ({ ...f, description: e.target.value }))}
               />
             </div>
+            <div className="grid gap-2">
+              <Label>Category</Label>
+              <Select
+                value={itemForm.categoryId > 0 ? String(itemForm.categoryId) : undefined}
+                onValueChange={v => setItemForm(f => ({ ...f, categoryId: Number(v) || 0 }))}
+              >
+                <SelectTrigger className="min-h-[44px] w-full">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map(c => (
+                    <SelectItem key={c.id} value={String(c.id)}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label>Full Price (₹)</Label>
                 <Input
                   type="number"
                   min={0}
-                  step={1}
-                  value={itemForm.basePrice || ''}
-                  onChange={e =>
+                  step="any"
+                  inputMode="decimal"
+                  value={itemForm.basePrice === 0 ? '' : itemForm.basePrice}
+                  onChange={e => {
+                    const v = e.target.value;
+                    const n = parseFloat(v);
                     setItemForm(f => ({
                       ...f,
-                      basePrice: Number(e.target.value) || 0,
-                    }))
-                  }
+                      basePrice: v === '' || !Number.isFinite(n) ? 0 : n,
+                    }));
+                  }}
                 />
               </div>
               <div className="grid gap-2">
@@ -10201,14 +10382,17 @@ const AdminDashboard = () => {
                 <Input
                   type="number"
                   min={0}
-                  step={1}
-                  value={itemForm.halfPrice || ''}
-                  onChange={e =>
+                  step="any"
+                  inputMode="decimal"
+                  value={itemForm.halfPrice === 0 ? '' : itemForm.halfPrice}
+                  onChange={e => {
+                    const v = e.target.value;
+                    const n = parseFloat(v);
                     setItemForm(f => ({
                       ...f,
-                      halfPrice: Number(e.target.value) || 0,
-                    }))
-                  }
+                      halfPrice: v === '' || !Number.isFinite(n) ? 0 : n,
+                    }));
+                  }}
                 />
               </div>
             </div>
@@ -10263,6 +10447,7 @@ const AdminDashboard = () => {
           </div>
           <DialogFooter>
             <Button
+              type="button"
               variant="outline"
               onClick={() => {
                 setEditingItem(null);
@@ -10272,11 +10457,32 @@ const AdminDashboard = () => {
               Cancel
             </Button>
             {editingItem ? (
-              <Button onClick={handleUpdateItem}>Update</Button>
+              <Button
+                type="button"
+                onClick={handleUpdateItem}
+                disabled={
+                  itemDialogSaving ||
+                  !itemForm.name.trim() ||
+                  !Number.isFinite(Number(itemForm.basePrice)) ||
+                  Number(itemForm.basePrice) <= 0 ||
+                  !itemForm.categoryId ||
+                  (itemForm.hasHalf &&
+                    (!Number.isFinite(Number(itemForm.halfPrice)) ||
+                      Number(itemForm.halfPrice) <= 0))
+                }
+              >
+                {itemDialogSaving ? 'Saving…' : 'Update'}
+              </Button>
             ) : (
               <Button
+                type="button"
                 onClick={handleCreateItem}
-                disabled={!itemForm.name.trim() || itemForm.basePrice <= 0}
+                disabled={
+                  !itemForm.name.trim() ||
+                  !Number.isFinite(Number(itemForm.basePrice)) ||
+                  Number(itemForm.basePrice) <= 0 ||
+                  !itemForm.categoryId
+                }
               >
                 Create
               </Button>

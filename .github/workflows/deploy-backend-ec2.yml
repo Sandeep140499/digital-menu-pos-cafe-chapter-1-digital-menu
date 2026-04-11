@@ -1,0 +1,44 @@
+# Deploy backend when backend code or this workflow changes.
+# Set GitHub repo secrets: EC2_HOST, EC2_USER, EC2_SSH_PRIVATE_KEY, EC2_APP_DIR
+# EC2 must already have: Node 20, git clone of this repo, PM2, .env in backend/
+
+name: Deploy backend to EC2
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy-backend-ec2.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-backend-ec2
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            APP_DIR="${{ secrets.EC2_APP_DIR }}"
+            if [ -z "$APP_DIR" ]; then
+              echo "Set EC2_APP_DIR secret to the directory that contains the backend folder (repo root)."
+              exit 1
+            fi
+            cd "$APP_DIR"
+            git pull origin main
+            cd backend
+            npm ci
+            npm run build
+            npx prisma migrate deploy
+            pm2 restart pos-backend || pm2 start npm --name pos-backend -- run start

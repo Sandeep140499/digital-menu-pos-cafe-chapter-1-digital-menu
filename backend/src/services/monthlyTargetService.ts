@@ -13,9 +13,10 @@ export function monthLabel(year: number, month: number): string {
   });
 }
 
-export function evaluateTargetStatus(achievedPct: number): TargetStatus {
-  if (achievedPct >= 100) return 'ON_TRACK';
-  if (achievedPct >= 40) return 'NEED_TO_PUSH';
+/** Pace-based status: compare actual % of monthly target to expected % by “day N of month”. */
+export function evaluatePacedStatus(achievedPct: number, expectedPct: number): TargetStatus {
+  if (achievedPct >= expectedPct) return 'ON_TRACK';
+  if (achievedPct >= expectedPct * 0.8) return 'NEED_TO_PUSH';
   return 'CRITICAL';
 }
 
@@ -70,8 +71,10 @@ export async function getCurrentMonthTargetProgress(now = new Date()) {
   });
   const achievedAmount = Number(agg._sum.totalAmount ?? 0);
   const achievedPct = target.targetAmount > 0 ? (achievedAmount / target.targetAmount) * 100 : 0;
-  const status = evaluateTargetStatus(achievedPct);
   const daysInMonth = new Date(year, month, 0).getDate();
+  const elapsedDays = Math.max(1, Math.min(daysInMonth, now.getDate()));
+  const expectedPct = (elapsedDays / daysInMonth) * 100;
+  const status = evaluatePacedStatus(achievedPct, expectedPct);
   const daysLeft = Math.max(0, daysInMonth - now.getDate());
 
   return {
@@ -83,6 +86,7 @@ export async function getCurrentMonthTargetProgress(now = new Date()) {
     targetAmount: target.targetAmount,
     achievedAmount,
     achievedPct,
+    expectedPct,
     status,
     daysLeft,
     updatedAt: target.updatedAt,

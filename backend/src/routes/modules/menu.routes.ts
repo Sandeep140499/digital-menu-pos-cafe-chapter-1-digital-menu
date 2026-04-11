@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma.js';
 import { authenticate, requireRole } from '../../middleware/auth.js';
 import { incrementPublicMenuViews } from '../../services/publicTraffic.js';
@@ -56,6 +57,60 @@ const upsertMenuItemSchema = z
   .superRefine((data, ctx) => {
     if (data.hasHalf) {
       if (!data.halfPrice || data.halfPrice <= 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['halfPrice'],
+          message: 'Half price is required and must be > 0 when half is enabled',
+        });
+      }
+    }
+  });
+
+/** PATCH body: all fields optional; coerces numeric strings from JSON/clients. */
+const patchMenuItemSchema = z
+  .object({
+    name: z.preprocess(
+      v => (typeof v === 'string' ? v.trim() : v),
+      z.string().min(1).optional()
+    ),
+    description: z.preprocess(
+      v =>
+        v === null || v === undefined
+          ? undefined
+          : typeof v === 'string' && v.trim() === ''
+            ? null
+            : v,
+      z.union([z.string(), z.null()]).optional()
+    ),
+    imageUrl: optionalUrl,
+    basePrice: z.coerce.number().positive().optional(),
+    hasHalf: z.boolean().optional(),
+    halfPrice: z.preprocess(
+      v =>
+        v === null || v === undefined || v === ''
+          ? undefined
+          : typeof v === 'string' && v.trim() === ''
+            ? undefined
+            : v,
+      z.coerce.number().nonnegative().optional()
+    ),
+    isActive: z.boolean().optional(),
+    categoryId: z.preprocess(
+      v =>
+        v === null || v === '' || v === undefined
+          ? undefined
+          : typeof v === 'string' && v.trim() === ''
+            ? undefined
+            : v,
+      z.union([z.coerce.number().int().positive(), z.null()]).optional()
+    ),
+    notifyCustomers: z.boolean().optional(),
+    highlightAsNewLaunch: z.boolean().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.hasHalf === true) {
+      const hp = data.halfPrice;
+      if (hp == null || hp <= 0) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['halfPrice'],
@@ -378,23 +433,61 @@ menuRouter.post('/items', authenticate, requireRole('ADMIN'), async (req, res) =
 
 // Admin: update menu item
 menuRouter.patch('/items/:id', authenticate, requireRole('ADMIN'), async (req, res) => {
-  const parsed = upsertMenuItemSchema.partial().safeParse(req.body);
+  const parsed = patchMenuItemSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ message: 'Invalid input', errors: parsed.error.issues });
   }
 
   const id = Number(req.params.id);
-  const { notifyCustomers: _n, highlightAsNewLaunch, ...rest } = parsed.data;
-  const data: Record<string, unknown> = { ...rest };
-  // Normalize optional URL / blank strings.
-  if (data.imageUrl === '') data.imageUrl = undefined;
-  if (data.description === '') data.description = undefined;
+  if (!Number.isFinite(id) || id <= 0) {
+    return res.status(400).json({ message: 'Invalid item id' });
+  }
 
-  // Normalize half-price rules:
-  // - if hasHalf is explicitly false -> clear halfPrice
-  // - if halfPrice is provided (>0) but hasHalf is missing -> auto-enable hasHalf
-  if (data.hasHalf === false) data.halfPrice = null;
-  if (typeof data.halfPrice === 'number' && data.halfPrice > 0 && data.hasHalf === undefined) data.hasHalf = true;
+  const {
+    notifyCustomers: _notify,
+    highlightAsNewLaunch,
+    name,
+    description,
+    imageUrl,
+    basePrice,
+    hasHalf,
+    halfPrice,
+    isActive,
+    categoryId,
+  } = parsed.data;
+
+  const data: Prisma.MenuItemUpdateInput = {};
+
+  if (name !== undefined) data.name = name;
+  if (description !== undefined) data.description = description;
+  if (imageUrl !== undefined) {
+    data.imageUrl = imageUrl ?? null;
+  }
+  if (basePrice !== undefined) data.basePrice = basePrice;
+  if (isActive !== undefined) data.isActive = isActive;
+  if (categoryId !== undefined) {
+    if (categoryId === null) {
+      data.category = { disconnect: true };
+    } else {
+      data.category = { connect: { id: categoryId } };
+    }
+  }
+
+  if (hasHalf === false) {
+    data.hasHalf = false;
+    data.halfPrice = null;
+  } else if (hasHalf === true) {
+    data.hasHalf = true;
+    if (halfPrice !== undefined && halfPrice > 0) data.halfPrice = halfPrice;
+  } else if (halfPrice !== undefined) {
+    if (halfPrice <= 0) {
+      data.halfPrice = null;
+      data.hasHalf = false;
+    } else {
+      data.halfPrice = halfPrice;
+      data.hasHalf = true;
+    }
+  }
 
   if (highlightAsNewLaunch === true) data.highlightNewUntil = highlightUntilFromNow();
   if (highlightAsNewLaunch === false) data.highlightNewUntil = null;

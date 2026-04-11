@@ -89,22 +89,22 @@ export default function MonthlyTargetSetup({
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <Input
-            type="number"
-            min={0}
-            step="1"
-            placeholder="Target amount (e.g. 100000)"
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
+            placeholder="e.g. 500000"
             value={inputValue}
             onChange={e => onInputChange(e.target.value)}
-            className="sm:max-w-xs"
+            className="sm:max-w-xs border-slate-300 bg-white text-base text-slate-900 shadow-sm placeholder:text-slate-500 dark:border-slate-300 dark:bg-white dark:text-slate-900 dark:placeholder:text-slate-500"
             aria-label="Monthly sales target amount"
           />
           <Button type="button" onClick={onSave} disabled={saving}>
-            {saving ? 'Saving...' : 'Set Target'}
+            {saving ? 'Saving…' : 'Set target'}
           </Button>
         </div>
         <p className="text-muted-foreground text-xs">
-          Enter the target amount, then click Set Target. If the amount is empty or invalid, you will
-          see a short message.
+          Enter amount in rupees (numbers only), then click Set target. Use Revenue → refresh if
+          progress does not update.
         </p>
       </CardContent>
     </Card>

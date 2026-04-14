@@ -42,3 +42,4 @@ jobs:
             npm run build
             npx prisma migrate deploy
             pm2 restart pos-backend || pm2 start npm --name pos-backend -- run start
+            pm2 save

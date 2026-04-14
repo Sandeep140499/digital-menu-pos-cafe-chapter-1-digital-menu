@@ -1,4 +1,14 @@
-npm run -s lint
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Run lint only when dependencies are installed. This keeps commits unblocked on fresh
+# checkouts / CI boxes where node_modules are intentionally absent.
+if [ -d "Digital-Menu-GN/node_modules" ] && [ -d "backend/node_modules" ]; then
+  npm run -s lint
+else
+  echo "husky pre-commit: skipping lint (missing node_modules)."
+  echo "Install deps to re-enable: npm ci --prefix Digital-Menu-GN && npm ci --prefix backend"
+fi
 
 # Optional: API tests can require a reachable DB. Enable when needed.
 if [ "${RUN_API_TESTS_ON_COMMIT:-}" = "true" ]; then

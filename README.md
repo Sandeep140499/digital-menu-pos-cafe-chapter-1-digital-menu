@@ -113,6 +113,8 @@ This repo is a **monorepo** (`backend/` + `Digital-Menu-GN/`). Railway must buil
 
 ### C. AWS EC2 (API) + AWS RDS (PostgreSQL)
 
+**Copy-paste helpers:** `backend/deploy/ec2/install-dependencies.sh` (Ubuntu: Node 20, PM2, Nginx, Certbot) and `backend/deploy/ec2/nginx-api.conf.example` (reverse proxy + Socket.IO).
+
 1. **RDS:** PostgreSQL, note endpoint, user, password, DB name → build `DATABASE_URL`.
 2. **EC2:** Amazon Linux / Ubuntu, install Node 20 LTS, clone repo, `cd backend && npm ci && npm run build`.
 3. Process manager: **systemd** or **PM2** to run `npm run start` (or `node dist/index.js` after `npx prisma migrate deploy` in UserData / deploy script).

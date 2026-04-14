@@ -2,6 +2,12 @@
 
 ALTER TABLE "MenuCategory" ADD COLUMN "branchId" INTEGER;
 
+-- Ensure at least one branch exists so backfill never sets NULL.
+-- Fresh Cloud SQL databases start empty, and seeds run outside of migrations.
+INSERT INTO "Branch" ("name")
+SELECT 'Main'
+WHERE NOT EXISTS (SELECT 1 FROM "Branch");
+
 UPDATE "MenuCategory" AS mc
 SET "branchId" = (SELECT id FROM "Branch" ORDER BY id ASC LIMIT 1);
 

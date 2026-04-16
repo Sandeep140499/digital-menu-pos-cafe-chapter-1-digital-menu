@@ -328,14 +328,17 @@ employeeRouter.post('/', authenticate, requireRole('ADMIN'), async (req, res) =>
   const confirmUrl = `${apiBaseUrl}/api/employees/confirm-email?token=${encodeURIComponent(linkToken)}`;
   const fromName = process.env.EMAIL_FROM_NAME || 'Cafe Chapter 1 Restro Private Limited';
 
+  const { passwordHash: _, verificationOtp: __, verificationOtpExpiresAt: ___, ...safe } = employee;
+  // Return success fast; send email in background so admin UI isn't blocked by SMTP slowness.
+  res.status(201).json(safe);
+
   if (isMailConfigured()) {
-    try {
-      const n = escapeHtml(name);
-      const pass = escapeHtml(randomPassword);
-      await sendEmail({
-        to: email,
-        subject: 'Your employee account is ready – verify your email',
-        text: `Hi ${name},
+    const n = escapeHtml(name);
+    const pass = escapeHtml(randomPassword);
+    void sendEmail({
+      to: email,
+      subject: 'Your employee account is ready – verify your email',
+      text: `Hi ${name},
 
 Your employee account has been created.
 
@@ -350,19 +353,16 @@ After verification you can log in with the password above and change it.
 Dashboard: ${baseUrl}/login
 
 This link expires in 24 hours.`,
-        html: `<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:560px;"><p>Hi <strong>${n}</strong>,</p><p>Your employee account has been created.</p><p><strong>Temporary password:</strong> <code style="background:#eee;padding:4px 8px;border-radius:4px;">${pass}</code></p><p>You must <strong>verify your email</strong> before you can log in. Click the button below:</p><p><a href="${escapeHtml(confirmUrl)}" style="display:inline-block;background:#047857;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;">Verify my email</a></p><p style="color:#666;font-size:14px;">Or copy this link: ${escapeHtml(confirmUrl)}</p><p>After verification you can log in with the password above and change it.</p><p><a href="${escapeHtml(baseUrl)}/login">Dashboard login</a></p><p style="color:#999;font-size:12px;">This link expires in 24 hours.</p></body></html>`,
-      });
-    } catch (mailErr) {
+      html: `<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:560px;"><p>Hi <strong>${n}</strong>,</p><p>Your employee account has been created.</p><p><strong>Temporary password:</strong> <code style="background:#eee;padding:4px 8px;border-radius:4px;">${pass}</code></p><p>You must <strong>verify your email</strong> before you can log in. Click the button below:</p><p><a href="${escapeHtml(confirmUrl)}" style="display:inline-block;background:#047857;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;">Verify my email</a></p><p style="color:#666;font-size:14px;">Or copy this link: ${escapeHtml(confirmUrl)}</p><p>After verification you can log in with the password above and change it.</p><p><a href="${escapeHtml(baseUrl)}/login">Dashboard login</a></p><p style="color:#999;font-size:12px;">This link expires in 24 hours.</p></body></html>`,
+    }).catch(mailErr => {
       console.error('Failed to send employee welcome email:', mailErr);
-    }
+    });
   } else {
     console.warn(
       'Email not configured; welcome email skipped. Set EMAIL_SMTP_* and EMAIL_FROM_ADDRESS in .env'
     );
   }
-
-  const { passwordHash: _, verificationOtp: __, verificationOtpExpiresAt: ___, ...safe } = employee;
-  return res.status(201).json(safe);
+  return;
 });
 
 const certificateSchema = z.object({

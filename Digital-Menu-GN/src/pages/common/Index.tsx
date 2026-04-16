@@ -441,15 +441,9 @@ const MenuCategoriesSection = memo(function MenuCategoriesSection({
         (a, b) => Number(!!b.isNewLaunch) - Number(!!a.isNewLaunch)
       );
       const hasNewItemsInside = !categoryNew && items.some((it: { isNewLaunch?: boolean }) => it.isNewLaunch);
-      const preview = items
-        .map((item: { name: string }) => item.name)
-        .filter(Boolean)
-        .slice(0, 2)
-        .join(' • ');
       return {
         key: String(cat.id),
         title: cat.name || 'Category',
-        preview,
         image: cat.imageUrl && cat.imageUrl.trim() ? cat.imageUrl : DEFAULT_CATEGORY_IMAGE,
         isNewLaunch: categoryNew,
         hasNewItemsInside,
@@ -603,7 +597,6 @@ function MenuCategoryCard({
   section: {
     key: string;
     title: string;
-    preview?: string;
     image: string;
     items: any[];
     isNewLaunch?: boolean;
@@ -715,11 +708,6 @@ function MenuCategoryCard({
             <h2 className="line-clamp-1 min-w-0 text-left text-sm leading-snug font-extrabold break-words whitespace-normal text-white sm:text-base">
               {section.title || categoryKey}
             </h2>
-            {section.preview && (
-              <p className="line-clamp-1 text-left text-[11px] font-medium text-white/85 sm:text-xs">
-                {section.preview}
-              </p>
-            )}
           </div>
         </div>
       </div>

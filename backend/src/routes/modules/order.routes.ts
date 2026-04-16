@@ -24,6 +24,19 @@ import { normalizeIndianMobile } from '../../utils/indianMobile.js';
 
 const mobileRegex = /^[6-9]\d{9}$/;
 
+function toMobileLast10(mobile: string | null | undefined): string | null {
+  const raw = String(mobile || '')
+    .replace(/\D/g, '')
+    .slice(-10);
+  return raw.length === 10 && /^[6-9]/.test(raw) ? raw : null;
+}
+
+function toCustomerKey(args: { mobileLast10: string | null; sessionToken: string | null | undefined }): string | null {
+  if (args.mobileLast10) return `m:${args.mobileLast10}`;
+  const st = (args.sessionToken || '').trim();
+  return st ? `s:${st}` : null;
+}
+
 const createOrderSchema = z
   .object({
     tableId: z.number().int().optional(),
@@ -167,6 +180,8 @@ orderRouter.post('/', async (req, res) => {
   const tableNumber = orderType === 'TAKE_AWAY' ? 'TAKE_AWAY' : (rawTableNumber || '').trim();
   const customerMobile = normalizeIndianMobile(rawMobile ?? null);
   const customerName = (rawName || '').trim().toUpperCase() || (rawName || '').trim();
+  const customerMobileLast10 = toMobileLast10(customerMobile);
+  const customerKey = toCustomerKey({ mobileLast10: customerMobileLast10, sessionToken: sessionToken ?? null });
 
   const branchExists = await prisma.branch.findUnique({
     where: { id: branchId },
@@ -328,6 +343,8 @@ orderRouter.post('/', async (req, res) => {
       sessionToken,
       customerName,
       customerMobile,
+      customerMobileLast10,
+      customerKey,
       orderSource: 'CUSTOMER', // This is a customer order from QR menu
       priority: determineOrderPriority(orderType, 'CUSTOMER', totalAmount, items.length),
       items: {
@@ -1345,7 +1362,7 @@ orderRouter.patch('/:id/customer', authenticate, async (req, res) => {
 
   const existing = await prisma.order.findUnique({
     where: { id },
-    select: { customerMobile: true, customerName: true },
+    select: { customerMobile: true, customerName: true, sessionToken: true },
   });
   if (!existing) {
     return res.status(404).json({ message: 'Order not found' });
@@ -1356,14 +1373,24 @@ orderRouter.patch('/:id/customer', authenticate, async (req, res) => {
     : undefined;
 
   const data: Prisma.OrderUpdateInput = {};
+
+  // Decide next mobile (canonical 10-digit or null).
+  const nextMobile: string | null =
+    mobileProvided ? (parsed.data.customerMobile ?? null) : normalizeIndianMobile(existing.customerMobile ?? null);
+
   if (mobileProvided) {
-    data.customerMobile = parsed.data.customerMobile ?? null;
+    data.customerMobile = nextMobile;
   } else if (existing.customerMobile) {
-    const norm = normalizeIndianMobile(existing.customerMobile);
+    const norm = nextMobile;
     if (norm && norm !== existing.customerMobile) {
       data.customerMobile = norm;
     }
   }
+
+  // Keep normalized identity columns in sync.
+  const nextLast10 = toMobileLast10(nextMobile);
+  data.customerMobileLast10 = nextLast10;
+  data.customerKey = toCustomerKey({ mobileLast10: nextLast10, sessionToken: existing.sessionToken ?? null });
   if (customerName) {
     data.customerName = customerName;
   }
@@ -1399,14 +1426,33 @@ orderRouter.delete('/customer-leads/:mobile', authenticate, async (req, res) => 
   if (raw.length !== 10 || !/^[6-9]/.test(raw)) {
     return res.status(400).json({ message: 'Valid 10-digit mobile number required' });
   }
-  const result = await prisma.$executeRaw(
-    Prisma.sql`
-      UPDATE "Order"
-      SET "customerMobile" = NULL
-      WHERE right(regexp_replace(COALESCE("customerMobile", ''), '[^0-9]', '', 'g'), 10) = ${raw}
-    `
-  );
-  const clearedCount = typeof result === 'number' ? result : 0;
+  const ordersToClear = await prisma.order.findMany({
+    where: { customerMobileLast10: raw },
+    select: { id: true, sessionToken: true },
+  });
+
+  const clearedCount = ordersToClear.length;
+
+  if (clearedCount > 0) {
+    const BATCH = 50;
+    await prisma.$transaction(async tx => {
+      for (let i = 0; i < ordersToClear.length; i += BATCH) {
+        const batch = ordersToClear.slice(i, i + BATCH);
+        await Promise.all(
+          batch.map(o =>
+            tx.order.update({
+              where: { id: o.id },
+              data: {
+                customerMobile: null,
+                customerMobileLast10: null,
+                customerKey: toCustomerKey({ mobileLast10: null, sessionToken: o.sessionToken ?? null }),
+              },
+            })
+          )
+        );
+      }
+    });
+  }
   try {
     await prisma.adminNotification.create({
       data: {

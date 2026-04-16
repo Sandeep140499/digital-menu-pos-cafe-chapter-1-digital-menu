@@ -8,40 +8,44 @@ datasource db {
 }
 
 model Admin {
-  id           Int      @id @default(autoincrement())
-  name         String
-  email        String   @unique
-  passwordHash String
-  createdAt    DateTime @default(now())
+  id                     Int            @id @default(autoincrement())
+  name                   String
+  email                  String         @unique
+  passwordHash           String
+  createdAt              DateTime       @default(now())
   notificationsClearedAt DateTime?
-  refreshTokens RefreshToken[]
+  refreshTokens          RefreshToken[]
 }
 
 model Branch {
-  id              Int       @id @default(autoincrement())
-  name            String
-  location        String?
-  timezone        String?   @default("Asia/Kolkata")
-  logoUrl         String?
-  phone           String?   // Restaurant phone for Call/WhatsApp
-  googleReviewUrl String?   // Google review link
-  pincode         String?   // Branch address pincode (for payslip, etc.)
-  directorsEmail  String?   // Comma-separated verified director emails (for salary slip copies)
-  showTotalAmountToCustomers Boolean @default(true)
-  enableNewOrderRinging     Boolean  @default(true)
-  /** Global employee notification sound preset for new orders (admin-controlled). */
-  newOrderSoundPreset       String   @default("ring")
-  /** Global employee notification volume (0..1) for new orders (admin-controlled). */
-  newOrderSoundVolume       Float    @default(1)
-  createdAt       DateTime  @default(now())
-  employees   Employee[]
-  tables      Table[]
-  shifts      EmployeeShift[]
-  orders      Order[]
-  customerQueries CustomerQuery[]
-  directorVerifications   DirectorVerification[]
-  directorRemovalRequests DirectorRemovalRequest[]
-  menuCategories          MenuCategory[]
+  id                         Int                      @id @default(autoincrement())
+  name                       String
+  location                   String?
+  timezone                   String?                  @default("Asia/Kolkata")
+  logoUrl                    String?
+  phone                      String? // Restaurant phone for Call/WhatsApp
+  googleReviewUrl            String? // Google review link
+  pincode                    String? // Branch address pincode (for payslip, etc.)
+  directorsEmail             String? // Comma-separated verified director emails (for salary slip copies)
+  showTotalAmountToCustomers Boolean                  @default(true)
+  enableNewOrderRinging      Boolean                  @default(true)
+  /**
+   * Global employee notification sound preset for new orders (admin-controlled).
+   */
+  newOrderSoundPreset        String                   @default("ring")
+  /**
+   * Global employee notification volume (0..1) for new orders (admin-controlled).
+   */
+  newOrderSoundVolume        Float                    @default(1)
+  createdAt                  DateTime                 @default(now())
+  employees                  Employee[]
+  tables                     Table[]
+  shifts                     EmployeeShift[]
+  orders                     Order[]
+  customerQueries            CustomerQuery[]
+  directorVerifications      DirectorVerification[]
+  directorRemovalRequests    DirectorRemovalRequest[]
+  menuCategories             MenuCategory[]
 }
 
 model DirectorVerification {
@@ -52,6 +56,7 @@ model DirectorVerification {
   token     String   @unique
   expiresAt DateTime
   createdAt DateTime @default(now())
+
   @@unique([branchId, email])
 }
 
@@ -63,42 +68,43 @@ model DirectorRemovalRequest {
   token     String   @unique
   expiresAt DateTime
   createdAt DateTime @default(now())
+
   @@unique([branchId, email])
 }
 
 model Employee {
-  id              Int               @id @default(autoincrement())
-  name            String
-  email           String            @unique
-  passwordHash    String
-  employeeCode    String            @unique
-  role            String?           // e.g. "Counter Staff", "Kitchen", "Manager"
-  status          EmployeeStatus    @default(ACTIVE)
-  createdAt       DateTime          @default(now())
-  branchId        Int
-  branch          Branch            @relation(fields: [branchId], references: [id])
-  shifts          EmployeeShift[]
-  orders          Order[]
-  paymentRecords  PaymentRecord[]   @relation("PaymentConfirmedBy")
-  emailVerified   Boolean           @default(false)
-  verificationOtp String?
+  id                       Int                  @id @default(autoincrement())
+  name                     String
+  email                    String               @unique
+  passwordHash             String
+  employeeCode             String               @unique
+  role                     String? // e.g. "Counter Staff", "Kitchen", "Manager"
+  status                   EmployeeStatus       @default(ACTIVE)
+  createdAt                DateTime             @default(now())
+  branchId                 Int
+  branch                   Branch               @relation(fields: [branchId], references: [id])
+  shifts                   EmployeeShift[]
+  orders                   Order[]
+  paymentRecords           PaymentRecord[]      @relation("PaymentConfirmedBy")
+  emailVerified            Boolean              @default(false)
+  verificationOtp          String?
   verificationOtpExpiresAt DateTime?
-  profileImageUrl String?
-  removedItems    RemovedItemsReport[]
-  updatedAt       DateTime         @updatedAt
-  phone                 String?
-  salary                Float?
-  address               String?
-  pincode               String?
-  workingHoursPerDay    Int?    // 1-24, for payroll and overtime calculation
-  shiftStartTime        String? // Scheduled shift start e.g. "10:00" (24h)
-  shiftEndTime          String? // Scheduled shift end e.g. "17:00" (24h)
-  joiningDate           DateTime? @db.Date
-  overtimeRecords       EmployeeOvertime[]
-  lateEntries           LateEntry[]
-  salarySlips           SalarySlip[]
-  leaves                EmployeeLeave[]
-  refreshTokens         RefreshToken[]
+  profileImageUrl          String?
+  removedItems             RemovedItemsReport[]
+  updatedAt                DateTime             @updatedAt
+  phone                    String?
+  salary                   Float?
+  address                  String?
+  pincode                  String?
+  workingHoursPerDay       Int? // 1-24, for payroll and overtime calculation
+  shiftStartTime           String? // Scheduled shift start e.g. "10:00" (24h)
+  shiftEndTime             String? // Scheduled shift end e.g. "17:00" (24h)
+  joiningDate              DateTime?            @db.Date
+  overtimeRecords          EmployeeOvertime[]
+  lateEntries              LateEntry[]
+  salarySlips              SalarySlip[]
+  leaves                   EmployeeLeave[]
+  refreshTokens            RefreshToken[]
 
   @@index([branchId, status]) // Optimized for branch employee listing
   @@index([email]) // Already unique, but explicit for performance
@@ -107,21 +113,21 @@ model Employee {
 }
 
 model RefreshToken {
-  id                Int       @id @default(autoincrement())
-  tokenHash          String    @unique
-  adminId            Int?
-  admin              Admin?    @relation(fields: [adminId], references: [id], onDelete: Cascade)
-  employeeId         Int?
-  employee           Employee? @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  role               String
-  createdAt          DateTime  @default(now())
-  expiresAt          DateTime
-  revokedAt          DateTime?
-  replacedByTokenId  Int?      @unique
-  replacedByToken    RefreshToken? @relation("RefreshTokenRotation", fields: [replacedByTokenId], references: [id])
-  replacesToken      RefreshToken? @relation("RefreshTokenRotation")
-  userAgent          String?
-  ip                 String?
+  id                Int           @id @default(autoincrement())
+  tokenHash         String        @unique
+  adminId           Int?
+  admin             Admin?        @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  employeeId        Int?
+  employee          Employee?     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  role              String
+  createdAt         DateTime      @default(now())
+  expiresAt         DateTime
+  revokedAt         DateTime?
+  replacedByTokenId Int?          @unique
+  replacedByToken   RefreshToken? @relation("RefreshTokenRotation", fields: [replacedByTokenId], references: [id])
+  replacesToken     RefreshToken? @relation("RefreshTokenRotation")
+  userAgent         String?
+  ip                String?
 
   @@index([adminId])
   @@index([employeeId])
@@ -142,17 +148,17 @@ enum LeaveType {
 }
 
 model EmployeeLeave {
-  id         Int         @id @default(autoincrement())
-  employeeId Int
-  employee   Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  leaveType  LeaveType   @default(CASUAL)
-  startDate  DateTime    @db.Date
-  endDate    DateTime    @db.Date
-  reason     String?
+  id           Int         @id @default(autoincrement())
+  employeeId   Int
+  employee     Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType    LeaveType   @default(CASUAL)
+  startDate    DateTime    @db.Date
+  endDate      DateTime    @db.Date
+  reason       String?
   adminRemarks String?
-  status     LeaveStatus @default(PENDING)
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
+  status       LeaveStatus @default(PENDING)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
 
   @@index([employeeId])
   @@index([startDate])
@@ -162,21 +168,21 @@ model EmployeeLeave {
 }
 
 model EmployeeShift {
-  id         Int       @id @default(autoincrement())
-  employeeId Int
-  employee   Employee  @relation(fields: [employeeId], references: [id])
-  branchId   Int
-  branch     Branch    @relation(fields: [branchId], references: [id])
-  shiftStart DateTime
-  shiftEnd   DateTime?
-  totalHours Float?    // computed on shift end
-  totalSales Float?    @default(0)
-  status     ShiftStatus @default(ACTIVE)
-  pauseCount Int       @default(0)
-  lastPauseAt DateTime?
-  endReason  String?   // "Auto Closed" | "Normal End" | null (legacy)
-  createdAt  DateTime  @default(now())
-  orders     Order[]
+  id             Int               @id @default(autoincrement())
+  employeeId     Int
+  employee       Employee          @relation(fields: [employeeId], references: [id])
+  branchId       Int
+  branch         Branch            @relation(fields: [branchId], references: [id])
+  shiftStart     DateTime
+  shiftEnd       DateTime?
+  totalHours     Float? // computed on shift end
+  totalSales     Float?            @default(0)
+  status         ShiftStatus       @default(ACTIVE)
+  pauseCount     Int               @default(0)
+  lastPauseAt    DateTime?
+  endReason      String? // "Auto Closed" | "Normal End" | null (legacy)
+  createdAt      DateTime          @default(now())
+  orders         Order[]
   overtimeRecord EmployeeOvertime?
 
   @@index([branchId, shiftEnd, status, shiftStart])
@@ -190,21 +196,21 @@ enum ShiftStatus {
 }
 
 model EmployeeOvertime {
-  id             Int      @id @default(autoincrement())
-  employeeId     Int
-  employee       Employee @relation(fields: [employeeId], references: [id])
-  shiftId        Int      @unique  // one overtime record per shift
-  shift          EmployeeShift @relation(fields: [shiftId], references: [id])
-  employeeName   String   // denormalized for display
-  role           String?  // denormalized
-  shiftDate      DateTime @db.Date  // date of shift (shiftStart date in branch TZ)
-  shiftStart     DateTime
-  shiftEnd       DateTime
-  totalHours     Float
-  overtimeHours  Float    // totalHours - workingHoursPerDay, min 0
-  reason         String?  // "Auto Closed" | "Normal End" | etc.
-  status         String   @default("PENDING") // PENDING | APPROVED | REJECTED | PAID
-  createdAt      DateTime @default(now())
+  id            Int           @id @default(autoincrement())
+  employeeId    Int
+  employee      Employee      @relation(fields: [employeeId], references: [id])
+  shiftId       Int           @unique // one overtime record per shift
+  shift         EmployeeShift @relation(fields: [shiftId], references: [id])
+  employeeName  String // denormalized for display
+  role          String? // denormalized
+  shiftDate     DateTime      @db.Date // date of shift (shiftStart date in branch TZ)
+  shiftStart    DateTime
+  shiftEnd      DateTime
+  totalHours    Float
+  overtimeHours Float // totalHours - workingHoursPerDay, min 0
+  reason        String? // "Auto Closed" | "Normal End" | etc.
+  status        String        @default("PENDING") // PENDING | APPROVED | REJECTED | PAID
+  createdAt     DateTime      @default(now())
 
   @@index([employeeId])
   @@index([shiftDate])
@@ -212,15 +218,15 @@ model EmployeeOvertime {
 }
 
 model LateEntry {
-  id                Int      @id @default(autoincrement())
-  employeeId        Int
-  employee          Employee @relation(fields: [employeeId], references: [id])
-  date              DateTime @db.Date
-  shiftStartTime    String   // scheduled e.g. "10:00"
-  actualLoginTime   DateTime // when employee actually started shift
-  lateDurationMinutes Int    // minutes late
-  shiftId           Int?     // optional link to EmployeeShift
-  createdAt         DateTime @default(now())
+  id                  Int      @id @default(autoincrement())
+  employeeId          Int
+  employee            Employee @relation(fields: [employeeId], references: [id])
+  date                DateTime @db.Date
+  shiftStartTime      String // scheduled e.g. "10:00"
+  actualLoginTime     DateTime // when employee actually started shift
+  lateDurationMinutes Int // minutes late
+  shiftId             Int? // optional link to EmployeeShift
+  createdAt           DateTime @default(now())
 
   @@index([employeeId])
   @@index([date])
@@ -232,7 +238,7 @@ model SalarySlip {
   employeeId   Int
   employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   salaryNumber String?
-  month        Int      // 1-12
+  month        Int // 1-12
   year         Int
   paidDays     Int?
   lopDays      Int?
@@ -258,19 +264,19 @@ model Table {
 }
 
 model MenuCategory {
-  id        Int          @id @default(autoincrement())
-  branchId  Int
-  branch    Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  name      String
-  slug      String?
-  imageUrl  String?      @map("image_url")
+  id                     Int                 @id @default(autoincrement())
+  branchId               Int
+  branch                 Branch              @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  name                   String
+  slug                   String
+  imageUrl               String?             @map("image_url")
   /// When set and in the future, customer menu shows this category as “New launch” (admin-controlled).
-  highlightNewUntil DateTime? @map("highlight_new_until")
+  highlightNewUntil      DateTime?           @map("highlight_new_until")
   /// When false, the whole category is hidden from the public customer menu (admin).
-  showOnMenu Boolean @default(true) @map("show_on_menu")
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
-  items     MenuItem[]
+  showOnMenu             Boolean             @default(true) @map("show_on_menu")
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+  items                  MenuItem[]
   happyHourCategoryLinks HappyHourCategory[]
 
   @@unique([branchId, slug])
@@ -278,35 +284,35 @@ model MenuCategory {
 }
 
 model MenuItem {
-  id          Int          @id @default(autoincrement())
-  name        String
-  description String?
-  imageUrl    String?
-  basePrice   Float        // default / full price
-  hasHalf     Boolean      @default(false)
-  halfPrice   Float?
-  isActive    Boolean      @default(true)
+  id                     Int                     @id @default(autoincrement())
+  name                   String
+  description            String?
+  imageUrl               String?
+  basePrice              Float // default / full price
+  hasHalf                Boolean                 @default(false)
+  halfPrice              Float?
+  isActive               Boolean                 @default(true)
   /// When set and in the future, customer menu highlights this item’s category as new (or stacks with category highlight).
-  highlightNewUntil DateTime? @map("highlight_new_until")
-  categoryId  Int?
-  category    MenuCategory? @relation(fields: [categoryId], references: [id])
-  createdAt   DateTime     @default(now())
-  orderItems  OrderItem[]
-  happyHourItemLinks      HappyHourItem[]
-  happyHourExcludedLinks  HappyHourExcludedItem[]
+  highlightNewUntil      DateTime?               @map("highlight_new_until")
+  categoryId             Int?
+  category               MenuCategory?           @relation(fields: [categoryId], references: [id])
+  createdAt              DateTime                @default(now())
+  orderItems             OrderItem[]
+  happyHourItemLinks     HappyHourItem[]
+  happyHourExcludedLinks HappyHourExcludedItem[]
 }
 
 model ErrorLog {
   id           Int       @id @default(autoincrement())
-  errorType    String    // API_FAILURE, DATABASE, MENU_LOAD, etc.
+  errorType    String // API_FAILURE, DATABASE, MENU_LOAD, etc.
   apiEndpoint  String?
   errorMessage String    @db.Text
   stackTrace   String?   @db.Text
-  branchId     Int?      // affected branch if applicable
+  branchId     Int? // affected branch if applicable
   status       String    @default("UNRESOLVED") // RESOLVED | UNRESOLVED
   createdAt    DateTime  @default(now())
   resolvedAt   DateTime?
-  metadata     Json?     // extra context
+  metadata     Json? // extra context
 
   @@index([branchId])
   @@index([status])
@@ -314,38 +320,50 @@ model ErrorLog {
 }
 
 model Order {
-  id              Int              @id @default(autoincrement())
-  tableId         Int
-  table           Table            @relation(fields: [tableId], references: [id])
-  employeeId      Int?
-  employee        Employee?        @relation(fields: [employeeId], references: [id])
-  branchId        Int
-  branch          Branch           @relation(fields: [branchId], references: [id])
-  shiftId         Int?
-  shift           EmployeeShift?   @relation(fields: [shiftId], references: [id])
-  status          OrderStatus      @default(NEW_ORDER)
-  orderType       OrderType        @default(DINE_IN)
-  paymentStatus   PaymentStatus    @default(PAYMENT_PENDING)
-  totalAmount     Float            @default(0)
-  originalAmount  Float?           @default(0) // Track original amount before modifications
-  customerName    String?          // Customer name (mandatory at checkout)
-  customerMobile  String?          // 10-digit mobile for WhatsApp & tracking
-  reviewSent      Boolean          @default(false) // Google review link sent once
-  acceptedAt      DateTime?        // When employee accepted the order (for "time to complete")
-  completedAt     DateTime?        // When order was marked ORDER_COMPLETE
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  items           OrderItem[]
-  paymentRecords  PaymentRecord[]
-  sessionToken    String?
-  removedItems    RemovedItemsReport[]
-  modifications   OrderModification[]
-  orderSource     OrderSource      @default(CUSTOMER) // Distinguish between customer and employee orders
-  priority        OrderPriority     @default(NORMAL) // For notification urgency
+  id                   Int                  @id @default(autoincrement())
+  tableId              Int
+  table                Table                @relation(fields: [tableId], references: [id])
+  employeeId           Int?
+  employee             Employee?            @relation(fields: [employeeId], references: [id])
+  branchId             Int
+  branch               Branch               @relation(fields: [branchId], references: [id])
+  shiftId              Int?
+  shift                EmployeeShift?       @relation(fields: [shiftId], references: [id])
+  status               OrderStatus          @default(NEW_ORDER)
+  orderType            OrderType            @default(DINE_IN)
+  paymentStatus        PaymentStatus        @default(PAYMENT_PENDING)
+  totalAmount          Float                @default(0)
+  originalAmount       Float?               @default(0) // Track original amount before modifications
+  customerName         String? // Customer name (mandatory at checkout)
+  customerMobile       String? // 10-digit mobile for WhatsApp & tracking
+  /**
+   * Cached 10-digit mobile for fast lookup/clearing (nullable when mobile absent).
+   */
+  customerMobileLast10 String?              @map("customer_mobile_last10")
+  /**
+   * Stable customer identity key for analytics:
+   * - m:<last10> when mobile known
+   * - s:<sessionToken> otherwise (if present)
+   */
+  customerKey          String?              @map("customer_key")
+  reviewSent           Boolean              @default(false) // Google review link sent once
+  acceptedAt           DateTime? // When employee accepted the order (for "time to complete")
+  completedAt          DateTime? // When order was marked ORDER_COMPLETE
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  items                OrderItem[]
+  paymentRecords       PaymentRecord[]
+  sessionToken         String?
+  removedItems         RemovedItemsReport[]
+  modifications        OrderModification[]
+  orderSource          OrderSource          @default(CUSTOMER) // Distinguish between customer and employee orders
+  priority             OrderPriority        @default(NORMAL) // For notification urgency
 
   @@index([branchId, status, createdAt]) // Optimized for order listing
   @@index([branchId, paymentStatus, createdAt]) // Optimized for payment tracking
   @@index([customerMobile]) // Optimized for customer lookup
+  @@index([customerMobileLast10])
+  @@index([customerKey])
   @@index([employeeId, shiftId, createdAt]) // Optimized for employee performance
   @@index([tableId, status]) // Optimized for table status
 }
@@ -353,15 +371,15 @@ model Order {
 // Imported customer leaderboard snapshots (e.g. from CSV exports).
 // Used to show legacy/high-level customer stats even when full order history isn't present in the DB.
 model CustomerLead {
-  id            Int      @id @default(autoincrement())
-  mobile        String   @unique
-  name          String?
-  totalOrders   Int      @default(0)
-  totalSpent    Float    @default(0)
-  lastOrderAt   DateTime?
-  sourceTag     String?  // e.g. "customer-leads-2026-04-11"
-  importedAt    DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id          Int       @id @default(autoincrement())
+  mobile      String    @unique
+  name        String?
+  totalOrders Int       @default(0)
+  totalSpent  Float     @default(0)
+  lastOrderAt DateTime?
+  sourceTag   String? // e.g. "customer-leads-2026-04-11"
+  importedAt  DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@index([lastOrderAt])
   @@index([totalOrders])
@@ -369,20 +387,20 @@ model CustomerLead {
 }
 
 model OrderItem {
-  id          Int       @id @default(autoincrement())
-  orderId     Int
-  order       Order     @relation(fields: [orderId], references: [id])
-  menuItemId  Int?
-  menuItem    MenuItem? @relation(fields: [menuItemId], references: [id])
-  name        String
-  quantity    Int
-  price       Float     // unit price for selected variant
-  variant     String?   // "HALF" | "FULL" | null
-  addedAt     DateTime? // When item was added by employee (post-order)
-  addedBy     Int?      // Employee ID who added it (post-order)
-  isRemoved   Boolean   @default(false)  // Track if item was removed by employee
-  removedAt   DateTime? // When item was removed
-  removedBy   Int?      // Employee ID who removed it
+  id            Int       @id @default(autoincrement())
+  orderId       Int
+  order         Order     @relation(fields: [orderId], references: [id])
+  menuItemId    Int?
+  menuItem      MenuItem? @relation(fields: [menuItemId], references: [id])
+  name          String
+  quantity      Int
+  price         Float // unit price for selected variant
+  variant       String? // "HALF" | "FULL" | null
+  addedAt       DateTime? // When item was added by employee (post-order)
+  addedBy       Int? // Employee ID who added it (post-order)
+  isRemoved     Boolean   @default(false) // Track if item was removed by employee
+  removedAt     DateTime? // When item was removed
+  removedBy     Int? // Employee ID who removed it
   removalReason String? // Reason for removal (e.g., "Item not available")
 
   @@index([orderId])
@@ -390,44 +408,44 @@ model OrderItem {
 }
 
 model RemovedItemsReport {
-  id          Int       @id @default(autoincrement())
-  date        DateTime  @default(now())
-  orderId     Int
-  order       Order     @relation(fields: [orderId], references: [id])
-  employeeId  Int?
-  employee    Employee? @relation(fields: [employeeId], references: [id])
-  itemName    String
-  quantity    Int
-  unitPrice   Float
-  totalLoss   Float     // quantity * unitPrice
-  reason      String?
-  createdAt   DateTime  @default(now())
+  id         Int       @id @default(autoincrement())
+  date       DateTime  @default(now())
+  orderId    Int
+  order      Order     @relation(fields: [orderId], references: [id])
+  employeeId Int?
+  employee   Employee? @relation(fields: [employeeId], references: [id])
+  itemName   String
+  quantity   Int
+  unitPrice  Float
+  totalLoss  Float // quantity * unitPrice
+  reason     String?
+  createdAt  DateTime  @default(now())
 }
 
 model OrderModification {
-  id          Int       @id @default(autoincrement())
-  orderId     Int
-  order       Order     @relation(fields: [orderId], references: [id])
-  modifiedBy  Int       // Employee ID
-  modifiedAt  DateTime  @default(now())
-  oldAmount   Float     // Total before modification
-  newAmount   Float     // Total after modification
-  itemsRemoved Json?    // Array of removed items
-  itemsAdded  Json?    // Array of added items
-  itemsUpdated Json?   // Array of updated items (qty/price/variant)
-  reason      String?
+  id           Int      @id @default(autoincrement())
+  orderId      Int
+  order        Order    @relation(fields: [orderId], references: [id])
+  modifiedBy   Int // Employee ID
+  modifiedAt   DateTime @default(now())
+  oldAmount    Float // Total before modification
+  newAmount    Float // Total after modification
+  itemsRemoved Json? // Array of removed items
+  itemsAdded   Json? // Array of added items
+  itemsUpdated Json? // Array of updated items (qty/price/variant)
+  reason       String?
 }
 
 model PaymentRecord {
-  id                  Int            @id @default(autoincrement())
+  id                  Int           @id @default(autoincrement())
   orderId             Int
-  order               Order          @relation(fields: [orderId], references: [id])
+  order               Order         @relation(fields: [orderId], references: [id])
   paymentStatus       PaymentStatus
-  paidAmount          Float          @default(0)
-  remainingAmount     Float          @default(0)
+  paidAmount          Float         @default(0)
+  remainingAmount     Float         @default(0)
   confirmedByEmployee Int?
-  confirmedBy         Employee?      @relation("PaymentConfirmedBy", fields: [confirmedByEmployee], references: [id])
-  createdAt           DateTime       @default(now())
+  confirmedBy         Employee?     @relation("PaymentConfirmedBy", fields: [confirmedByEmployee], references: [id])
+  createdAt           DateTime      @default(now())
 }
 
 enum EmployeeStatus {
@@ -470,14 +488,14 @@ enum OrderPriority {
 }
 
 model AdminNotification {
-  id        Int       @id @default(autoincrement())
-  type      String    // e.g. PAYMENT_PENDING, DAILY_REPORT_SENT
-  orderId   Int?      // optional, for order-related alerts
-  branchId  Int?      // optional, for branch-scoped alerts
-  message   String    @db.Text
-  meta      Json?     // e.g. { totalPending: 1670, count: 3 } for summary alerts
-  isRead    Boolean   @default(false)
-  createdAt DateTime  @default(now())
+  id        Int      @id @default(autoincrement())
+  type      String // e.g. PAYMENT_PENDING, DAILY_REPORT_SENT
+  orderId   Int? // optional, for order-related alerts
+  branchId  Int? // optional, for branch-scoped alerts
+  message   String   @db.Text
+  meta      Json? // e.g. { totalPending: 1670, count: 3 } for summary alerts
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
 
   @@index([isRead])
   @@index([createdAt])
@@ -485,16 +503,16 @@ model AdminNotification {
 }
 
 model CustomerQuery {
-  id        Int       @id @default(autoincrement())
-  name      String
-  mobile    String
-  orderId   Int?      // optional order reference
-  branchId  Int?
-  branch    Branch?   @relation(fields: [branchId], references: [id])
-  issueType String    // ORDER_ISSUE, PAYMENT_ISSUE, FOOD_ISSUE, DELAY_ISSUE, OTHER
-  message   String    @db.Text
-  status    String    @default("PENDING") // PENDING, IN_PROGRESS, RESOLVED
-  createdAt DateTime  @default(now())
+  id         Int       @id @default(autoincrement())
+  name       String
+  mobile     String
+  orderId    Int? // optional order reference
+  branchId   Int?
+  branch     Branch?   @relation(fields: [branchId], references: [id])
+  issueType  String // ORDER_ISSUE, PAYMENT_ISSUE, FOOD_ISSUE, DELAY_ISSUE, OTHER
+  message    String    @db.Text
+  status     String    @default("PENDING") // PENDING, IN_PROGRESS, RESOLVED
+  createdAt  DateTime  @default(now())
   resolvedAt DateTime?
 
   @@index([status])
@@ -502,7 +520,9 @@ model CustomerQuery {
   @@index([branchId])
 }
 
-/** Persisted month rollup (written before optional order purge) so admin Revenue page keeps history. */
+/**
+ * Persisted month rollup (written before optional order purge) so admin Revenue page keeps history.
+ */
 model MonthlyRevenueSnapshot {
   id                    Int      @id @default(autoincrement())
   year                  Int
@@ -511,7 +531,9 @@ model MonthlyRevenueSnapshot {
   totalOrders           Int
   totalSales            Float
   uniqueCustomers       Int
-  /** Customers whose first-ever order falls in this month (mobile/session key). */
+  /**
+   * Customers whose first-ever order falls in this month (mobile/session key).
+   */
   newCustomersCount     Int      @default(0)
   avgOrdersPerDay       Float
   paidOrdersCount       Int      @default(0)
@@ -526,26 +548,26 @@ model MonthlyRevenueSnapshot {
 }
 
 model MonthlyTarget {
-  id          Int      @id @default(autoincrement())
-  year        Int
-  month       Int
-  yearMonth   String   @unique
+  id           Int      @id @default(autoincrement())
+  year         Int
+  month        Int
+  yearMonth    String   @unique
   targetAmount Float
-  createdBy   Int?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdBy    Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@index([year, month])
 }
 
 model DailyRevenueEntry {
-  id            Int      @id @default(autoincrement())
-  businessDate  DateTime @db.Date
-  totalOrders   Int      @default(0)
-  paidOrders    Int      @default(0)
-  totalRevenue  Float    @default(0)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           Int      @id @default(autoincrement())
+  businessDate DateTime @db.Date
+  totalOrders  Int      @default(0)
+  paidOrders   Int      @default(0)
+  totalRevenue Float    @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@unique([businessDate])
   @@index([businessDate])
@@ -583,33 +605,33 @@ enum HappyHourNotifyAudience {
 
 /// Time-based discount offers (Happy Hours) with optional WhatsApp broadcast metadata.
 model HappyHour {
-  id                   Int                         @id @default(autoincrement())
-  name                 String
-  discountPercent      Float
-  dateStart            DateTime                    @db.Date
-  dateEnd              DateTime                    @db.Date
+  id              Int                @id @default(autoincrement())
+  name            String
+  discountPercent Float
+  dateStart       DateTime           @db.Date
+  dateEnd         DateTime           @db.Date
   /// Local time start, 24h "HH:mm" (branch timezone).
-  timeStart            String
+  timeStart       String
   /// Local time end, 24h "HH:mm". If end < start on clock, treated as overnight window.
-  timeEnd              String
+  timeEnd         String
   /// JSON number[] weekday 0=Sunday .. 6=Saturday; null or empty = all days.
-  daysOfWeek           Json?
-  status               HappyHourStatus             @default(ACTIVE)
-  applyMode            HappyHourApplyMode
+  daysOfWeek      Json?
+  status          HappyHourStatus    @default(ACTIVE)
+  applyMode       HappyHourApplyMode
 
-  notificationPref     HappyHourNotificationPref   @default(NONE)
-  notificationStatus   HappyHourNotificationStatus @default(NOT_APPLICABLE)
-  sentAt               DateTime?
-  notifyAudience       HappyHourNotifyAudience?
+  notificationPref   HappyHourNotificationPref   @default(NONE)
+  notificationStatus HappyHourNotificationStatus @default(NOT_APPLICABLE)
+  sentAt             DateTime?
+  notifyAudience     HappyHourNotifyAudience?
   /// JSON string[] of 10-digit mobiles when notifyAudience = SELECTED
-  selectedMobiles      Json?
+  selectedMobiles    Json?
 
-  categoryLinks        HappyHourCategory[]
-  itemLinks            HappyHourItem[]
-  excludedItemLinks    HappyHourExcludedItem[]
+  categoryLinks     HappyHourCategory[]
+  itemLinks         HappyHourItem[]
+  excludedItemLinks HappyHourExcludedItem[]
 
-  createdAt            DateTime                    @default(now())
-  updatedAt            DateTime                    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([status, dateStart, dateEnd])
 }

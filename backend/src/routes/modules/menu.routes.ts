@@ -19,7 +19,49 @@ function createSlug(name: string): string {
     .replace(/[^a-z0-9\s-]/g, '')
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-')
-    .trim();
+    .replace(/(^-+|-+$)/g, '');
+}
+
+async function ensureUniqueCategorySlug(args: {
+  branchId: number;
+  desiredSlug: string;
+  selfCategoryId?: number;
+}): Promise<string> {
+  const base = (args.desiredSlug || '').trim().toLowerCase();
+  const normalized = base
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/(^-+|-+$)/g, '');
+
+  const root = normalized || `category-${args.selfCategoryId ?? Date.now()}`;
+
+  const existing = await prisma.menuCategory.findFirst({
+    where: {
+      branchId: args.branchId,
+      slug: root,
+      ...(args.selfCategoryId ? { id: { not: args.selfCategoryId } } : {}),
+    },
+    select: { id: true },
+  });
+  if (!existing) return root;
+
+  // Try slug-2, slug-3, ... then fall back to slug-<id>.
+  for (let i = 2; i <= 50; i += 1) {
+    const candidate = `${root}-${i}`;
+    const hit = await prisma.menuCategory.findFirst({
+      where: {
+        branchId: args.branchId,
+        slug: candidate,
+        ...(args.selfCategoryId ? { id: { not: args.selfCategoryId } } : {}),
+      },
+      select: { id: true },
+    });
+    if (!hit) return candidate;
+  }
+
+  if (args.selfCategoryId) return `${root}-${args.selfCategoryId}`;
+  return `${root}-${Date.now()}`;
 }
 
 const NEW_LAUNCH_DAYS = 7;
@@ -451,7 +493,11 @@ menuRouter.post('/categories', authenticate, requireRole('ADMIN'), async (req, r
     return res.status(400).json({ message: 'Invalid branchId' });
   }
 
-  const slug = parsed.data.slug?.trim() || createSlug(parsed.data.name);
+  const desiredSlug = parsed.data.slug?.trim() || createSlug(parsed.data.name);
+  const slug = await ensureUniqueCategorySlug({
+    branchId: parsed.data.branchId,
+    desiredSlug,
+  });
   try {
     const category = await prisma.menuCategory.create({
       data: {
@@ -485,6 +531,13 @@ async function updateCategory(req: import('express').Request, res: import('expre
   }
 
   const id = Number(req.params.id);
+  const existing = await prisma.menuCategory.findUnique({
+    where: { id },
+    select: { id: true, branchId: true, slug: true },
+  });
+  if (!existing) {
+    return res.status(404).json({ message: 'Category not found' });
+  }
   const data: {
     name?: string;
     imageUrl?: string | null;
@@ -495,9 +548,26 @@ async function updateCategory(req: import('express').Request, res: import('expre
   if (parsed.data.name !== undefined) data.name = parsed.data.name;
   if (parsed.data.imageUrl !== undefined)
     data.imageUrl = parsed.data.imageUrl === '' ? null : parsed.data.imageUrl;
-  if (parsed.data.slug !== undefined) data.slug = parsed.data.slug;
-  if (parsed.data.name !== undefined && parsed.data.slug === undefined)
-    data.slug = createSlug(parsed.data.name);
+  if (parsed.data.slug !== undefined) {
+    const next = await ensureUniqueCategorySlug({
+      branchId: existing.branchId,
+      desiredSlug: parsed.data.slug,
+      selfCategoryId: existing.id,
+    });
+    data.slug = next;
+  }
+  if (parsed.data.name !== undefined && parsed.data.slug === undefined) {
+    const desired = createSlug(parsed.data.name);
+    // Keep slug stable unless it would collide.
+    if (desired && desired !== existing.slug) {
+      const next = await ensureUniqueCategorySlug({
+        branchId: existing.branchId,
+        desiredSlug: desired,
+        selfCategoryId: existing.id,
+      });
+      data.slug = next;
+    }
+  }
   if (parsed.data.highlightAsNewLaunch === true) data.highlightNewUntil = highlightUntilFromNow();
   if (parsed.data.highlightAsNewLaunch === false) data.highlightNewUntil = null;
   if (parsed.data.showOnMenu !== undefined) data.showOnMenu = parsed.data.showOnMenu;

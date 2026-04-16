@@ -1680,11 +1680,10 @@ const EmployeeDashboard = () => {
   // Employee UX settings (ringing is branch-controlled by admin)
   useEffect(() => {
     const fetchEmployeeSettings = async () => {
+      if (!ready) return;
       if (!token) return;
       try {
-        const res = await fetch(`${apiBase}/config/employee-settings`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await fetchAuthed(`${apiBase}/config/employee-settings`, { method: 'GET' });
         if (!res.ok) return;
         const data = await res.json().catch(() => ({}));
         setRingingEnabledByAdmin(data.enableNewOrderRinging !== false);
@@ -1704,7 +1703,7 @@ const EmployeeDashboard = () => {
       }
     };
     fetchEmployeeSettings();
-  }, [token]);
+  }, [ready, token, fetchAuthed]);
 
   const { stopGlobalLoading } = useGlobalLoading();
 
@@ -2027,21 +2026,12 @@ const EmployeeDashboard = () => {
   }, [ready, token, refresh, logout, isOrderPopupOpen, mergeOrders]);
 
   useEffect(() => {
+    if (!ready) return;
     if (!token) return;
     let cancelled = false;
     (async () => {
       try {
-        const doFetch = async (t: string) =>
-          fetchWithTimeout(`${apiBase}/employees/me`, {
-            headers: { Authorization: `Bearer ${t}` },
-            credentials: 'include',
-          });
-
-        let res = await doFetch(token);
-        if (res.status === 401) {
-          const nextToken = await refresh();
-          if (nextToken) res = await doFetch(nextToken);
-        }
+        const res = await fetchAuthed(`${apiBase}/employees/me`, { method: 'GET' });
         if (!res.ok) return;
         const data = await res.json().catch(() => null);
         const payload =
@@ -2054,63 +2044,82 @@ const EmployeeDashboard = () => {
     return () => {
       cancelled = true;
     };
-  }, [token, refresh]);
+  }, [ready, token, fetchAuthed]);
 
   // Fetch current shift status on load; show Start shift? only once per day when no active shift
   useEffect(() => {
+    if (!ready) return;
     if (!token) return;
-    fetchWithTimeout(`${apiBase}/shift/current`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(res => (res.ok ? res.json() : null))
-      .then(data => {
-        if (data && data.active) setShiftActive(true);
-        if (data?.shift) setCurrentShift(data.shift);
-        if (!data?.active) {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetchAuthed(`${apiBase}/shift/current`, { method: 'GET' });
+        if (!res.ok) return;
+        const data = await res.json().catch(() => null);
+        if (cancelled || !data) return;
+        if (data.active) setShiftActive(true);
+        if (data.shift) setCurrentShift(data.shift);
+        if (!data.active) {
           const businessDayKey = getBusinessDateKey(new Date());
           const todayKey = 'dm_shift_prompt_dismissed_' + businessDayKey;
           const dismissedToday = window.sessionStorage.getItem(todayKey) === '1';
           if (!dismissedToday) setShowStartShiftPrompt(true);
         }
-      })
-      .catch(() => {});
-  }, [token]);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, token, fetchAuthed]);
 
   // Load employee shift history (daily in/out + hours)
   useEffect(() => {
+    if (!ready) return;
     if (!token) return;
     setMyShiftHistoryLoaded(false);
-    fetchWithTimeout(`${apiBase}/shift/my-history`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(res => (res.ok ? res.json() : null))
-      .then(data => {
-        if (!data) return;
+    (async () => {
+      try {
+        const res = await fetchAuthed(`${apiBase}/shift/my-history`, { method: 'GET' });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data) return;
         setMyShiftHistory(data.shifts ?? []);
         setMyDailyShiftStats(data.dailyStats ?? []);
+      } catch {
+        // ignore
+      } finally {
         setMyShiftHistoryLoaded(true);
-      })
-      .catch(() => setMyShiftHistoryLoaded(true));
-  }, [token]);
+      }
+    })();
+  }, [ready, token, fetchAuthed]);
 
   // Approved overtime counter (only after Admin approval)
   useEffect(() => {
+    if (!ready) return;
     if (!token) return;
-    fetchWithTimeout(`${apiBase}/overtime/my-summary`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(res => (res.ok ? res.json() : null))
-      .then(data => data && setMyApprovedOvertime(data))
-      .catch(() => {});
-  }, [token]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetchAuthed(`${apiBase}/overtime/my-summary`, { method: 'GET' });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || cancelled || !data) return;
+        setMyApprovedOvertime(data);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, token, fetchAuthed]);
 
   const loadMyLeaves = useCallback(async () => {
+    if (!ready) return;
     if (!token) return;
     setLeaveLoading(true);
     try {
-      const res = await fetchWithTimeout(`${apiBase}/leaves/mine`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetchAuthed(`${apiBase}/leaves/mine`, { method: 'GET' });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
         throw new Error(
@@ -2129,7 +2138,7 @@ const EmployeeDashboard = () => {
     } finally {
       setLeaveLoading(false);
     }
-  }, [token]);
+  }, [ready, token, fetchAuthed]);
 
   useEffect(() => {
     if (!token || activeSection !== 'leave') return;

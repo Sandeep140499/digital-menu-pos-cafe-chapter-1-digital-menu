@@ -4,12 +4,15 @@ import { prisma } from './config/prisma.js';
 
 async function main() {
   const adminEmail = 'chapteronecafe11@gmail.com';
-  const adminPassword = 'admin@123';
+  const adminPassword = 'admin@1208';
 
   const adminHash = await bcrypt.hash(adminPassword, 10);
   await prisma.admin.upsert({
     where: { email: adminEmail },
-    update: {},
+    update: {
+      name: 'Super Admin',
+      passwordHash: adminHash,
+    },
     create: {
       name: 'Super Admin',
       email: adminEmail,

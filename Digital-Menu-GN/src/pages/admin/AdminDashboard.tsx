@@ -1929,7 +1929,14 @@ const AddEmployeeDialog = memo(function AddEmployeeDialog({
       if (form.joiningDate?.trim()) payload.joiningDate = form.joiningDate.trim();
       const res = await createEmployeeRequest(payload);
       if (res.ok) {
-        const data = await res.json();
+        const data: any = await res.json().catch(() => null);
+        const created = (data && typeof data === 'object' && 'employee' in data ? data.employee : data) as any;
+        if (!created || typeof created.id !== 'number' || !Number.isFinite(created.id)) {
+          throw new Error('Employee created but server returned an invalid response. Please refresh and check Employees.');
+        }
+        if (typeof created.name !== 'string' || !created.name.trim()) {
+          throw new Error('Employee created but missing name in response. Please refresh and check Employees.');
+        }
         toast({
           title: 'Success',
           description: 'Employee created. Verification email sent.',
@@ -1951,7 +1958,7 @@ const AddEmployeeDialog = memo(function AddEmployeeDialog({
           branchId: branches[0]?.id ?? 0,
         } as EmployeeFormState & { branchId: number });
         onOpenChange(false);
-        onCreated(data);
+        onCreated(created);
       } else {
         const err = await res.json().catch(() => ({}));
         toast({
@@ -2119,10 +2126,10 @@ const AddEmployeeDialog = memo(function AddEmployeeDialog({
           />
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancel
           </Button>
-          <Button onClick={handleCreate} disabled={saving || branches.length === 0}>
+          <Button type="button" onClick={handleCreate} disabled={saving || branches.length === 0}>
             {saving ? (
               <>
                 <span className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
@@ -6474,7 +6481,7 @@ const AdminDashboard = () => {
   );
 
   const MenuSection = () => (
-    <div className="min-h-0 space-y-6" style={{ overflowAnchor: 'auto' }}>
+    <div id="menu-section-top" className="min-h-0 space-y-6" style={{ overflowAnchor: 'auto' }}>
       {viewingCategory ? (
         <>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -6815,7 +6822,17 @@ const AdminDashboard = () => {
                                 variant="outline"
                                 size="sm"
                                 className="h-8 shrink-0"
-                                onClick={() => setViewingCategory(category.id)}
+                                type="button"
+                                onClick={() => {
+                                  // Ensure the view panel renders immediately, and scroll it into view
+                                  // so it never feels like the click was ignored.
+                                  flushSync(() => setViewingCategory(category.id));
+                                  queueMicrotask(() => {
+                                    document
+                                      .getElementById('menu-section-top')
+                                      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                  });
+                                }}
                               >
                                 <Eye className="h-4 w-4 sm:mr-1" />
                                 <span className="hidden sm:inline">View</span>
@@ -10295,7 +10312,31 @@ const AdminDashboard = () => {
       branchName={displayBranchName}
       sidebarSections={adminSidebarSections}
       activeKey={currentSection}
-      onSelect={key => validSectionKeys.includes(key) && setActiveSection(key)}
+      onSelect={key => {
+        if (!validSectionKeys.includes(key)) return;
+        // Make navigation feel instant:
+        // - switch section synchronously
+        // - start that section's fetch immediately (no "blank first visit" feeling)
+        flushSync(() => setActiveSection(key));
+        queueMicrotask(() => {
+          if (!ready || !tokenRef.current) return;
+          if (!hasLoadedOnce) {
+            void loadDashboardData();
+          }
+          if (key === 'customer-leaderboard') {
+            void loadLeaderboard();
+          } else if (key === 'customer-queries') {
+            void loadCustomerQueries();
+          } else if (key === 'menu') {
+            // Ensure menu data is present when switching in.
+            if (!categories || categories.length === 0) void loadDashboardData();
+          } else if (key === 'employees') {
+            if (!employees || employees.length === 0) void loadDashboardData();
+          } else if (key === 'all-orders') {
+            if (!orders || orders.length === 0) void loadDashboardData();
+          }
+        });
+      }}
       notifications={notifications}
       notificationCount={notifications.filter((n: any) => !n.read).length}
       sidebarBadges={{

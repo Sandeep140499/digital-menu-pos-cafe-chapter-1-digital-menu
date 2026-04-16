@@ -38,7 +38,6 @@ function dedupeItems<T extends { id?: number; name?: string; isNewLaunch?: boole
 
 export function dedupeCustomerMenuCategories(categories: any[]): any[] {
   const byMergeKey = new Map<string, any>();
-  const slugToMergeKey = new Map<string, string>();
 
   for (const cat of categories) {
     if (!cat || typeof cat !== 'object') continue;
@@ -47,14 +46,8 @@ export function dedupeCustomerMenuCategories(categories: any[]): any[] {
 
     const slugRaw = typeof cat.slug === 'string' ? cat.slug.trim().toLowerCase() : '';
 
-    let mergeKey = nameKey;
-    if (slugRaw) {
-      if (slugToMergeKey.has(slugRaw)) {
-        mergeKey = slugToMergeKey.get(slugRaw)!;
-      } else {
-        slugToMergeKey.set(slugRaw, mergeKey);
-      }
-    }
+    // Only merge by slug. Merging by name can put items under the wrong category.
+    const mergeKey = slugRaw ? `slug:${slugRaw}` : `id:${String(cat.id ?? nameKey)}`;
 
     const existing = byMergeKey.get(mergeKey);
     const rawItems = [...(existing?.items ?? []), ...(Array.isArray(cat.items) ? cat.items : [])];

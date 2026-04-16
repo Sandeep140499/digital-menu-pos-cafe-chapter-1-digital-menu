@@ -3,31 +3,23 @@ import { prisma } from '../config/prisma.js';
 
 /** Customers whose first order (by mobile/session identity) is in [from, to]. */
 export async function countNewCustomersFirstOrderInRange(from: Date, to: Date): Promise<number> {
-  const rows = await prisma.$queryRaw<{ c: bigint }[]>`
-    WITH cust AS (
-      SELECT
-        o."createdAt",
-        CASE
-          WHEN length(regexp_replace(coalesce(o."customerMobile", ''), '[^0-9]', '', 'g')) >= 10
-            THEN 'm:' || right(regexp_replace(coalesce(o."customerMobile", ''), '[^0-9]', '', 'g'), 10)
-          WHEN o."sessionToken" IS NOT NULL AND length(trim(o."sessionToken")) > 0
-            THEN 's:' || o."sessionToken"
-          ELSE NULL
-        END AS ck
-      FROM "Order" o
-    ),
-    first_at AS (
-      SELECT ck, MIN("createdAt") AS first_ts
-      FROM cust
-      WHERE ck IS NOT NULL
-      GROUP BY ck
-    )
-    SELECT COUNT(*)::bigint AS c
-    FROM first_at
-    WHERE first_ts >= ${from} AND first_ts <= ${to}
-  `;
-  const n = rows[0]?.c;
-  return typeof n === 'bigint' ? Number(n) : Number(n ?? 0);
+  // Avoid raw SQL by relying on normalized `customerKey` (m:<last10> or s:<sessionToken>).
+  // We only need keys whose first-ever order (min createdAt) falls in range.
+  const grouped = await prisma.order.groupBy({
+    by: ['customerKey'],
+    where: {
+      customerKey: { not: null },
+      createdAt: { lte: to },
+    },
+    _min: { createdAt: true },
+  });
+
+  let count = 0;
+  for (const g of grouped) {
+    const first = g._min.createdAt;
+    if (first && first >= from && first <= to) count += 1;
+  }
+  return count;
 }
 
 export type MonthlyMetrics = {

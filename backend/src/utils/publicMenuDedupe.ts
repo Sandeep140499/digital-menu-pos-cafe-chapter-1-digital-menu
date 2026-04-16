@@ -51,7 +51,6 @@ export type PublicMenuCategoryShape = {
 
 export function dedupePublicMenuCategories<T extends PublicMenuCategoryShape>(categories: T[]): T[] {
   const byMergeKey = new Map<string, T>();
-  const slugToMergeKey = new Map<string, string>();
 
   for (const cat of categories) {
     const nameKey = normalizeMenuNameKey(cat.name);
@@ -59,14 +58,10 @@ export function dedupePublicMenuCategories<T extends PublicMenuCategoryShape>(ca
 
     const slugRaw = typeof cat.slug === 'string' ? cat.slug.trim().toLowerCase() : '';
 
-    let mergeKey = nameKey;
-    if (slugRaw) {
-      if (slugToMergeKey.has(slugRaw)) {
-        mergeKey = slugToMergeKey.get(slugRaw)!;
-      } else {
-        slugToMergeKey.set(slugRaw, mergeKey);
-      }
-    }
+    // IMPORTANT:
+    // Only merge categories when there's a valid slug match.
+    // Merging by name can incorrectly group items under the wrong card when names repeat or drift.
+    const mergeKey = slugRaw ? `slug:${slugRaw}` : `id:${cat.id}`;
 
     const existing = byMergeKey.get(mergeKey);
     const combinedItems = dedupePublicMenuItems([

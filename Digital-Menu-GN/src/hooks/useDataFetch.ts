@@ -36,11 +36,9 @@ export function useDataFetch<T = unknown>(
   const execute = useCallback(async () => {
     try {
       setError(null);
-      const result = await fetchWithLoading(key, '', {
-        showLoading: true,
-      });
-      
-      // Use the provided fetcher function
+      // Drive the loading state via the shared loading registry.
+      // We don't use `useApi` here because `fetcher()` can be any async function.
+      await fetchWithLoading(key, '__local__', { showLoading: true });
       const data = await fetcher();
       setData(data);
       setHasLoadedOnce(true);

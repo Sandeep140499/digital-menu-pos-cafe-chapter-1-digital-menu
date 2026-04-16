@@ -400,7 +400,11 @@ const DashboardShell = ({
           onPointerDownCapture={() => {
             // Mobile UX: if sidebar is open, close it *without* swallowing the click.
             // This prevents the "first tap does nothing" feeling on buttons.
-            if (window.innerWidth < 640 && sidebarOpen) setSidebarOpen(false);
+            if (window.innerWidth < 640 && sidebarOpen) {
+              // Defer the close until after this event dispatch so the underlying control
+              // (SelectTrigger / Button etc.) still receives the same tap.
+              queueMicrotask(() => setSidebarOpen(false));
+            }
           }}
         >
           {/* Admin & Employee: logo watermark on all pages - same logo/colour from assets */}

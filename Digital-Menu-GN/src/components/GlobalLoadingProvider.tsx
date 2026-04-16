@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import cafeLogo from '@/assets/logo.png';
 
 type GlobalLoadingState = {
@@ -18,8 +18,12 @@ export function GlobalLoadingProvider({ children }: { children: ReactNode }) {
     isGlobalLoading: false,
     message: undefined,
   });
+  const startedAtRef = useRef<number | null>(null);
+  const [canDismiss, setCanDismiss] = useState(false);
 
   const startGlobalLoading = useCallback((msg?: string) => {
+    startedAtRef.current = Date.now();
+    setCanDismiss(false);
     setState({ isGlobalLoading: true, message: msg });
   }, []);
 
@@ -28,6 +32,20 @@ export function GlobalLoadingProvider({ children }: { children: ReactNode }) {
       prev.isGlobalLoading ? { isGlobalLoading: false, message: undefined } : prev
     );
   }, []);
+
+  // Fail-safe: never trap the UI behind a full-screen overlay forever.
+  // If something hangs (network/proxy/DB), allow dismiss and auto-release after a max time.
+  useEffect(() => {
+    if (!isGlobalLoading) return;
+    const dismissTimer = window.setTimeout(() => setCanDismiss(true), 6000);
+    const hardTimeout = window.setTimeout(() => {
+      stopGlobalLoading();
+    }, 30000);
+    return () => {
+      window.clearTimeout(dismissTimer);
+      window.clearTimeout(hardTimeout);
+    };
+  }, [isGlobalLoading, stopGlobalLoading]);
 
   return (
     <GlobalLoadingContext.Provider
@@ -48,9 +66,22 @@ export function GlobalLoadingProvider({ children }: { children: ReactNode }) {
                 <p className="text-sm font-semibold text-slate-800">
                   {message || 'Loading, please wait…'}
                 </p>
-                <p className="text-xs text-slate-500">Do not refresh or close this tab.</p>
+                <p className="text-xs text-slate-500">
+                  {canDismiss
+                    ? 'If this takes too long, continue and try again.'
+                    : 'Do not refresh or close this tab.'}
+                </p>
               </div>
             </div>
+            {canDismiss && (
+              <button
+                type="button"
+                onClick={stopGlobalLoading}
+                className="mt-1 inline-flex min-h-[40px] items-center justify-center rounded-lg bg-emerald-700 px-4 text-sm font-semibold text-white hover:bg-emerald-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+              >
+                Continue
+              </button>
+            )}
           </div>
         </div>
       )}

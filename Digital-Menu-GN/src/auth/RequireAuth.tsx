@@ -1,7 +1,9 @@
 import { Navigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
+import { useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { useGlobalLoading } from '@/components/GlobalLoadingProvider';
 
 export function RequireAuth({
   children,
@@ -11,6 +13,20 @@ export function RequireAuth({
   role?: 'ADMIN' | 'EMPLOYEE';
 }) {
   const { isAuthenticated, role: currentRole, ready } = useAuth();
+  const { stopGlobalLoading } = useGlobalLoading();
+
+  // Never let the full-screen global loader "trap" the UI.
+  // If auth is not satisfied and we are about to redirect, clear the overlay so buttons work.
+  useEffect(() => {
+    if (!ready) return;
+    if (!isAuthenticated) {
+      stopGlobalLoading();
+      return;
+    }
+    if (role && currentRole !== role) {
+      stopGlobalLoading();
+    }
+  }, [ready, isAuthenticated, role, currentRole, stopGlobalLoading]);
 
   if (!ready) {
     return (

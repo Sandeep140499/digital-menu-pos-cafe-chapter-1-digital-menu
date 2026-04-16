@@ -18,8 +18,8 @@
   ],
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "https://digital-menu-pos-cafe-chapter-1-digital-menu-production.up.railway.app/api/$1"
+      "source": "/api/:path*",
+      "destination": "http://34.56.153.143:4000/api/:path*"
     },
     { "source": "/(.*)", "destination": "/index.html" }
   ]

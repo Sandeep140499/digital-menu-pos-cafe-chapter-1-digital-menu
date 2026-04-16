@@ -10,24 +10,14 @@ const servers = [
     description: 'Local development (Node backend on :4000)',
   },
   {
+    url: 'http://34.56.153.143:4000/api',
+    description: 'Deployed Google VM backend',
+  },
+  {
     url: 'https://digital-menu-pos-cafe-chapter-1-digital.onrender.com/api',
     description: 'Deployed Render backend',
   },
-  {
-    url: 'https://digital-menu-pos-cafe-chapter-1-digital-menu-production.up.railway.app/api',
-    description: 'Deployed Railway backend (production)',
-  },
 ] as { url: string; description: string }[];
-
-// Railway exposes the public domain via RAILWAY_PUBLIC_DOMAIN by default, e.g.
-// RAILWAY_PUBLIC_DOMAIN=your-app.up.railway.app
-// If present, add it as a Swagger server entry.
-if (process.env.RAILWAY_PUBLIC_DOMAIN) {
-  servers.push({
-    url: `https://${process.env.RAILWAY_PUBLIC_DOMAIN}/api`,
-    description: 'Deployed Railway backend',
-  });
-}
 
 export const openApiSpec = {
   openapi: '3.0.0',

@@ -964,14 +964,82 @@ orderRouter.get('/customer-leaderboard', authenticate, requireRole('ADMIN'), asy
     _max: { createdAt: true },
   });
 
-  const top = grouped
+  const fromOrders = grouped
     .map(g => ({
       customerMobile: String(g.customerMobile || '').trim(),
       totalOrders: g._count?._all ?? 0,
       totalSpent: Number(g._sum?.totalAmount ?? 0),
       lastOrderDate: g._max?.createdAt ? new Date(g._max.createdAt).toISOString() : null,
+      _source: 'orders' as const,
     }))
-    .filter(r => r.customerMobile.length > 0)
+    .filter(r => r.customerMobile.length > 0);
+
+  // Imported leads (CSV snapshots) - merged by mobile.
+  // Keep this lightweight: leads table is typically small; if it grows large, add paging/query filters.
+  const leads = await prisma.customerLead.findMany({
+    select: {
+      mobile: true,
+      name: true,
+      totalOrders: true,
+      totalSpent: true,
+      lastOrderAt: true,
+      sourceTag: true,
+    },
+  });
+
+  const mergedByMobile = new Map<
+    string,
+    {
+      customerMobile: string;
+      totalOrders: number;
+      totalSpent: number;
+      lastOrderDate: string | null;
+      leadName?: string | null;
+      leadSourceTag?: string | null;
+    }
+  >();
+
+  for (const r of fromOrders) {
+    mergedByMobile.set(r.customerMobile, {
+      customerMobile: r.customerMobile,
+      totalOrders: r.totalOrders,
+      totalSpent: r.totalSpent,
+      lastOrderDate: r.lastOrderDate,
+    });
+  }
+
+  for (const l of leads) {
+    const mobile = String(l.mobile || '').trim();
+    if (!mobile) continue;
+    const incomingLast = l.lastOrderAt ? new Date(l.lastOrderAt).toISOString() : null;
+    const existing = mergedByMobile.get(mobile);
+    if (!existing) {
+      mergedByMobile.set(mobile, {
+        customerMobile: mobile,
+        totalOrders: Number(l.totalOrders ?? 0),
+        totalSpent: Number(l.totalSpent ?? 0),
+        lastOrderDate: incomingLast,
+        leadName: (l.name || '').trim() || null,
+        leadSourceTag: l.sourceTag ?? null,
+      });
+      continue;
+    }
+    const bestOrders = Math.max(existing.totalOrders, Number(l.totalOrders ?? 0));
+    const bestSpent = Math.max(existing.totalSpent, Number(l.totalSpent ?? 0));
+    const lastExisting = existing.lastOrderDate ? new Date(existing.lastOrderDate).getTime() : 0;
+    const lastIncoming = incomingLast ? new Date(incomingLast).getTime() : 0;
+    const bestLast = lastIncoming > lastExisting ? incomingLast : existing.lastOrderDate;
+    mergedByMobile.set(mobile, {
+      ...existing,
+      totalOrders: bestOrders,
+      totalSpent: bestSpent,
+      lastOrderDate: bestLast ?? null,
+      leadName: existing.leadName ?? ((l.name || '').trim() || null),
+      leadSourceTag: existing.leadSourceTag ?? (l.sourceTag ?? null),
+    });
+  }
+
+  const merged = Array.from(mergedByMobile.values())
     .sort((a, b) => {
       if (sortBy === 'amount') return b.totalSpent - a.totalSpent;
       return b.totalOrders - a.totalOrders;
@@ -979,7 +1047,7 @@ orderRouter.get('/customer-leaderboard', authenticate, requireRole('ADMIN'), asy
     .slice(0, limitNum);
 
   // Fetch latest known name for these mobiles (distinct by mobile).
-  const mobiles = top.map(t => t.customerMobile);
+  const mobiles = merged.map(t => t.customerMobile);
   const latestNames = mobiles.length
     ? await prisma.order.findMany({
         where: { customerMobile: { in: mobiles } },
@@ -999,9 +1067,13 @@ orderRouter.get('/customer-leaderboard', authenticate, requireRole('ADMIN'), asy
   };
 
   return res.json({
-    leaderboard: top.map(r => ({
-      ...r,
-      customerName: toDisplayName(nameByMobile.get(r.customerMobile) || null),
+    leaderboard: merged.map(r => ({
+      customerMobile: r.customerMobile,
+      totalOrders: r.totalOrders,
+      totalSpent: r.totalSpent,
+      lastOrderDate: r.lastOrderDate,
+      customerName: toDisplayName(nameByMobile.get(r.customerMobile) || r.leadName || null),
+      leadSourceTag: r.leadSourceTag ?? null,
     })),
   });
 });

@@ -350,6 +350,24 @@ model Order {
   @@index([tableId, status]) // Optimized for table status
 }
 
+// Imported customer leaderboard snapshots (e.g. from CSV exports).
+// Used to show legacy/high-level customer stats even when full order history isn't present in the DB.
+model CustomerLead {
+  id            Int      @id @default(autoincrement())
+  mobile        String   @unique
+  name          String?
+  totalOrders   Int      @default(0)
+  totalSpent    Float    @default(0)
+  lastOrderAt   DateTime?
+  sourceTag     String?  // e.g. "customer-leads-2026-04-11"
+  importedAt    DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([lastOrderAt])
+  @@index([totalOrders])
+  @@index([totalSpent])
+}
+
 model OrderItem {
   id          Int       @id @default(autoincrement())
   orderId     Int

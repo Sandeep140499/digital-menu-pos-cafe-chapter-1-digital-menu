@@ -3610,7 +3610,7 @@ const AdminDashboard = () => {
   });
   const [loading, setLoading] = useState(true);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
-  const { token, ready } = useAuth();
+  const { token, ready, refresh, logout } = useAuth();
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const tokenRef = useRef(token);
   tokenRef.current = token;
@@ -3626,6 +3626,57 @@ const AdminDashboard = () => {
   } | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const { stopGlobalLoading } = useGlobalLoading();
+
+  const fetchAuthed = useCallback(
+    async (url: string, init: RequestInit = {}) => {
+      const doFetch = async (t: string) =>
+        fetch(url, {
+          ...init,
+          headers: {
+            ...(init.headers || {}),
+            Authorization: `Bearer ${t}`,
+          },
+          credentials: 'include',
+        });
+
+      const current = tokenRef.current;
+      if (!current) return doFetch('');
+      const res = await doFetch(current);
+      if (res.status !== 401) return res;
+
+      const next = await refresh();
+      if (!next) {
+        // Session cannot be refreshed; log out to avoid a "dead UI".
+        await logout().catch(() => {});
+        return res;
+      }
+      return doFetch(next);
+    },
+    [refresh, logout]
+  );
+
+  const fetchWithTimeoutRetryAuthed = useCallback(
+    async (url: string, opts: { timeout: number }) => {
+      const current = tokenRef.current;
+      const doFetch = (t: string) =>
+        fetchWithTimeoutRetry(url, {
+          headers: { Authorization: `Bearer ${t}` },
+          timeout: opts.timeout,
+          credentials: 'include',
+        });
+      if (!current) return doFetch('');
+      let res = await doFetch(current);
+      if (res.status !== 401) return res;
+      const next = await refresh();
+      if (!next) {
+        await logout().catch(() => {});
+        return res;
+      }
+      res = await doFetch(next);
+      return res;
+    },
+    [refresh, logout]
+  );
 
   // Persist active section to localStorage
   useEffect(() => {
@@ -4185,8 +4236,7 @@ const AdminDashboard = () => {
 
   const loadDashboardData = async (loadOpts?: { background?: boolean }) => {
     const background = loadOpts?.background === true;
-    const authToken = tokenRef.current;
-    if (!authToken) {
+    if (!tokenRef.current) {
       stopGlobalLoading();
       return;
     }
@@ -4194,10 +4244,6 @@ const AdminDashboard = () => {
     try {
       if (!background) setLoading(true);
 
-      const fetchOpts = {
-        headers: { Authorization: `Bearer ${authToken}` },
-        timeout: API_TIMEOUT_MS,
-      };
       const businessDate = getBusinessDateString();
       const requests = [
         {
@@ -4235,7 +4281,7 @@ const AdminDashboard = () => {
       for (let i = 0; i < requests.length; i += PARALLEL_BATCH) {
         const batch = requests.slice(i, i + PARALLEL_BATCH);
         const batchResults = await Promise.allSettled(
-          batch.map(r => fetchWithTimeoutRetry(r.url, fetchOpts))
+          batch.map(r => fetchWithTimeoutRetryAuthed(r.url, { timeout: API_TIMEOUT_MS }))
         );
         results.push(...batchResults);
       }
@@ -4525,8 +4571,7 @@ const AdminDashboard = () => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetchWithTimeout(`${apiBase}/menu/admin?branchId=${bid}`, {
-          headers: { Authorization: `Bearer ${token}` },
+        const res = await fetchWithTimeoutRetryAuthed(`${apiBase}/menu/admin?branchId=${bid}`, {
           timeout: API_TIMEOUT_MS,
         });
         if (cancelled || !res.ok) return;
@@ -4539,15 +4584,13 @@ const AdminDashboard = () => {
     return () => {
       cancelled = true;
     };
-  }, [token, (branch as { id?: number })?.id, activeSection, apiBase]);
+  }, [token, (branch as { id?: number })?.id, activeSection, apiBase, fetchWithTimeoutRetryAuthed]);
 
   // When salary slip dialog opens, refresh employees so the dropdown has the latest active list
   useEffect(() => {
     if (!token || !isSalarySlipDialogOpen) return;
     let cancelled = false;
-    fetch(`${apiBase}/employees`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    fetchAuthed(`${apiBase}/employees`, { method: 'GET' })
       .then(r => (r.ok ? r.json() : null))
       .then(data => {
         if (cancelled) return;
@@ -4564,14 +4607,13 @@ const AdminDashboard = () => {
     return () => {
       cancelled = true;
     };
-  }, [token, isSalarySlipDialogOpen]);
+  }, [token, isSalarySlipDialogOpen, fetchAuthed]);
 
   const handleDeleteCategory = async (id: number) => {
     if (!token) return;
     try {
-      const res = await fetch(`${apiBase}/menu/categories/${id}`, {
+      const res = await fetchAuthed(`${apiBase}/menu/categories/${id}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
         toast({ title: 'Success', description: 'Category deleted' });
@@ -4599,11 +4641,10 @@ const AdminDashboard = () => {
     }
     try {
       const { notifyCustomers, ...payload } = itemForm;
-      const res = await fetch(`${apiBase}/menu/items`, {
+      const res = await fetchAuthed(`${apiBase}/menu/items`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           ...payload,
@@ -4937,11 +4978,10 @@ const AdminDashboard = () => {
     if (!token) return;
     setCompletingOrderId(orderId);
     try {
-      const res = await fetch(`${apiBase}/orders/${orderId}/status`, {
+      const res = await fetchAuthed(`${apiBase}/orders/${orderId}/status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ status }),
       });
@@ -5054,9 +5094,7 @@ const AdminDashboard = () => {
       if (overtimeDateFrom) params.append('dateFrom', overtimeDateFrom);
       if (overtimeDateTo) params.append('dateTo', overtimeDateTo);
       if (overtimeEmployeeFilter !== 'all') params.append('employeeId', overtimeEmployeeFilter);
-      const res = await fetch(`${apiBase}/overtime?${params}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetchAuthed(`${apiBase}/overtime?${params}`, { method: 'GET' });
       if (res.ok) {
         const data = await res.json();
         setOvertimeRecords(data);
@@ -5066,7 +5104,7 @@ const AdminDashboard = () => {
     } finally {
       setOvertimeLoading(false);
     }
-  }, [token, apiBase, overtimeDateFrom, overtimeDateTo, overtimeEmployeeFilter]);
+  }, [token, apiBase, overtimeDateFrom, overtimeDateTo, overtimeEmployeeFilter, fetchAuthed]);
 
   const loadLate = useCallback(async () => {
     if (!token) return;
@@ -5076,9 +5114,7 @@ const AdminDashboard = () => {
       if (lateDateFrom) params.append('dateFrom', lateDateFrom);
       if (lateDateTo) params.append('dateTo', lateDateTo);
       if (lateEmployeeFilter !== 'all') params.append('employeeId', lateEmployeeFilter);
-      const res = await fetch(`${apiBase}/late?${params}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetchAuthed(`${apiBase}/late?${params}`, { method: 'GET' });
       if (res.ok) {
         const data = await res.json();
         setLateEntries(Array.isArray(data) ? data : []);
@@ -5088,7 +5124,7 @@ const AdminDashboard = () => {
     } finally {
       setLateLoading(false);
     }
-  }, [token, apiBase, lateDateFrom, lateDateTo, lateEmployeeFilter]);
+  }, [token, apiBase, lateDateFrom, lateDateTo, lateEmployeeFilter, fetchAuthed]);
 
   const loadLeaves = useCallback(async () => {
     if (!token) return;
@@ -5100,9 +5136,7 @@ const AdminDashboard = () => {
       if (leaveEmployeeFilter !== 'all') params.append('employeeId', leaveEmployeeFilter);
       if (leaveStatusFilter && leaveStatusFilter !== 'all')
         params.append('status', leaveStatusFilter);
-      const res = await fetch(`${apiBase}/leaves?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetchAuthed(`${apiBase}/leaves?${params.toString()}`, { method: 'GET' });
       if (res.ok) {
         const data = await res.json();
         const list = Array.isArray(data?.leaves) ? data.leaves : Array.isArray(data) ? data : [];
@@ -5113,18 +5147,17 @@ const AdminDashboard = () => {
     } finally {
       setLeaveLoading(false);
     }
-  }, [token, apiBase, leaveDateFrom, leaveDateTo, leaveEmployeeFilter, leaveStatusFilter]);
+  }, [token, apiBase, leaveDateFrom, leaveDateTo, leaveEmployeeFilter, leaveStatusFilter, fetchAuthed]);
 
   const updateLeaveStatus = useCallback(
     async (id: number, status: 'APPROVED' | 'REJECTED') => {
       if (!token) return;
       setLeaveActionLoadingId(id);
       try {
-        const res = await fetch(`${apiBase}/leaves/${id}/status`, {
+        const res = await fetchAuthed(`${apiBase}/leaves/${id}/status`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
             status,
@@ -5154,7 +5187,7 @@ const AdminDashboard = () => {
         setLeaveActionLoadingId(null);
       }
     },
-    [token, apiBase, leaveRemarksById, loadLeaves, toast]
+    [token, apiBase, leaveRemarksById, loadLeaves, toast, fetchAuthed]
   );
 
   // Debounce late filters so Apply feels reliable and avoids spam fetches

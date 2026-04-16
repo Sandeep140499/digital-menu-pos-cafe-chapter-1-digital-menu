@@ -1649,6 +1649,30 @@ const EmployeeDashboard = () => {
   const tokenRef = useRef(token);
   tokenRef.current = token;
 
+  const fetchAuthed = useCallback(
+    async (url: string, init: RequestInit = {}) => {
+      const doFetch = async (t: string) =>
+        fetch(url, {
+          ...init,
+          headers: {
+            ...(init.headers || {}),
+            Authorization: `Bearer ${t}`,
+          },
+          credentials: 'include',
+        });
+
+      const current = tokenRef.current;
+      if (!current) return doFetch('');
+      const res = await doFetch(current);
+      if (res.status !== 401) return res;
+
+      const next = await refresh();
+      if (!next) return res;
+      return doFetch(next);
+    },
+    [refresh]
+  );
+
   useEffect(() => {
     ordersRef.current = orders;
   }, [orders]);
@@ -1888,6 +1912,37 @@ const EmployeeDashboard = () => {
       if (socketRef.current === s) socketRef.current = null;
     };
   }, [ready, token, shiftActive, isShiftPaused, pauseNewOrderPopup, mergeOrders]);
+
+  // Polling fallback: keeps the list fresh when Socket.IO cannot reach the backend
+  // (common when the frontend is on Vercel and the backend is on a VM).
+  useEffect(() => {
+    if (!ready) return;
+    if (!token) return;
+
+    let cancelled = false;
+    const run = async () => {
+      try {
+        if (cancelled) return;
+        if (isOrderPopupOpenRef.current) return;
+        const res = await fetchAuthed(`${apiBase}/orders/live`, {
+          method: 'GET',
+        });
+        if (!res.ok) return;
+        const data = await res.json().catch(() => null);
+        if (!data || isOrderPopupOpenRef.current) return;
+        setOrders(prev => mergeOrders(prev, data));
+      } catch {
+        // ignore
+      }
+    };
+
+    void run();
+    const id = window.setInterval(run, 10_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [ready, token, fetchAuthed, mergeOrders]);
 
   useEffect(() => {
     if (newOrderPopupOrders.length === 0) return;
@@ -2250,9 +2305,8 @@ const EmployeeDashboard = () => {
     if (!token) return;
     setAcceptingOrderId(orderId);
     try {
-      const res = await fetch(`${apiBase}/orders/${orderId}/accept`, {
+      const res = await fetchAuthed(`${apiBase}/orders/${orderId}/accept`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
         const data = await res.json();
@@ -2304,9 +2358,8 @@ const EmployeeDashboard = () => {
     if (!token) return;
     setAcceptingOrderId(orderId);
     try {
-      const res = await fetch(`${apiBase}/orders/${orderId}/reject`, {
+      const res = await fetchAuthed(`${apiBase}/orders/${orderId}/reject`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
         const data = await res.json();
@@ -2364,11 +2417,10 @@ const EmployeeDashboard = () => {
       if (!token) return;
       setActionOrderId(orderId);
       try {
-        const res = await fetch(`${apiBase}/orders/${orderId}/status`, {
+        const res = await fetchAuthed(`${apiBase}/orders/${orderId}/status`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({ status }),
         });
@@ -2420,7 +2472,7 @@ const EmployeeDashboard = () => {
         setActionOrderId(null);
       }
     },
-    [token]
+    [token, fetchAuthed]
   );
 
   const applyOrderPayment = useCallback(
@@ -2442,11 +2494,10 @@ const EmployeeDashboard = () => {
               remainingAmount: localOrder.totalAmount,
             };
       try {
-        const res = await fetch(`${apiBase}/payments/${orderId}`, {
+        const res = await fetchAuthed(`${apiBase}/payments/${orderId}`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(body),
         });

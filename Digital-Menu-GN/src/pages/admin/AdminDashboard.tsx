@@ -1818,6 +1818,7 @@ const AddEmployeeDialog = memo(function AddEmployeeDialog({
   token,
   branches,
   onGoToSettings,
+  createEmployeeRequest,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -1825,6 +1826,7 @@ const AddEmployeeDialog = memo(function AddEmployeeDialog({
   token: string | null;
   branches: { id: number; name: string }[];
   onGoToSettings?: () => void;
+  createEmployeeRequest: (payload: Record<string, unknown>) => Promise<Response>;
 }) {
   const { toast } = useToast();
   const [form, setForm] = useState<EmployeeFormState & { branchId: number }>({
@@ -1858,7 +1860,38 @@ const AddEmployeeDialog = memo(function AddEmployeeDialog({
       ? form.branchId
       : (branches[0]?.id ?? 0);
   const handleCreate = async () => {
-    if (!token || !form.name.trim() || !form.email.trim()) return;
+    if (!token) {
+      toast({
+        title: 'Session expired',
+        description: 'Please log in again and retry creating the employee.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (!form.name.trim()) {
+      toast({
+        title: 'Name required',
+        description: 'Enter the employee name before creating the employee.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (!form.email.trim()) {
+      toast({
+        title: 'Email required',
+        description: 'Enter the employee email before creating the employee.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      toast({
+        title: 'Invalid email',
+        description: 'Enter a valid employee email address.',
+        variant: 'destructive',
+      });
+      return;
+    }
     if (!branchId || !branches.some(b => b.id === branchId)) {
       toast({
         title: 'Select branch',
@@ -1894,14 +1927,7 @@ const AddEmployeeDialog = memo(function AddEmployeeDialog({
       if (form.shiftStartTime?.trim()) payload.shiftStartTime = form.shiftStartTime.trim();
       if (form.shiftEndTime?.trim()) payload.shiftEndTime = form.shiftEndTime.trim();
       if (form.joiningDate?.trim()) payload.joiningDate = form.joiningDate.trim();
-      const res = await fetch(`${apiBase}/employees`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
+      const res = await createEmployeeRequest(payload);
       if (res.ok) {
         const data = await res.json();
         toast({
@@ -6552,11 +6578,11 @@ const AdminDashboard = () => {
                               variant="ghost"
                               size="sm"
                               className="h-8 w-8 p-0"
-                                type="button"
+                              type="button"
                               onClick={() => {
-                                  // Ensure the dialog opens immediately even during background refreshes.
-                                  flushSync(() => setIsItemDialogOpen(true));
-                                  flushSync(() => setEditingItem(item));
+                                // Set the edit target before opening so the dialog gets fresh data on first click.
+                                flushSync(() => {
+                                  setEditingItem(item);
                                   setItemForm({
                                     name: item.name,
                                     description: item.description || '',
@@ -6572,6 +6598,8 @@ const AdminDashboard = () => {
                                       new Date(item.highlightNewUntil) > new Date()
                                     ),
                                   });
+                                  setIsItemDialogOpen(true);
+                                });
                               }}
                             >
                               <Edit2 className="h-4 w-4" />
@@ -6798,8 +6826,10 @@ const AdminDashboard = () => {
                                 className="h-8 shrink-0"
                                 type="button"
                                 onClick={() => {
-                                  flushSync(() => setIsCategoryDialogOpen(true));
-                                  flushSync(() => setEditingCategory(category));
+                                  flushSync(() => {
+                                    setEditingCategory(category);
+                                    setIsCategoryDialogOpen(true);
+                                  });
                                 }}
                               >
                                 <Edit2 className="h-4 w-4 sm:mr-1" />
@@ -11046,6 +11076,14 @@ const AdminDashboard = () => {
           setCreateBranchOpen(true);
         }}
         token={token}
+        createEmployeeRequest={payload =>
+          fetchWithTimeoutRetryAuthed(`${apiBase}/employees`, {
+            method: 'POST',
+            timeout: API_TIMEOUT_MS,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          })
+        }
       />
       <EditEmployeeDialog
         open={!!editingEmployee}

@@ -441,9 +441,15 @@ const MenuCategoriesSection = memo(function MenuCategoriesSection({
         (a, b) => Number(!!b.isNewLaunch) - Number(!!a.isNewLaunch)
       );
       const hasNewItemsInside = !categoryNew && items.some((it: { isNewLaunch?: boolean }) => it.isNewLaunch);
+      const preview = items
+        .map((item: { name: string }) => item.name)
+        .filter(Boolean)
+        .slice(0, 2)
+        .join(' • ');
       return {
         key: String(cat.id),
         title: cat.name || 'Category',
+        preview,
         image: cat.imageUrl && cat.imageUrl.trim() ? cat.imageUrl : DEFAULT_CATEGORY_IMAGE,
         isNewLaunch: categoryNew,
         hasNewItemsInside,
@@ -597,6 +603,7 @@ function MenuCategoryCard({
   section: {
     key: string;
     title: string;
+    preview?: string;
     image: string;
     items: any[];
     isNewLaunch?: boolean;
@@ -704,9 +711,16 @@ function MenuCategoryCard({
         <div
           className={`flex max-h-[52px] min-h-[52px] flex-shrink-0 items-center justify-start px-3 py-2 ${footerBar}`}
         >
-          <h2 className="line-clamp-2 min-w-0 flex-1 text-left text-sm leading-snug font-extrabold break-words whitespace-normal text-white sm:text-base">
-            {section.title || categoryKey}
-          </h2>
+          <div className="min-w-0 flex-1">
+            <h2 className="line-clamp-1 min-w-0 text-left text-sm leading-snug font-extrabold break-words whitespace-normal text-white sm:text-base">
+              {section.title || categoryKey}
+            </h2>
+            {section.preview && (
+              <p className="line-clamp-1 text-left text-[11px] font-medium text-white/85 sm:text-xs">
+                {section.preview}
+              </p>
+            )}
+          </div>
         </div>
       </div>
     </button>
@@ -782,7 +796,9 @@ function MenuCategoryItemsPanel({
               typeof item.menuItemId === 'number' && Number.isFinite(item.menuItemId)
                 ? `mi-${item.menuItemId}`
                 : `row-${idx}`;
-            const isAddon = item.name.toLowerCase().startsWith('add-on');
+            const normalizedItemName = String(item.name).trim().toLowerCase();
+            const isAddon =
+              normalizedItemName.startsWith('add-on') || normalizedItemName.startsWith('extra ');
             const priceText = String(item.price);
             const hasHalfFull = priceText.includes('/');
             const pcVariant = isPcVariantItem({

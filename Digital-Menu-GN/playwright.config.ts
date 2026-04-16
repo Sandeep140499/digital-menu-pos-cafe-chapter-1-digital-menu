@@ -28,10 +28,20 @@ export default defineConfig({
       },
     },
   ],
-  webServer: {
-    command: "npm run dev",
-    url: "http://[::1]:8080",
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  webServer: [
+    // Backend is required for login and all authenticated flows.
+    {
+      command: "npm run dev --prefix ../backend",
+      url: "http://127.0.0.1:4000/api/health",
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
+    // Frontend (Vite) proxies /api + /socket.io to the backend in vite.config.ts.
+    {
+      command: "npm run dev",
+      url: "http://[::1]:8080",
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
+  ],
 });

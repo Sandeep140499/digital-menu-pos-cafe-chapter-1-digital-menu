@@ -16,10 +16,27 @@ export function LoaderButton({
   disabled,
   children,
   className,
+  onClick,
+  type,
   ...props
 }: LoaderButtonProps) {
   return (
-    <Button disabled={disabled || loading} className={cn(className)} {...props}>
+    <Button
+      disabled={disabled || loading}
+      className={cn(className)}
+      type={type}
+      onClick={e => {
+        onClick?.(e);
+        if (e.defaultPrevented) return;
+        // Some layouts (overlays, pointer-capture, etc.) can interfere with normal submit bubbling.
+        // For submit buttons, explicitly trigger the nearest form submit on click.
+        if ((type ?? 'button') !== 'submit') return;
+        const el = e.currentTarget as HTMLElement;
+        const form = el.closest('form') as HTMLFormElement | null;
+        form?.requestSubmit?.();
+      }}
+      {...props}
+    >
       {loading ? (
         <>
           <span

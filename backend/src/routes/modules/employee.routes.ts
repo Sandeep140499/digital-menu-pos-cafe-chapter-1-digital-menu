@@ -323,9 +323,7 @@ employeeRouter.post('/', authenticate, requireRole('ADMIN'), async (req, res) =>
     process.env.FRONTEND_CUSTOMER_URL ||
     'http://localhost:5173'
   ).replace(/\/$/, '');
-  // Public verification endpoints live in the backend under /api. Prefer PUBLIC_API_BASE_URL when set.
-  const apiBaseUrl = (process.env.PUBLIC_API_BASE_URL || baseUrl).replace(/\/$/, '');
-  const confirmUrl = `${apiBaseUrl}/api/employees/confirm-email?token=${encodeURIComponent(linkToken)}`;
+  const confirmUrl = `${baseUrl}/employee/confirm-email?token=${encodeURIComponent(linkToken)}`;
   const fromName = process.env.EMAIL_FROM_NAME || 'Cafe Chapter 1 Restro Private Limited';
 
   const { passwordHash: _, verificationOtp: __, verificationOtpExpiresAt: ___, ...safe } = employee;
@@ -560,9 +558,7 @@ employeeRouter.post(
       process.env.FRONTEND_CUSTOMER_URL ||
       'http://localhost:5173'
     ).replace(/\/$/, '');
-    // Public verification endpoints live in the backend under /api. Prefer PUBLIC_API_BASE_URL when set.
-    const apiBaseUrl = (process.env.PUBLIC_API_BASE_URL || baseUrl).replace(/\/$/, '');
-    const verifyLink = `${apiBaseUrl}/api/employees/verify-email-link?token=${encodeURIComponent(token)}`;
+    const verifyLink = `${baseUrl}/employee/verify-email?token=${encodeURIComponent(token)}`;
     const fromName = process.env.EMAIL_FROM_NAME || 'Chapter One Cafe';
     if (!isMailConfigured()) {
       return res.status(503).json({

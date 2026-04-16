@@ -24,6 +24,7 @@
     "postinstall": "prisma generate",
     "seed": "node --loader ts-node/esm src/seed.ts",
     "migrate:menu": "node --loader ts-node/esm src/migrate-menu.ts",
+    "import:chapter1-menu": "node --loader ts-node/esm src/import-chapter-one-menu.ts",
     "import:customer-leads": "node --loader ts-node/esm src/import-customer-leads.ts",
     "seed:migrate": "node --loader ts-node/esm src/seed-menu-migrate.ts",
     "reset-db-keep-menu": "node --loader ts-node/esm src/reset-db-keep-menu.ts"

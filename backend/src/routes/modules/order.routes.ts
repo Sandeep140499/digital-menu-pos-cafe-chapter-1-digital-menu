@@ -119,43 +119,28 @@ const modifyOrderV2Schema = z.object({
 export const orderRouter = Router();
 
 async function assignEmployeeToOrder(branchId: number) {
-  // Allow any ACTIVE employee to handle orders, not just those with active shifts
-  // This enables multiple employees to work concurrently
-  const employee = await prisma.employee.findFirst({
+  // Orders should only be accepted when at least one employee is actively on shift.
+  const activeShift = await prisma.employeeShift.findFirst({
     where: {
       branchId,
+      shiftEnd: null,
       status: 'ACTIVE' as any,
+      employee: {
+        status: 'ACTIVE' as any,
+      },
     },
-    select: { id: true },
-    orderBy: undefined,
+    select: { id: true, employeeId: true },
+    orderBy: { shiftStart: 'asc' },
   });
 
-  if (employee) {
+  if (activeShift) {
     return {
-      employeeId: employee.id,
-      shiftId: null, // Not using shift system for concurrent access
+      employeeId: activeShift.employeeId,
+      shiftId: activeShift.id,
     };
   }
 
-  // No active employee found - fallback to any active employee
-  const anyActiveEmployee = await prisma.employee.findFirst({
-    where: {
-      branchId,
-      status: 'ACTIVE' as any,
-    },
-    select: { id: true },
-  });
-
-  if (anyActiveEmployee) {
-    console.log(`Assigning order to any active employee for branch ${branchId}`);
-    return {
-      employeeId: anyActiveEmployee.id,
-      shiftId: null,
-    };
-  }
-
-  // No active employees at all
-  console.log(`Cannot assign order for branch ${branchId} - no active employees found`);
+  console.log(`Cannot assign order for branch ${branchId} - no employee is on an active shift`);
   return {
     employeeId: null,
     shiftId: null,
@@ -783,6 +768,20 @@ orderRouter.get('/live', authenticate, async (req, res) => {
         select: { branchId: true },
       });
       if (employee?.branchId != null) where.branchId = employee.branchId;
+
+      const activeShift = await prisma.employeeShift.findFirst({
+        where: {
+          employeeId: userId,
+          branchId: employee?.branchId ?? undefined,
+          shiftEnd: null,
+          status: 'ACTIVE' as any,
+        },
+        select: { id: true },
+      });
+
+      if (!activeShift) {
+        return res.json([]);
+      }
     }
 
     const limitNum = Math.min(Math.max(Number(req.query.limit) || 300, 1), 1000);
@@ -1105,6 +1104,9 @@ orderRouter.post('/:id/accept', authenticate, requireRole('EMPLOYEE'), async (re
   const activeShift = await prisma.employeeShift.findFirst({
     where: { employeeId, branchId: order.branchId, shiftEnd: null, status: 'ACTIVE' as any },
   });
+  if (!activeShift) {
+    return res.status(403).json({ message: 'Start your shift before accepting customer orders' });
+  }
   const updated = await prisma.order.update({
     where: { id },
     data: {

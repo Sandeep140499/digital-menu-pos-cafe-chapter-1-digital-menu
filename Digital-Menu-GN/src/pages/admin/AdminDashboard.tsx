@@ -130,6 +130,7 @@ import { calculateLate } from '@/utils/lateCalculator';
 import { getBusinessDateString } from '@/utils/businessDate';
 import { filterOrderItemsForDisplay } from '@/utils/orderDisplay';
 import cafeLogo from '@/assets/logo.png';
+import { flushSync } from 'react-dom';
 
 const apiBase = API_BASE_URL;
 
@@ -6551,24 +6552,26 @@ const AdminDashboard = () => {
                               variant="ghost"
                               size="sm"
                               className="h-8 w-8 p-0"
+                                type="button"
                               onClick={() => {
-                                setEditingItem(item);
-                                setItemForm({
-                                  name: item.name,
-                                  description: item.description || '',
-                                  basePrice: item.basePrice,
-                                  hasHalf: item.hasHalf,
-                                  halfPrice: item.halfPrice || 0,
-                                  isActive: item.isActive,
-                                  categoryId: item.categoryId || viewingCategory,
-                                  imageUrl: item.imageUrl || '',
-                                  notifyCustomers: false,
-                                  highlightAsNewLaunch: !!(
-                                    item.highlightNewUntil &&
-                                    new Date(item.highlightNewUntil) > new Date()
-                                  ),
-                                });
-                                setIsItemDialogOpen(true);
+                                  // Ensure the dialog opens immediately even during background refreshes.
+                                  flushSync(() => setIsItemDialogOpen(true));
+                                  flushSync(() => setEditingItem(item));
+                                  setItemForm({
+                                    name: item.name,
+                                    description: item.description || '',
+                                    basePrice: item.basePrice,
+                                    hasHalf: item.hasHalf,
+                                    halfPrice: item.halfPrice || 0,
+                                    isActive: item.isActive,
+                                    categoryId: item.categoryId || viewingCategory,
+                                    imageUrl: item.imageUrl || '',
+                                    notifyCustomers: false,
+                                    highlightAsNewLaunch: !!(
+                                      item.highlightNewUntil &&
+                                      new Date(item.highlightNewUntil) > new Date()
+                                    ),
+                                  });
                               }}
                             >
                               <Edit2 className="h-4 w-4" />
@@ -6793,9 +6796,10 @@ const AdminDashboard = () => {
                                 variant="outline"
                                 size="sm"
                                 className="h-8 shrink-0"
+                                type="button"
                                 onClick={() => {
-                                  setEditingCategory(category);
-                                  setIsCategoryDialogOpen(true);
+                                  flushSync(() => setIsCategoryDialogOpen(true));
+                                  flushSync(() => setEditingCategory(category));
                                 }}
                               >
                                 <Edit2 className="h-4 w-4 sm:mr-1" />

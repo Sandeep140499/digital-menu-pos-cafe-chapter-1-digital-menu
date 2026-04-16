@@ -271,15 +271,6 @@ const DashboardShell = ({
 
       {/* Body */}
       <div className="relative flex flex-1 overflow-hidden">
-        {/* Mobile overlay: tap outside to close sidebar (below header, below sidebar) */}
-        {sidebarOpen && (
-          <div
-            className="fixed right-0 bottom-0 left-0 z-[50] bg-black/50 sm:hidden"
-            style={{ top: 'var(--header-height)' }}
-            aria-hidden
-            onClick={() => setSidebarOpen(false)}
-          />
-        )}
         {/* Sidebar: on small screens slides in from left; close on nav click (handleNavSelect) or overlay click */}
         <aside
           className={`fixed left-0 z-[55] sm:relative sm:z-auto ${
@@ -406,6 +397,11 @@ const DashboardShell = ({
         <main
           className="relative min-h-0 min-w-0 flex-1 overflow-auto overflow-x-hidden bg-slate-50 px-3 py-4 sm:px-4 md:px-6"
           style={{ overflowAnchor: 'auto' }}
+          onPointerDownCapture={() => {
+            // Mobile UX: if sidebar is open, close it *without* swallowing the click.
+            // This prevents the "first tap does nothing" feeling on buttons.
+            if (window.innerWidth < 640 && sidebarOpen) setSidebarOpen(false);
+          }}
         >
           {/* Admin & Employee: logo watermark on all pages - same logo/colour from assets */}
           <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>

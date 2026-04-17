@@ -19,11 +19,11 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "http://34.56.153.143:4000/api/:path*"
+      "destination": "https://api.cafechapter1.online/api/:path*"
     },
     {
       "source": "/socket.io/:path*",
-      "destination": "http://34.56.153.143:4000/socket.io/:path*"
+      "destination": "https://api.cafechapter1.online/socket.io/:path*"
     },
     { "source": "/(.*)", "destination": "/index.html" }
   ]

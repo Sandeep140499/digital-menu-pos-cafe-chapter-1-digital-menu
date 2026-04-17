@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { prisma } from '../../config/prisma.js';
 import { jwtConfig } from '../../config/auth.js';
 import { isMailConfigured, sendEmail } from '../../config/mailer.js';
+import { getFrontendBaseUrl } from '../../config/frontendUrl.js';
 import { authenticate, requireRole } from '../../middleware/auth.js';
 import {
   clearAuthCookies,
@@ -355,14 +356,8 @@ authRouter.post('/forgot-password', async (req, res) => {
     { expiresIn: '1h' } as SignOptions
   );
 
-  const baseUrl =
-    process.env.FRONTEND_DASHBOARD_URL ||
-    process.env.FRONTEND_CUSTOMER_URL ||
-    'http://localhost:5173';
-  const resetUrl = `${baseUrl.replace(
-    /\/$/,
-    ''
-  )}/reset-password?token=${encodeURIComponent(token)}`;
+  const baseUrl = getFrontendBaseUrl();
+  const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`;
 
   if (!isMailConfigured()) {
     return res.status(503).json({

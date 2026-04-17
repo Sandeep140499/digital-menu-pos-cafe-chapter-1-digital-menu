@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { prisma } from '../../config/prisma.js';
 import { isMailConfigured, sendEmail } from '../../config/mailer.js';
 import { authenticate, requireRole } from '../../middleware/auth.js';
+import { getFrontendBaseUrl } from '../../config/frontendUrl.js';
 
 const requestVerifySchema = z.object({
   email: z.string().email(),
@@ -30,18 +31,6 @@ function escapeHtml(s: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
-}
-
-function getFrontendBaseUrl(): string {
-  const raw =
-    process.env.FRONTEND_URL ||
-    process.env.FRONTEND_DASHBOARD_URL ||
-    process.env.FRONTEND_CUSTOMER_URL ||
-    'http://localhost:5173';
-  return raw
-    .trim()
-    .replace(/^['"]|['"]$/g, '')
-    .replace(/\/$/, '');
 }
 
 /** GET /api/branches/:id/directors – list verified, pending verification, pending removal */

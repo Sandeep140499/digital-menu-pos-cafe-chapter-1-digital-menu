@@ -6,6 +6,7 @@ import { prisma } from '../../config/prisma.js';
 import { findEmployeeByEmailLoose, normalizeStaffEmail } from '../../utils/staffEmail.js';
 import { getFromAddress, isMailConfigured, sendEmail } from '../../config/mailer.js';
 import { authenticate, requireRole } from '../../middleware/auth.js';
+import { getFrontendBaseUrl } from '../../config/frontendUrl.js';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
@@ -317,13 +318,12 @@ employeeRouter.post('/', authenticate, requireRole('ADMIN'), async (req, res) =>
     },
   });
 
-  const baseUrl = (
-    process.env.FRONTEND_URL ||
-    process.env.FRONTEND_DASHBOARD_URL ||
-    process.env.FRONTEND_CUSTOMER_URL ||
-    'http://localhost:5173'
-  ).replace(/\/$/, '');
-  const confirmUrl = `${baseUrl}/employee/confirm-email?token=${encodeURIComponent(linkToken)}`;
+  const baseUrl = getFrontendBaseUrl();
+  // IMPORTANT:
+  // Use the "verify email" flow so the employee receives credentials AFTER verification.
+  // This matches the EmployeeVerifyEmail page which redirects to backend
+  // GET /api/employees/verify-email-link?token=...
+  const verifyUrl = `${baseUrl}/employee/verify-email?token=${encodeURIComponent(linkToken)}`;
   const fromName = process.env.EMAIL_FROM_NAME || 'Cafe Chapter 1 Restro Private Limited';
 
   const { passwordHash: _, verificationOtp: __, verificationOtpExpiresAt: ___, ...safe } = employee;
@@ -332,7 +332,6 @@ employeeRouter.post('/', authenticate, requireRole('ADMIN'), async (req, res) =>
 
   if (isMailConfigured()) {
     const n = escapeHtml(name);
-    const pass = escapeHtml(randomPassword);
     void sendEmail({
       to: email,
       subject: 'Your employee account is ready – verify your email',
@@ -340,18 +339,16 @@ employeeRouter.post('/', authenticate, requireRole('ADMIN'), async (req, res) =>
 
 Your employee account has been created.
 
-Temporary password: ${randomPassword}
-
 You must verify your email before you can log in. Click the link below:
 
-${confirmUrl}
+${verifyUrl}
 
-After verification you can log in with the password above and change it.
+After verification, you will receive your login password by email.
 
 Dashboard: ${baseUrl}/login
 
 This link expires in 24 hours.`,
-      html: `<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:560px;"><p>Hi <strong>${n}</strong>,</p><p>Your employee account has been created.</p><p><strong>Temporary password:</strong> <code style="background:#eee;padding:4px 8px;border-radius:4px;">${pass}</code></p><p>You must <strong>verify your email</strong> before you can log in. Click the button below:</p><p><a href="${escapeHtml(confirmUrl)}" style="display:inline-block;background:#047857;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;">Verify my email</a></p><p style="color:#666;font-size:14px;">Or copy this link: ${escapeHtml(confirmUrl)}</p><p>After verification you can log in with the password above and change it.</p><p><a href="${escapeHtml(baseUrl)}/login">Dashboard login</a></p><p style="color:#999;font-size:12px;">This link expires in 24 hours.</p></body></html>`,
+      html: `<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:560px;"><p>Hi <strong>${n}</strong>,</p><p>Your employee account has been created.</p><p>You must <strong>verify your email</strong> before you can log in. Click the button below:</p><p><a href="${escapeHtml(verifyUrl)}" style="display:inline-block;background:#047857;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;">Verify my email</a></p><p style="color:#666;font-size:14px;">Or copy this link: ${escapeHtml(verifyUrl)}</p><p>After verification, we will email you your login password.</p><p><a href="${escapeHtml(baseUrl)}/login">Employee portal login</a></p><p style="color:#999;font-size:12px;">This link expires in 24 hours.</p></body></html>`,
     }).catch(mailErr => {
       console.error('Failed to send employee welcome email:', mailErr);
     });
@@ -552,12 +549,7 @@ employeeRouter.post(
     }
     const token = randomBytes(16).toString('hex');
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
-    const baseUrl = (
-      process.env.FRONTEND_URL ||
-      process.env.FRONTEND_DASHBOARD_URL ||
-      process.env.FRONTEND_CUSTOMER_URL ||
-      'http://localhost:5173'
-    ).replace(/\/$/, '');
+    const baseUrl = getFrontendBaseUrl();
     const verifyLink = `${baseUrl}/employee/verify-email?token=${encodeURIComponent(token)}`;
     const fromName = process.env.EMAIL_FROM_NAME || 'Chapter One Cafe';
     if (!isMailConfigured()) {
@@ -626,12 +618,7 @@ employeeRouter.post(
       where: { id },
       data: { verificationOtp: otp, verificationOtpExpiresAt: otpExpires },
     });
-    const baseUrl = (
-      process.env.FRONTEND_URL ||
-      process.env.FRONTEND_DASHBOARD_URL ||
-      process.env.FRONTEND_CUSTOMER_URL ||
-      'http://localhost:5173'
-    ).replace(/\/$/, '');
+    const baseUrl = getFrontendBaseUrl();
     const verifyUrl = `${baseUrl}/login?verify=1&email=${encodeURIComponent(employee.email)}`;
     if (!isMailConfigured()) {
       return res.status(503).json({
@@ -788,12 +775,7 @@ employeeRouter.get('/confirm-email', async (req, res) => {
       verificationOtpExpiresAt: null,
     },
   });
-  const baseUrl = (
-    process.env.FRONTEND_URL ||
-    process.env.FRONTEND_DASHBOARD_URL ||
-    process.env.FRONTEND_CUSTOMER_URL ||
-    'http://localhost:5173'
-  ).replace(/\/$/, '');
+  const baseUrl = getFrontendBaseUrl();
   const loginUrl = `${baseUrl}/login`;
   const name = escapeHtml(employee.name);
   const loginLink = escapeHtml(loginUrl);
@@ -837,12 +819,7 @@ employeeRouter.get('/verify-email-link', async (req, res) => {
       verificationOtpExpiresAt: null,
     },
   });
-  const baseUrl = (
-    process.env.FRONTEND_URL ||
-    process.env.FRONTEND_DASHBOARD_URL ||
-    process.env.FRONTEND_CUSTOMER_URL ||
-    'http://localhost:5173'
-  ).replace(/\/$/, '');
+  const baseUrl = getFrontendBaseUrl();
   const loginUrl = `${baseUrl}/login`;
   const fromName = process.env.EMAIL_FROM_NAME || 'Chapter One Cafe';
 

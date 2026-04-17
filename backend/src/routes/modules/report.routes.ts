@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma.js';
 import { isMailConfigured, sendEmail } from '../../config/mailer.js';
 import { authenticate, requireRole } from '../../middleware/auth.js';
@@ -141,30 +142,41 @@ reportRouter.get('/salary-slips', authenticate, requireRole('ADMIN'), async (req
 
   const employeeId = employeeIdParam ? Number(employeeIdParam) : undefined;
 
-  const slips = await prisma.salarySlip.findMany({
-    where: {
-      ...(employeeId ? { employeeId } : {}),
-      ...(year && month ? { year, month } : {}),
-      ...(q
-        ? {
-            employee: {
-              OR: [
-                { name: { contains: q, mode: 'insensitive' } },
-                { employeeCode: { contains: q, mode: 'insensitive' } },
-                { email: { contains: q, mode: 'insensitive' } },
-              ],
-            },
-          }
-        : {}),
-    },
-    orderBy: { createdAt: 'desc' },
-    include: {
-      employee: { select: { id: true, name: true, employeeCode: true, email: true } },
-    },
-    take: 2000,
-  });
+  try {
+    const slips = await prisma.salarySlip.findMany({
+      where: {
+        ...(employeeId ? { employeeId } : {}),
+        ...(year && month ? { year, month } : {}),
+        ...(q
+          ? {
+              employee: {
+                OR: [
+                  { name: { contains: q, mode: 'insensitive' } },
+                  { employeeCode: { contains: q, mode: 'insensitive' } },
+                  { email: { contains: q, mode: 'insensitive' } },
+                ],
+              },
+            }
+          : {}),
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        employee: { select: { id: true, name: true, employeeCode: true, email: true } },
+      },
+      take: 2000,
+    });
 
-  return res.json({ slips, count: slips.length });
+    return res.json({ slips, count: slips.length });
+  } catch (e) {
+    // If production DB is missing the table (migrations not deployed), Prisma throws a known error.
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2021') {
+      return res.status(503).json({
+        message:
+          'Salary slips table is missing in the database. Deploy backend migrations (prisma migrate deploy) and retry.',
+      });
+    }
+    throw e;
+  }
 });
 
 function getBusinessDayRange() {

@@ -68,12 +68,14 @@ const createOrderSchema = z
   .superRefine((data, ctx) => {
     const table = (data.tableNumber || '').trim();
     if (data.orderType === 'DINE_IN') {
-      if (!table || !/^\d$/.test(table)) {
+      // Allow common table numbering (1..999). Previously we required exactly one digit (0-9),
+      // which caused unexpected "order failed" when restaurants use tables like 10, 11, etc.
+      if (!table || !/^\d{1,3}$/.test(table)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['tableNumber'],
           message:
-            'Dine-in table must be exactly one digit (0–9), as printed on your table. Do not enter 10, letters, or spaces.',
+            'Enter a valid table number (digits only). Example: 1, 10, 101.',
         });
       }
     }
@@ -162,66 +164,67 @@ async function assignEmployeeToOrder(branchId: number) {
 
 // Customer: create order from QR menu
 orderRouter.post('/', async (req, res) => {
-  const parsed = createOrderSchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ message: 'Invalid input', errors: parsed.error.issues });
-  }
+  try {
+    const parsed = createOrderSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: 'Invalid input', errors: parsed.error.issues });
+    }
 
-  const {
-    tableId,
-    tableNumber: rawTableNumber,
-    orderType,
-    branchId,
-    items,
-    sessionToken,
-    customerName: rawName,
-    customerMobile: rawMobile,
-  } = parsed.data;
+    const {
+      tableId,
+      tableNumber: rawTableNumber,
+      orderType,
+      branchId,
+      items,
+      sessionToken,
+      customerName: rawName,
+      customerMobile: rawMobile,
+    } = parsed.data;
   const tableNumber = orderType === 'TAKE_AWAY' ? 'TAKE_AWAY' : (rawTableNumber || '').trim();
   const customerMobile = normalizeIndianMobile(rawMobile ?? null);
   const customerName = (rawName || '').trim().toUpperCase() || (rawName || '').trim();
   const customerMobileLast10 = toMobileLast10(customerMobile);
   const customerKey = toCustomerKey({ mobileLast10: customerMobileLast10, sessionToken: sessionToken ?? null });
 
-  const branchExists = await prisma.branch.findUnique({
-    where: { id: branchId },
-    select: { id: true },
-  });
-  if (!branchExists) {
-    return res.status(400).json({
-      success: false,
-      message:
-        'Invalid branch. The branch may have been removed. Please refresh the page or scan the QR again.',
+    const branchExists = await prisma.branch.findUnique({
+      where: { id: branchId },
+      select: { id: true },
     });
-  }
+    if (!branchExists) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'Invalid branch. The branch may have been removed. Please refresh the page or scan the QR again.',
+      });
+    }
 
-  let resolvedTableId = tableId ?? null;
-  if (!resolvedTableId) {
-    let table = await prisma.table.findFirst({
-      where: {
-        tableNumber,
-        branchId,
-      },
-    });
-
-    if (!table) {
-      table = await prisma.table.create({
-        data: {
+    let resolvedTableId = tableId ?? null;
+    if (!resolvedTableId) {
+      let table = await prisma.table.findFirst({
+        where: {
           tableNumber,
           branchId,
         },
       });
-    }
 
-    resolvedTableId = table.id;
-  }
+      if (!table) {
+        table = await prisma.table.create({
+          data: {
+            tableNumber,
+            branchId,
+          },
+        });
+      }
+
+      resolvedTableId = table.id;
+    }
 
   // Normalize item name: store base name without "(5pc / 8pc)" so variant (HALF/FULL) carries size for analytics
   const normalizeItemName = (name: string) =>
     (name || '').replace(/\s*\(5pc\s*\/\s*8pc\)\s*/gi, '').trim() || name;
 
-  const { rules: happyHourRules, tz: happyHourTz } = await loadActiveHappyHourRules();
-  const happyHourNow = new Date();
+    const { rules: happyHourRules, tz: happyHourTz } = await loadActiveHappyHourRules();
+    const happyHourNow = new Date();
 
   async function resolveMenuItemForLine(item: (typeof items)[0]) {
     const select = {
@@ -258,128 +261,127 @@ orderRouter.post('/', async (req, res) => {
     return mi;
   }
 
-  let totalAmount = 0;
-  const orderItemsData: Array<{
-    name: string;
-    quantity: number;
-    price: number;
-    variant?: string;
-    menuItemId?: number;
-  }> = [];
+    let totalAmount = 0;
+    const orderItemsData: Array<{
+      name: string;
+      quantity: number;
+      price: number;
+      variant?: string;
+      menuItemId?: number;
+    }> = [];
 
-  for (const item of items) {
-    const mi = await resolveMenuItemForLine(item);
-    if (!mi) {
-      return res.status(400).json({
-        success: false,
-        message: `This dish is not available to order: ${item.name}. Please refresh the menu.`,
+    for (const item of items) {
+      const mi = await resolveMenuItemForLine(item);
+      if (!mi) {
+        return res.status(400).json({
+          success: false,
+          message: `This dish is not available to order: ${item.name}. Please refresh the menu.`,
+        });
+      }
+      const expected = resolveExpectedUnitPrice({
+        basePrice: Number(mi.basePrice),
+        halfPrice: mi.halfPrice != null ? Number(mi.halfPrice) : null,
+        hasHalf: !!mi.hasHalf,
+        variant: item.variant,
+        menuItemId: mi.id,
+        categoryId: mi.categoryId,
+        rules: happyHourRules,
+        now: happyHourNow,
+        tz: happyHourTz,
+      });
+      if (Math.abs(expected - item.unitPrice) > 0.051) {
+        return res.status(400).json({
+          success: false,
+          message:
+            'Menu or offer pricing has changed. Please close this page, refresh the menu, and try again.',
+        });
+      }
+      const price = item.unitPrice;
+      totalAmount += price * item.quantity;
+      const baseName = normalizeItemName(item.name);
+      orderItemsData.push({
+        name: baseName,
+        quantity: item.quantity,
+        price,
+        variant: item.variant ?? undefined,
+        menuItemId: mi.id,
       });
     }
-    const expected = resolveExpectedUnitPrice({
-      basePrice: Number(mi.basePrice),
-      halfPrice: mi.halfPrice != null ? Number(mi.halfPrice) : null,
-      hasHalf: !!mi.hasHalf,
-      variant: item.variant,
-      menuItemId: mi.id,
-      categoryId: mi.categoryId,
-      rules: happyHourRules,
-      now: happyHourNow,
-      tz: happyHourTz,
-    });
-    if (Math.abs(expected - item.unitPrice) > 0.051) {
-      return res.status(400).json({
-        success: false,
-        message:
-          'Menu or offer pricing has changed. Please close this page, refresh the menu, and try again.',
-      });
-    }
-    const price = item.unitPrice;
-    totalAmount += price * item.quantity;
-    const baseName = normalizeItemName(item.name);
-    orderItemsData.push({
-      name: baseName,
-      quantity: item.quantity,
-      price,
-      variant: item.variant ?? undefined,
-      menuItemId: mi.id,
-    });
-  }
 
   // Take away is already shown via orderType TAKE_AWAY — do not add a separate "Packaging" line
   // (it cluttered order cards, emails, and receipts at ₹0).
 
-  // Require at least one ACTIVE employee for the branch so orders can be handled; stay unassigned
-  // until an employee taps Accept (pre-assigning employeeId broke POST /orders/:id/accept with 409).
-  const { employeeId: branchHasActiveStaff } = await assignEmployeeToOrder(branchId);
-  if (branchHasActiveStaff == null) {
-    try {
-      await prisma.errorLog.create({
-        data: {
-          errorType: 'NO_ACTIVE_SHIFT',
-          apiEndpoint: '/orders',
-          errorMessage:
-            'A customer tried to place an order but no employee has started their shift. Please ask staff to start their shift.',
-          branchId,
-          status: 'UNRESOLVED',
-        },
-      });
-    } catch (logErr) {
-      console.error('Failed to log no-active-shift notification:', logErr);
+    // Previously we rejected customer orders when no employee had an active shift (503).
+    // That creates a bad customer experience ("Order failed") and blocks orders outside shift start times.
+    // New behavior: accept the order anyway, keep it unassigned, and log a notification for admins.
+    const { employeeId: branchHasActiveStaff } = await assignEmployeeToOrder(branchId);
+    if (branchHasActiveStaff == null) {
+      try {
+        await prisma.errorLog.create({
+          data: {
+            errorType: 'NO_ACTIVE_SHIFT',
+            apiEndpoint: '/orders',
+            errorMessage:
+              'Customer placed an order but no employee is on an active shift. Staff must start a shift to accept and process orders.',
+            branchId,
+            status: 'UNRESOLVED',
+          },
+        });
+      } catch (logErr) {
+        console.error('Failed to log no-active-shift notification:', logErr);
+      }
+      // continue to create the order (unassigned)
     }
-    return res.status(503).json({
-      message: 'No staff on shift. Please ask restaurant staff to start their shift to take orders.',
-    });
-  }
 
-  const order = await prisma.order.create({
-    data: {
-      tableId: resolvedTableId,
-      branchId,
-      employeeId: null,
-      shiftId: null,
-      status: 'NEW_ORDER',
-      orderType: orderType as any,
-      totalAmount,
-      sessionToken,
-      customerName,
-      customerMobile,
-      customerMobileLast10,
-      customerKey,
-      orderSource: 'CUSTOMER', // This is a customer order from QR menu
-      priority: determineOrderPriority(orderType, 'CUSTOMER', totalAmount, items.length),
-      items: {
-        create: orderItemsData,
+    const order = await prisma.order.create({
+      data: {
+        tableId: resolvedTableId,
+        branchId,
+        employeeId: null,
+        shiftId: null,
+        status: 'NEW_ORDER',
+        orderType: orderType as any,
+        totalAmount,
+        sessionToken,
+        customerName,
+        customerMobile,
+        customerMobileLast10,
+        customerKey,
+        orderSource: 'CUSTOMER', // This is a customer order from QR menu
+        priority: determineOrderPriority(orderType, 'CUSTOMER', totalAmount, items.length),
+        items: {
+          create: orderItemsData,
+        },
       },
-    },
-    select: {
-      id: true,
-      branchId: true,
-      status: true,
-      paymentStatus: true,
-      orderType: true,
-      totalAmount: true,
-      createdAt: true,
-      orderSource: true,
-      priority: true,
-    },
-  });
+      select: {
+        id: true,
+        branchId: true,
+        status: true,
+        paymentStatus: true,
+        orderType: true,
+        totalAmount: true,
+        createdAt: true,
+        orderSource: true,
+        priority: true,
+      },
+    });
   // Invoice generation/linking intentionally omitted from order-create response to keep the
   // customer checkout path fast under high concurrency. Invoice endpoints remain available.
 
   // For realtime employee popups we still need order details (items/table). Fetch once and emit.
   // This keeps the customer API response small while preserving existing employee UX.
-  const orderForRealtime = await prisma.order.findUnique({
-    where: { id: order.id },
-    include: {
-      items: true,
-      table: true,
-      employee: { select: { id: true, name: true } },
-      branch: true,
-    },
-  });
+    const orderForRealtime = await prisma.order.findUnique({
+      where: { id: order.id },
+      include: {
+        items: true,
+        table: true,
+        employee: { select: { id: true, name: true } },
+        branch: true,
+      },
+    });
 
   // Emit enhanced notifications using the new notification service
-  const notificationService = new OrderNotificationService(req.app.locals.io);
+    const notificationService = new OrderNotificationService(req.app.locals.io);
 
   // Prepare notification data
   const notificationData = {
@@ -395,33 +397,33 @@ orderRouter.post('/', async (req, res) => {
   };
 
   // Send loud notification for new customer order
-  await notificationService.sendNewOrderNotification(notificationData);
+    await notificationService.sendNewOrderNotification(notificationData);
 
   // Keep legacy emissions for backward compatibility
-  const payload = orderForRealtime ?? order;
-  req.app.locals.io?.emit('order:new', payload);
-  req.app.locals.io?.to(`branch:${order.branchId}`)?.emit('order:new', payload);
+    const payload = orderForRealtime ?? order;
+    req.app.locals.io?.emit('order:new', payload);
+    req.app.locals.io?.to(`branch:${order.branchId}`)?.emit('order:new', payload);
 
-  publishOrderStatus({
-    id: order.id,
-    status: order.status,
-    acceptedAt: (order as any).acceptedAt ?? null,
-    completedAt: (order as any).completedAt ?? null,
-    updatedAt: (order as any).updatedAt ?? null,
-  });
+    publishOrderStatus({
+      id: order.id,
+      status: order.status,
+      acceptedAt: (order as any).acceptedAt ?? null,
+      completedAt: (order as any).completedAt ?? null,
+      updatedAt: (order as any).updatedAt ?? null,
+    });
 
-  logger.info('New customer order created with enhanced notifications', {
-    orderId: order.id,
-    branchId: order.branchId,
-    priority: order.priority,
-    totalAmount: order.totalAmount,
-    itemCount: items.length,
-  });
+    logger.info('New customer order created with enhanced notifications', {
+      orderId: order.id,
+      branchId: order.branchId,
+      priority: order.priority,
+      totalAmount: order.totalAmount,
+      itemCount: items.length,
+    });
 
   // Send email notification to admin + branch directors for new orders
-  if (isMailConfigured()) {
-    setImmediate(async () => {
-      try {
+    if (isMailConfigured()) {
+      setImmediate(async () => {
+        try {
         const items = filterOrderItemsForReceipt(
           await prisma.orderItem.findMany({
             where: { orderId: order.id, isRemoved: false },
@@ -479,17 +481,35 @@ orderRouter.post('/', async (req, res) => {
           subject: `🛎️ New Order #${order.id} — ${customerName || 'Walk-in'} (${tableLabel})`,
           html,
         });
-      } catch (err) {
-        console.error('[order-email] Failed to send new order notification:', err);
+        } catch (err) {
+          console.error('[order-email] Failed to send new order notification:', err);
+        }
+      });
+    }
+
+    return res.status(201).json({
+      order,
+      invoicePdfUrl: undefined,
+      invoiceFileName: undefined,
+    });
+  } catch (err: unknown) {
+    // Common production cause for sudden 500s: backend code was deployed but DB migrations were not.
+    if (err instanceof Prisma.PrismaClientKnownRequestError) {
+      // P2021: table does not exist; P2022: column does not exist
+      if (err.code === 'P2021' || err.code === 'P2022') {
+        return res.status(503).json({
+          message:
+            'Order service database schema is out of date (missing table/column). Deploy backend migrations (prisma migrate deploy) and retry.',
+        });
       }
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('POST /orders error:', msg, err);
+    return res.status(500).json({
+      message: 'Failed to create order. Check server logs.',
+      ...(process.env.NODE_ENV === 'development' ? { detail: msg } : {}),
     });
   }
-
-  return res.status(201).json({
-    order,
-    invoicePdfUrl: undefined,
-    invoiceFileName: undefined,
-  });
 });
 
 // Public: stream order status updates (SSE) for customer tracking (no auth)

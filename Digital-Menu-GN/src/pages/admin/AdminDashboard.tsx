@@ -6475,8 +6475,8 @@ const AdminDashboard = () => {
 
       {/* Two Column Layout for Item Sales & Employee Sales */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <ItemSalesSection />
-        <EmployeeSalesSection />
+        {ItemSalesSection()}
+        {EmployeeSalesSection()}
       </div>
 
       {/* End of Day Summary */}
@@ -10171,31 +10171,31 @@ const AdminDashboard = () => {
   const mainSectionContent = useMemo(() => {
     switch (currentSection) {
       case 'overview':
-        return <OverviewSection />;
+        return OverviewSection();
       case 'performance':
-        return <PerformanceSection />;
+        return PerformanceSection();
       case 'menu':
-        return <MenuSection />;
+        return MenuSection();
       case 'happy-hours':
         return <HappyHoursAdminSection apiBase={apiBase} token={token} toast={toast} />;
       case 'employees':
-        return <EmployeesSection />;
+        return EmployeesSection();
       case 'all-orders':
-        return <OrdersSection />;
+        return OrdersSection();
       case 'customer-leaderboard':
-        return <CustomerLeaderboardSection />;
+        return CustomerLeaderboardSection();
       case 'customer-queries':
-        return <CustomerQueriesSection />;
+        return CustomerQueriesSection();
       case 'removed-items':
-        return <RemovedItemsSection />;
+        return RemovedItemsSection();
       case 'hours':
-        return <WorkHoursSection />;
+        return WorkHoursSection();
       case 'overtime':
-        return <OvertimeSection />;
+        return OvertimeSection();
       case 'late':
-        return <LateSection />;
+        return LateSection();
       case 'leaves':
-        return <LeaveRequestsSection />;
+        return LeaveRequestsSection();
       case 'revenue':
         return renderRevenueSection();
       case 'salary-slips':
@@ -10236,7 +10236,7 @@ const AdminDashboard = () => {
           />
         );
       default:
-        return <OverviewSection />;
+        return OverviewSection();
     }
   }, [
     currentSection,

@@ -3690,12 +3690,16 @@ const AdminDashboard = () => {
   );
 
   const fetchWithTimeoutRetryAuthed = useCallback(
-    async (url: string, opts: { timeout: number }) => {
+    async (url: string, init: RequestInit & { timeout: number }) => {
       const current = tokenRef.current;
       const doFetch = (t: string) =>
         fetchWithTimeoutRetry(url, {
-          headers: { Authorization: `Bearer ${t}` },
-          timeout: opts.timeout,
+          ...init,
+          headers: {
+            ...(init.headers || {}),
+            Authorization: `Bearer ${t}`,
+          },
+          timeout: init.timeout,
           credentials: 'include',
         });
       if (!current) return doFetch('');
@@ -9430,7 +9434,7 @@ const AdminDashboard = () => {
       .reduce((sum, s) => sum + (s.netSalary || 0), 0);
   }, [salarySlips]);
 
-  const RevenueSection = () => {
+  const renderRevenueSection = useCallback(() => {
     const now = new Date();
 
     const saveMonthlyTarget = async () => {
@@ -9675,7 +9679,17 @@ const AdminDashboard = () => {
         </Card>
       </div>
     );
-  };
+  }, [
+    apiBase,
+    formatINR,
+    loadDashboardData,
+    monthlyRevenueSnapshots.length,
+    monthlyTargetInfo,
+    monthlyTargetInput,
+    savingMonthlyTarget,
+    toast,
+    token,
+  ]);
 
   const handleOpenGenerateDialog = useCallback(() => {
     setSalarySlipPrefill(null);
@@ -10183,7 +10197,7 @@ const AdminDashboard = () => {
       case 'leaves':
         return <LeaveRequestsSection />;
       case 'revenue':
-        return <RevenueSection />;
+        return renderRevenueSection();
       case 'salary-slips':
         return (
           <SalarySlipsSection

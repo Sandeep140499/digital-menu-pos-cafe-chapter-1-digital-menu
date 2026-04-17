@@ -502,6 +502,21 @@ orderRouter.post('/', async (req, res) => {
             'Order service database schema is out of date (missing table/column). Deploy backend migrations (prisma migrate deploy) and retry.',
         });
       }
+      // Common data-related errors (no sensitive info in response)
+      if (err.code === 'P2003') {
+        return res.status(400).json({
+          message: 'Invalid reference (branch/table). Please refresh and try again.',
+        });
+      }
+      if (err.code === 'P2002') {
+        return res.status(409).json({
+          message: 'Duplicate data conflict. Please retry.',
+        });
+      }
+      return res.status(500).json({
+        message: 'Failed to create order. Database error.',
+        code: err.code,
+      });
     }
     const msg = err instanceof Error ? err.message : String(err);
     console.error('POST /orders error:', msg, err);

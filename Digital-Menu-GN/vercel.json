@@ -2,29 +2,31 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "framework": "vite",
+  
   "headers": [
-    {
-      "source": "/assets/(.*)",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
-      ]
-    },
-    {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-store" }
-      ]
-    }
-  ],
-  "rewrites": [
-    {
-      "source": "/api/:path*",
-      "destination": "https://api.cafechapter1.online/api/:path*"
-    },
-    {
-      "source": "/socket.io/:path*",
-      "destination": "https://api.cafechapter1.online/socket.io/:path*"
-    },
-    { "source": "/(.*)", "destination": "/index.html" }
+  {
+  "source": "/assets/(.*)",
+  "headers": [
+  { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
   ]
-}
+  },
+  {
+  "source": "/(.*)",
+  "headers": [
+  { "key": "Cache-Control", "value": "no-store" }
+  ]
+  }
+  ],
+  
+  "rewrites": [
+  {
+  "source": "/api/(.*)",
+  "destination": "https://api.cafechapter1.online/api/$1"
+  },
+  {
+  "source": "/socket.io/(.*)",
+  "destination": "https://api.cafechapter1.online/socket.io/$1"
+  }
+  ]
+  }
+  

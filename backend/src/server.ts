@@ -69,6 +69,35 @@ function isLocalDevOrigin(origin: string): boolean {
 const isProd = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
 
 const app = express();
+// 🔒 Block common bots/scanners (reduces cost + attacks)
+app.use((req, res, next) => {
+  const url = req.url.toLowerCase();
+
+  const blockedPatterns = [
+    "phpunit",
+    "eval-stdin",
+    ".env",
+    "vendor",
+    "wp-admin",
+    "boaform",
+    "cgi-bin",
+    "xmlrpc",
+    "admin.php",
+    "config.php"
+  ];
+
+  if (blockedPatterns.some(pattern => url.includes(pattern))) {
+    return res.status(403).send("Blocked");
+  }
+
+  next();
+});
+
+// 🚦 Global rate limit (extra safety)
+app.use(rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200
+}));
 const server = http.createServer(app);
 
 // When behind a reverse proxy / load balancer (Render, Railway, Nginx, etc.)
@@ -269,12 +298,22 @@ app.get('/api/docs', (_req, res) => {
 // switch to a shared store (Redis). In-memory is still useful for single instance or per-worker protection.
 const apiLimiter = rateLimit({
   windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS || 60_000) || 60_000,
-  limit: Number(process.env.RATE_LIMIT_MAX || 300) || 300, // requests per window per IP
+  limit: Number(process.env.RATE_LIMIT_MAX || 60) || 60, // requests per window per IP
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later.' },
 });
 app.use('/api', apiLimiter);
+// 🤖 Block suspicious API clients
+app.use('/api', (req, res, next) => {
+  const userAgent = req.headers['user-agent'] || '';
+
+  if (!userAgent || userAgent.length < 10) {
+    return res.status(403).json({ error: 'Blocked bot' });
+  }
+
+  next();
+});
 app.use('/api', performanceMiddleware);
 app.use('/api', router);
 

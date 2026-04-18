@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { prisma } from '../../config/prisma.js';
 import { isMailConfigured, sendEmail } from '../../config/mailer.js';
 import { authenticate, requireRole } from '../../middleware/auth.js';
-import { getFrontendBaseUrl } from '../../config/frontendUrl.js';
+import { resolveFrontendBaseUrlForEmail } from '../../config/frontendUrl.js';
 
 const requestVerifySchema = z.object({
   email: z.string().email(),
@@ -96,7 +96,12 @@ directorRouter.post('/request-verify', authenticate, requireRole('ADMIN'), async
     return res.status(503).json({ message: 'Email is not configured. Set EMAIL_SMTP_* in .env.' });
   }
 
-  const baseUrl = getFrontendBaseUrl();
+  let baseUrl: string;
+  try {
+    baseUrl = resolveFrontendBaseUrlForEmail(req);
+  } catch (e: unknown) {
+    return res.status(503).json({ message: (e as Error).message });
+  }
   const verifyUrl = `${baseUrl}/api/directors/verify?token=${encodeURIComponent(token)}`;
   const fromName = process.env.EMAIL_FROM_NAME || 'Chapter One Cafe';
 
@@ -150,7 +155,12 @@ directorRouter.post('/request-remove', authenticate, requireRole('ADMIN'), async
     return res.status(503).json({ message: 'Email is not configured. Set EMAIL_SMTP_* in .env.' });
   }
 
-  const baseUrl = getFrontendBaseUrl();
+  let baseUrl: string;
+  try {
+    baseUrl = resolveFrontendBaseUrlForEmail(req);
+  } catch (e: unknown) {
+    return res.status(503).json({ message: (e as Error).message });
+  }
   const confirmUrl = `${baseUrl}/api/directors/confirm-removal?token=${encodeURIComponent(token)}`;
   const fromName = process.env.EMAIL_FROM_NAME || 'Chapter One Cafe';
 

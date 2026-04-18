@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { prisma } from '../../config/prisma.js';
 import { jwtConfig } from '../../config/auth.js';
 import { isMailConfigured, sendEmail } from '../../config/mailer.js';
-import { getFrontendBaseUrl } from '../../config/frontendUrl.js';
+import { resolveFrontendBaseUrlForEmail } from '../../config/frontendUrl.js';
 import { authenticate, requireRole } from '../../middleware/auth.js';
 import {
   clearAuthCookies,
@@ -350,13 +350,19 @@ authRouter.post('/forgot-password', async (req, res) => {
   const role = admin ? 'ADMIN' : 'EMPLOYEE';
   const userId = (admin ?? employee)!.id;
 
+  let baseUrl: string;
+  try {
+    baseUrl = resolveFrontendBaseUrlForEmail(req);
+  } catch (e: unknown) {
+    return res.status(503).json({ message: (e as Error).message });
+  }
+
   const token = jwt.sign(
     { id: userId, role, type: 'RESET' },
     jwtConfig.secret as string,
     { expiresIn: '1h' } as SignOptions
   );
 
-  const baseUrl = getFrontendBaseUrl();
   const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`;
 
   if (!isMailConfigured()) {

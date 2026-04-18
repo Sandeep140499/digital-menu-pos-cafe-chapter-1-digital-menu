@@ -6,7 +6,7 @@ import { prisma } from '../../config/prisma.js';
 import { findEmployeeByEmailLoose, normalizeStaffEmail } from '../../utils/staffEmail.js';
 import { getFromAddress, isMailConfigured, sendEmail } from '../../config/mailer.js';
 import { authenticate, requireRole } from '../../middleware/auth.js';
-import { getFrontendBaseUrl } from '../../config/frontendUrl.js';
+import { resolveFrontendBaseUrlForEmail } from '../../config/frontendUrl.js';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
@@ -289,6 +289,13 @@ employeeRouter.post('/', authenticate, requireRole('ADMIN'), async (req, res) =>
     return res.status(409).json({ message: 'Employee already exists' });
   }
 
+  let baseUrl: string;
+  try {
+    baseUrl = resolveFrontendBaseUrlForEmail(req);
+  } catch (e: unknown) {
+    return res.status(503).json({ message: (e as Error).message });
+  }
+
   const randomPassword = Math.random().toString(36).slice(-8);
   const passwordHash = await bcrypt.hash(randomPassword, 10);
 
@@ -318,7 +325,6 @@ employeeRouter.post('/', authenticate, requireRole('ADMIN'), async (req, res) =>
     },
   });
 
-  const baseUrl = getFrontendBaseUrl();
   // IMPORTANT:
   // Use the "verify email" flow so the employee receives credentials AFTER verification.
   // This matches the EmployeeVerifyEmail page which redirects to backend
@@ -547,9 +553,14 @@ employeeRouter.post(
         _message: 'Employee is already verified. They can log in with their existing credentials.',
       });
     }
+    let baseUrl: string;
+    try {
+      baseUrl = resolveFrontendBaseUrlForEmail(req);
+    } catch (e: unknown) {
+      return res.status(503).json({ message: (e as Error).message });
+    }
     const token = randomBytes(16).toString('hex');
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
-    const baseUrl = getFrontendBaseUrl();
     const verifyLink = `${baseUrl}/employee/verify-email?token=${encodeURIComponent(token)}`;
     const fromName = process.env.EMAIL_FROM_NAME || 'Chapter One Cafe';
     if (!isMailConfigured()) {
@@ -612,13 +623,18 @@ employeeRouter.post(
     if (!employee) {
       return res.status(404).json({ message: 'Employee not found' });
     }
+    let baseUrl: string;
+    try {
+      baseUrl = resolveFrontendBaseUrlForEmail(req);
+    } catch (e: unknown) {
+      return res.status(503).json({ message: (e as Error).message });
+    }
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const otpExpires = new Date(Date.now() + 1000 * 60 * 60 * 24); // 24 hours
     await prisma.employee.update({
       where: { id },
       data: { verificationOtp: otp, verificationOtpExpiresAt: otpExpires },
     });
-    const baseUrl = getFrontendBaseUrl();
     const verifyUrl = `${baseUrl}/login?verify=1&email=${encodeURIComponent(employee.email)}`;
     if (!isMailConfigured()) {
       return res.status(503).json({
@@ -767,6 +783,17 @@ employeeRouter.get('/confirm-email', async (req, res) => {
         "<!DOCTYPE html><html><body style='font-family:sans-serif;padding:2rem;'><h1>Link expired or invalid</h1><p>Verification links expire after 24 hours. Ask your admin to add you again or send a new verification email.</p></body></html>"
       );
   }
+  let baseUrl: string;
+  try {
+    baseUrl = resolveFrontendBaseUrlForEmail(req);
+  } catch (e: unknown) {
+    const msg = escapeHtml((e as Error).message);
+    return res
+      .status(503)
+      .send(
+        `<!DOCTYPE html><html><body style='font-family:sans-serif;padding:2rem;max-width:560px;margin:0 auto;'><h1>Server configuration</h1><p>The site cannot complete this step until the administrator sets the public app URL (for example <code>FRONTEND_URL</code> or <code>CORS_ORIGIN</code> on the API server).</p><p style="color:#666;font-size:14px;">${msg}</p></body></html>`
+      );
+  }
   await prisma.employee.update({
     where: { id: employee.id },
     data: {
@@ -775,7 +802,6 @@ employeeRouter.get('/confirm-email', async (req, res) => {
       verificationOtpExpiresAt: null,
     },
   });
-  const baseUrl = getFrontendBaseUrl();
   const loginUrl = `${baseUrl}/login`;
   const name = escapeHtml(employee.name);
   const loginLink = escapeHtml(loginUrl);
@@ -807,6 +833,17 @@ employeeRouter.get('/verify-email-link', async (req, res) => {
         "<!DOCTYPE html><html><body style='font-family:sans-serif;padding:2rem;'><h1>Link expired or invalid</h1><p>Verification links expire after 24 hours. Ask your admin to send a new verification email.</p></body></html>"
       );
   }
+  let baseUrl: string;
+  try {
+    baseUrl = resolveFrontendBaseUrlForEmail(req);
+  } catch (e: unknown) {
+    const msg = escapeHtml((e as Error).message);
+    return res
+      .status(503)
+      .send(
+        `<!DOCTYPE html><html><body style='font-family:sans-serif;padding:2rem;max-width:560px;margin:0 auto;'><h1>Server configuration</h1><p>The site cannot complete verification until the administrator sets the public app URL (for example <code>FRONTEND_URL</code> or <code>CORS_ORIGIN</code> on the API server).</p><p style="color:#666;font-size:14px;">${msg}</p></body></html>`
+      );
+  }
   const randomPassword =
     Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-4);
   const passwordHash = await bcrypt.hash(randomPassword, 10);
@@ -819,7 +856,6 @@ employeeRouter.get('/verify-email-link', async (req, res) => {
       verificationOtpExpiresAt: null,
     },
   });
-  const baseUrl = getFrontendBaseUrl();
   const loginUrl = `${baseUrl}/login`;
   const fromName = process.env.EMAIL_FROM_NAME || 'Chapter One Cafe';
 

@@ -79,7 +79,10 @@ export async function endShiftAndCreateOvertimeIfNeeded(
 }
 
 export async function runAutoCloseAt4AM(): Promise<number> {
-  if (!AUTO_CLOSE_ENABLED) return 0;
+  if (!AUTO_CLOSE_ENABLED) {
+    console.log('[Auto-close] DISABLED via AUTO_CLOSE_SHIFTS env var');
+    return 0;
+  }
   // Close only when the *current* instant is in a later business day than the shift's start
   // (same rule as dateKey in getBusinessDayRange). End time = 04:00 at the start of "now"'s business day.
   // Do not use shiftStart < todayBoundary alone — Intl "hour 24" bugs and boundary math can close too early.
@@ -90,10 +93,14 @@ export async function runAutoCloseAt4AM(): Promise<number> {
     timeZone: TIMEZONE,
   });
 
+  console.log(`[Auto-close] Running check at ${now.toISOString()}, business day key: ${nowKey}`);
+
   const openShifts = await prisma.employeeShift.findMany({
     where: { shiftEnd: null },
     include: { employee: true },
   });
+
+  console.log(`[Auto-close] Found ${openShifts.length} open shifts`);
 
   let closed = 0;
   for (const shift of openShifts) {
@@ -102,6 +109,7 @@ export async function runAutoCloseAt4AM(): Promise<number> {
       boundaryHour: 4,
       timeZone: TIMEZONE,
     });
+    console.log(`[Auto-close] Shift ${shift.id} (${shift.employee.name}): shiftKey=${shiftKey}, nowKey=${nowKey}, shouldClose=${shiftKey < nowKey}`);
     if (shiftKey >= nowKey) continue;
 
     try {
@@ -111,12 +119,15 @@ export async function runAutoCloseAt4AM(): Promise<number> {
         'Auto Closed'
       );
       closed++;
+      console.log(`[Auto-close] Closed shift ${shift.id}`);
     } catch (e) {
       console.error('Auto-close shift failed:', shift.id, e);
     }
   }
   if (closed > 0) {
     console.log(`[Auto-close] Closed ${closed} shift(s) at 04:00 ${TIMEZONE}`);
+  } else {
+    console.log(`[Auto-close] No shifts to close`);
   }
   return closed;
 }

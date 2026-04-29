@@ -170,28 +170,35 @@ shiftRouter.post('/start', authenticate, requireRole('EMPLOYEE'), async (req, re
 
   // One shift per day: if employee already ended a shift today, they cannot start again until next day
   const timeZone = process.env.TZ || 'Asia/Kolkata';
-  const { dateKey: todayBusinessKey } = getBusinessDayRange({
+  const { dateKey: todayBusinessKey, start: businessDayStart } = getBusinessDayRange({
     date: new Date(),
     boundaryHour: 4,
     timeZone,
   });
-  const completedToday = await prisma.employeeShift.findMany({
-    where: { employeeId, shiftEnd: { not: null } },
-    select: { shiftStart: true, shiftEnd: true },
+  
+  // Check for ANY shift (active or ended) started today
+  const anyShiftToday = await prisma.employeeShift.findFirst({
+    where: {
+      employeeId,
+      shiftStart: {
+        gte: businessDayStart,
+      },
+    },
+    select: { id: true, shiftStart: true, shiftEnd: true },
   });
-  const hasEndedShiftToday = completedToday.some(s => {
-    if (!s.shiftEnd) return false;
-    const { dateKey } = getBusinessDayRange({
-      date: s.shiftStart,
-      boundaryHour: 4,
-      timeZone,
-    });
-    return dateKey === todayBusinessKey;
-  });
-  if (hasEndedShiftToday) {
-    return res.status(400).json({
-      message: 'You already completed a shift today. You can start again tomorrow.',
-    });
+  
+  if (anyShiftToday) {
+    if (!anyShiftToday.shiftEnd) {
+      // Active shift exists
+      return res.status(400).json({
+        message: 'You already have an active shift. End it first.',
+      });
+    } else {
+      // Shift already completed today
+      return res.status(400).json({
+        message: 'You already completed a shift today. You can start again tomorrow.',
+      });
+    }
   }
 
   const shiftStartTime = new Date();
@@ -411,4 +418,19 @@ shiftRouter.get('/history', authenticate, requireRole('ADMIN'), async (req, res)
     },
     dailyStats: Array.from(dailyStats.values()),
   });
+});
+
+// Admin: manually trigger auto-close for open shifts (emergency use)
+shiftRouter.post('/auto-close', authenticate, requireRole('ADMIN'), async (_req, res) => {
+  try {
+    const { runAutoCloseAt4AM } = await import('../../services/shiftAutoClose.js');
+    const closed = await runAutoCloseAt4AM();
+    return res.json({
+      message: `Auto-close completed. Closed ${closed} shift(s).`,
+      closed,
+    });
+  } catch (error) {
+    console.error('Manual auto-close error:', error);
+    return res.status(500).json({ message: 'Failed to run auto-close' });
+  }
 });

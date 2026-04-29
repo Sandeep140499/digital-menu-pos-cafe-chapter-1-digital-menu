@@ -203,3 +203,28 @@ All colors MUST be HSL.
 [data-radix-toast-viewport] {
   z-index: 99999;
 }
+
+/* Custom scrollbar styling for sidebar */
+aside nav::-webkit-scrollbar {
+  width: 6px;
+}
+
+aside nav::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+}
+
+aside nav::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+aside nav::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Firefox scrollbar styling for sidebar */
+aside nav {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) rgba(255, 255, 255, 0.05);
+}

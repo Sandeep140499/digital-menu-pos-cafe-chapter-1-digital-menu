@@ -3614,6 +3614,1020 @@ const SalarySlipDialogModule = memo(function SalarySlipDialogModule(props: Salar
   );
 });
 
+// Performance Section - extracted to avoid hooks violation
+const PerformanceSection = ({ token, apiBase, activeSection }: { token: string | null; apiBase: string; activeSection: string }) => {
+  type ApiPerfRow = {
+    key: string;
+    actor: 'ALL' | 'ADMIN' | 'EMPLOYEE' | 'CUSTOMER';
+    count: number;
+    errorCount: number;
+    avgMs: number;
+    p50Ms: number;
+    p95Ms: number;
+    maxMs: number;
+  };
+  type ApiPerfSummary = {
+    now: number;
+    windowMinutes: number;
+    actor: 'ALL' | 'ADMIN' | 'EMPLOYEE' | 'CUSTOMER';
+    totalCount: number;
+    totalErrorCount: number;
+    totalBytesSent?: number;
+    rpm: number;
+    rows: ApiPerfRow[];
+  };
+
+  type SystemPerf = {
+    now: number;
+    cpuUsagePct: number;
+    diskUsagePct: number;
+    diskTotalBytes: number;
+    diskUsedBytes: number;
+    diskFreeBytes: number;
+    networkEgressBytes: number;
+    window: { hours: number };
+  };
+
+  type MetricsSummary = {
+    now: number;
+    windowMinutes: number;
+    socketio?: { activeConnections?: number };
+    http?: { rpm?: number; totalCount?: number; totalErrorCount?: number };
+  };
+
+  type CompletionRow = {
+    employeeId: number;
+    employeeName: string;
+    employeeCode: string | null;
+    ordersCompleted: number;
+    avgMinutes: number;
+    minMinutes: number;
+    maxMinutes: number;
+  };
+
+  const [apiPerfActor, setApiPerfActor] = useState<'ALL' | 'ADMIN' | 'EMPLOYEE' | 'CUSTOMER'>(
+    'ALL'
+  );
+  const [apiPerfWindowMinutes, setApiPerfWindowMinutes] = useState<number>(60);
+  const [apiPerfLoading, setApiPerfLoading] = useState(false);
+  const [apiPerf, setApiPerf] = useState<ApiPerfSummary | null>(null);
+  const [apiPerfByActor, setApiPerfByActor] = useState<{
+    CUSTOMER: ApiPerfSummary | null;
+    EMPLOYEE: ApiPerfSummary | null;
+    ADMIN: ApiPerfSummary | null;
+  }>({ CUSTOMER: null, EMPLOYEE: null, ADMIN: null });
+  const [sysPerfLoading, setSysPerfLoading] = useState(false);
+  const [sysPerf, setSysPerf] = useState<SystemPerf | null>(null);
+  const [metricsLoading, setMetricsLoading] = useState(false);
+  const [metricsSummary, setMetricsSummary] = useState<MetricsSummary | null>(null);
+  const [completionLoading, setCompletionLoading] = useState(false);
+  const [completionRows, setCompletionRows] = useState<CompletionRow[]>([]);
+
+  const formatBytes = (b: number) => {
+    const n = Number(b) || 0;
+    if (n < 1024) return `${n} B`;
+    const kb = n / 1024;
+    if (kb < 1024) return `${kb.toFixed(1)} KB`;
+    const mb = kb / 1024;
+    if (mb < 1024) return `${mb.toFixed(1)} MB`;
+    const gb = mb / 1024;
+    return `${gb.toFixed(2)} GB`;
+  };
+
+  const loadApiPerf = useCallback(async () => {
+    if (!token) return;
+    setApiPerfLoading(true);
+    try {
+      const fetchSummary = async (actor: 'ALL' | 'ADMIN' | 'EMPLOYEE' | 'CUSTOMER') => {
+        const params = new URLSearchParams({
+          windowMinutes: String(apiPerfWindowMinutes),
+          top: '30',
+          actor,
+        });
+        const res = await fetch(`${apiBase}/performance/summary?${params}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          throw new Error(
+            (data && typeof data === 'object' && 'message' in data
+              ? String((data as any).message)
+              : 'Failed to load performance') || 'Failed to load performance'
+          );
+        }
+        return data as ApiPerfSummary;
+      };
+
+      const [all, customer, employee, admin] = await Promise.all([
+        fetchSummary('ALL'),
+        fetchSummary('CUSTOMER'),
+        fetchSummary('EMPLOYEE'),
+        fetchSummary('ADMIN'),
+      ]);
+
+      setApiPerf(all);
+      setApiPerfByActor({ CUSTOMER: customer, EMPLOYEE: employee, ADMIN: admin });
+    } catch (e) {
+      setApiPerf(null);
+      setApiPerfByActor({ CUSTOMER: null, EMPLOYEE: null, ADMIN: null });
+    } finally {
+      setApiPerfLoading(false);
+    }
+  }, [token, apiPerfWindowMinutes, apiPerfActor, apiBase]);
+
+  const loadSysPerf = useCallback(async () => {
+    if (!token) return;
+    setSysPerfLoading(true);
+    try {
+      const res = await fetch(`${apiBase}/performance/system`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        const msg =
+          data && typeof data === 'object' && 'message' in data
+            ? String((data as { message?: unknown }).message || '')
+            : '';
+        throw new Error(msg || 'Failed to load system metrics');
+      }
+      setSysPerf(data as SystemPerf);
+    } catch (e) {
+      setSysPerf(null);
+    } finally {
+      setSysPerfLoading(false);
+    }
+  }, [token, apiBase]);
+
+  const loadMetricsSummary = useCallback(async () => {
+    setMetricsLoading(true);
+    try {
+      const params = new URLSearchParams({
+        windowMinutes: String(apiPerfWindowMinutes),
+      });
+      const res = await fetch(`${apiBase}/metrics/summary?${params}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error('Failed to load metrics');
+      setMetricsSummary(data as MetricsSummary);
+    } catch {
+      setMetricsSummary(null);
+    } finally {
+      setMetricsLoading(false);
+    }
+  }, [apiPerfWindowMinutes, token, apiBase]);
+
+  const loadCompletion = useCallback(async () => {
+    if (!token) return;
+    setCompletionLoading(true);
+    try {
+      const res = await fetch(`${apiBase}/reports/order-completion-times?days=7`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        const msg =
+          data && typeof data === 'object' && 'message' in data
+            ? String((data as { message?: unknown }).message || '')
+            : '';
+        throw new Error(msg || 'Failed to load completion times');
+      }
+      const rows =
+        data && typeof data === 'object' && 'rows' in data
+          ? (data as { rows?: unknown }).rows
+          : undefined;
+      setCompletionRows(Array.isArray(rows) ? (rows as any[]) : []);
+    } catch (e) {
+      setCompletionRows([]);
+    } finally {
+      setCompletionLoading(false);
+    }
+  }, [token, apiBase]);
+
+  useEffect(() => {
+    if (activeSection !== 'performance') return;
+    loadApiPerf();
+    loadSysPerf();
+    loadCompletion();
+    loadMetricsSummary();
+    const id = window.setInterval(() => loadApiPerf(), 30_000);
+    const id2 = window.setInterval(() => loadSysPerf(), 60_000);
+    const id3 = window.setInterval(() => loadCompletion(), 120_000);
+    const id4 = window.setInterval(() => loadMetricsSummary(), 30_000);
+    return () => {
+      window.clearInterval(id);
+      window.clearInterval(id2);
+      window.clearInterval(id3);
+      window.clearInterval(id4);
+    };
+  }, [activeSection, loadApiPerf, loadSysPerf, loadCompletion, loadMetricsSummary]);
+
+  const overall = useMemo(() => {
+    const rows = apiPerf?.rows ?? [];
+    const total = rows.reduce((s, r) => s + (r.count || 0), 0);
+    const weightedAvg =
+      total > 0 ? rows.reduce((s, r) => s + (Number(r.avgMs) || 0) * r.count, 0) / total : 0;
+    const weightedP95 =
+      total > 0 ? rows.reduce((s, r) => s + (Number(r.p95Ms) || 0) * r.count, 0) / total : 0;
+    return {
+      rpm: apiPerf?.rpm ?? 0,
+      avgMs: Math.round(weightedAvg),
+      p95Ms: Math.round(weightedP95),
+      totalCount: apiPerf?.totalCount ?? 0,
+      totalErrorCount: apiPerf?.totalErrorCount ?? 0,
+      totalBytesSent: apiPerf?.totalBytesSent ?? 0,
+    };
+  }, [apiPerf]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h2 className="text-lg font-bold sm:text-xl">Performance Dashboard</h2>
+          <p className="text-muted-foreground max-w-full truncate text-xs sm:text-sm">
+            Live backend API latency and traffic (auto refresh every 30 seconds).
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Select
+            value={apiPerfActor}
+            onValueChange={(v: any) =>
+              setApiPerfActor(v === 'ADMIN' || v === 'EMPLOYEE' || v === 'CUSTOMER' ? v : 'ALL')
+            }
+          >
+            <SelectTrigger className="min-h-[44px] w-full min-w-0 sm:min-h-0 sm:w-[150px]">
+              <SelectValue placeholder="Actor" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All</SelectItem>
+              <SelectItem value="ADMIN">Admin</SelectItem>
+              <SelectItem value="EMPLOYEE">Employee</SelectItem>
+              <SelectItem value="CUSTOMER">Customer</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select
+            value={String(apiPerfWindowMinutes)}
+            onValueChange={v => setApiPerfWindowMinutes(Number(v) || 60)}
+          >
+            <SelectTrigger className="min-h-[44px] w-full min-w-0 sm:min-h-0 sm:w-[150px]">
+              <SelectValue placeholder="Window" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="15">Last 15 min</SelectItem>
+              <SelectItem value="60">Last 60 min</SelectItem>
+              <SelectItem value="360">Last 6 hours</SelectItem>
+              <SelectItem value="1440">Last 24 hours</SelectItem>
+            </SelectContent>
+          </Select>
+          <LoaderButton
+            size="sm"
+            variant="outline"
+            loading={apiPerfLoading}
+            loadingLabel="Refreshing..."
+            onClick={loadApiPerf}
+            className="min-h-[44px] sm:min-h-0"
+          >
+            <RefreshCw className="mr-1 h-4 w-4" />
+            Refresh
+          </LoaderButton>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
+        <Card className="bg-white">
+          <CardContent className="p-4">
+            <p className="text-muted-foreground text-xs">Requests / min</p>
+            <p className="mt-1 text-lg font-bold text-slate-900">
+              {overall.rpm ? overall.rpm.toFixed(1) : '0.0'}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="bg-white">
+          <CardContent className="p-4">
+            <p className="text-muted-foreground text-xs">API Avg (ms)</p>
+            <p className="mt-1 text-lg font-bold text-slate-900">{overall.avgMs || 0}</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-white">
+          <CardContent className="p-4">
+            <p className="text-muted-foreground text-xs">API P95 (ms)</p>
+            <p className="mt-1 text-lg font-bold text-amber-700">{overall.p95Ms || 0}</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-white">
+          <CardContent className="p-4">
+            <p className="text-muted-foreground text-xs">Errors (5xx)</p>
+            <p className="mt-1 text-lg font-bold text-red-600">{overall.totalErrorCount || 0}</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-white">
+          <CardContent className="p-4">
+            <p className="text-muted-foreground text-xs">Active devices</p>
+            <p className="mt-1 text-lg font-bold text-slate-900">
+              {metricsLoading && !metricsSummary
+                ? '…'
+                : (metricsSummary?.socketio?.activeConnections ?? 0)}
+            </p>
+            <p className="text-muted-foreground mt-1 text-[10px]">Socket.IO connections</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-white">
+          <CardContent className="p-4">
+            <p className="text-muted-foreground text-xs">Total requests</p>
+            <p className="mt-1 text-lg font-bold text-slate-900">{overall.totalCount || 0}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Card className="bg-white">
+          <CardContent className="p-4">
+            <p className="text-muted-foreground text-xs">Network Egress (24h)</p>
+            <p className="mt-1 text-lg font-bold text-slate-900">
+              {sysPerf ? formatBytes(sysPerf.networkEgressBytes) : '—'}
+            </p>
+            <p className="text-muted-foreground mt-1 text-[11px]">Estimated from API responses</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-white">
+          <CardContent className="p-4">
+            <p className="text-muted-foreground text-xs">CPU Usage</p>
+            <p className="mt-1 text-lg font-bold text-slate-900">
+              {sysPerf ? `${sysPerf.cpuUsagePct}%` : '—'}
+            </p>
+            <p className="text-muted-foreground mt-1 text-[11px]">Based on 1‑min load average</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-white">
+          <CardContent className="p-4">
+            <p className="text-muted-foreground text-xs">Disk Usage</p>
+            <p className="mt-1 text-lg font-bold text-slate-900">
+              {sysPerf ? `${sysPerf.diskUsagePct}%` : '—'}
+            </p>
+            <p className="text-muted-foreground mt-1 text-[11px]">
+              {sysPerf
+                ? `${formatBytes(sysPerf.diskUsedBytes)} / ${formatBytes(sysPerf.diskTotalBytes)}`
+                : ''}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Activity className="h-4 w-4 text-emerald-600" />
+            Slow APIs (by P95)
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Categorized by role: Customer, Employee, Admin.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pt-2">
+          {apiPerfLoading && !apiPerf ? (
+            <div className="text-muted-foreground py-8 text-center text-sm">Loading…</div>
+          ) : (apiPerf?.rows?.length ?? 0) === 0 ? (
+            <div className="text-muted-foreground py-8 text-center text-sm">
+              No API traffic in this window yet.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {(
+                [
+                  { key: 'CUSTOMER' as const, label: 'Customer APIs' },
+                  { key: 'EMPLOYEE' as const, label: 'Employee APIs' },
+                  { key: 'ADMIN' as const, label: 'Admin APIs' },
+                ] as const
+              ).map(grp => {
+                const s = apiPerfByActor[grp.key];
+                const rows = s?.rows ?? [];
+                return (
+                  <div key={grp.key} className="space-y-2">
+                    <div className="text-sm font-semibold text-slate-900">{grp.label}</div>
+                    {rows.length === 0 ? (
+                      <div className="text-muted-foreground text-xs">No traffic.</div>
+                    ) : (
+                      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-slate-50">
+                              <TableHead>API</TableHead>
+                              <TableHead className="text-right whitespace-nowrap">Hits</TableHead>
+                              <TableHead className="text-right whitespace-nowrap">
+                                Avg (ms)
+                              </TableHead>
+                              <TableHead className="text-right whitespace-nowrap">
+                                P95 (ms)
+                              </TableHead>
+                              <TableHead className="text-right whitespace-nowrap">
+                                Max (ms)
+                              </TableHead>
+                              <TableHead className="text-right whitespace-nowrap">5xx</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {rows.map(r => (
+                              <TableRow key={`${grp.key}-${r.key}`}>
+                                <TableCell className="font-medium">{r.key}</TableCell>
+                                <TableCell className="text-right">{r.count}</TableCell>
+                                <TableCell className="text-right">
+                                  {Math.round(r.avgMs)}
+                                </TableCell>
+                                <TableCell className="text-right font-semibold text-amber-700">
+                                  {Math.round(r.p95Ms)}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {Math.round(r.maxMs)}
+                                </TableCell>
+                                <TableCell className="text-right font-semibold text-red-600">
+                                  {r.errorCount}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Order completion time (avg)</CardTitle>
+          <CardDescription className="text-xs">
+            Average time taken by employees to complete orders (last 7 days).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pt-2">
+          {completionLoading && completionRows.length === 0 ? (
+            <div className="text-muted-foreground py-8 text-center text-sm">Loading…</div>
+          ) : completionRows.length === 0 ? (
+            <div className="text-muted-foreground py-8 text-center text-sm">
+              No completed orders in this window yet.
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-slate-50">
+                    <TableHead>Employee</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Orders</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Avg (min)</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Min</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Max</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {completionRows.map(r => (
+                    <TableRow key={String(r.employeeId)}>
+                      <TableCell className="font-medium">
+                        {r.employeeName}
+                        {r.employeeCode ? (
+                          <span className="text-muted-foreground ml-2 font-mono text-xs">
+                            {r.employeeCode}
+                          </span>
+                        ) : null}
+                      </TableCell>
+                      <TableCell className="text-right">{r.ordersCompleted}</TableCell>
+                      <TableCell className="text-right font-semibold text-emerald-700">
+                        {r.avgMinutes}
+                      </TableCell>
+                      <TableCell className="text-right">{r.minMinutes}</TableCell>
+                      <TableCell className="text-right">{r.maxMinutes}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
+// Salary Slips Section - extracted to avoid hooks violation
+const SalarySlipsSection = ({
+  salaryTotalThisMonth,
+  salarySlipsFiltered,
+  salarySlipsPaginated,
+  salaryTableSearch,
+  salaryTableMonthFilter,
+  salaryTablePage,
+  SALARY_TABLE_PAGE_SIZE,
+  onOpenGenerateDialog,
+  onOpenGenerateAgain,
+  setSalaryTableSearch,
+  setSalaryTablePage,
+  setSalaryTableMonthFilter,
+  branchForm,
+  branch,
+  cafeLogo,
+  formatINR,
+  buildPayslipHtmlFromSlip,
+  getSalarySlipMonthColor,
+}: {
+  salaryTotalThisMonth: number;
+  salarySlipsFiltered: any[];
+  salarySlipsPaginated: any[];
+  salaryTableSearch: string;
+  salaryTableMonthFilter: string;
+  salaryTablePage: number;
+  SALARY_TABLE_PAGE_SIZE: number;
+  onOpenGenerateDialog: () => void;
+  onOpenGenerateAgain: (slip: any) => void;
+  setSalaryTableSearch: (val: string) => void;
+  setSalaryTablePage: (val: number) => void;
+  setSalaryTableMonthFilter: (val: string) => void;
+  branchForm: any;
+  branch: any;
+  cafeLogo: string;
+  formatINR: (amount: number) => string;
+  buildPayslipHtmlFromSlip: (slip: any, opts: any) => string;
+  getSalarySlipMonthColor: (slip: any) => string;
+}) => {
+  const logoUrl =
+    (typeof window !== 'undefined' && window.localStorage.getItem('branch_logo_url')) ||
+    branchForm?.logoUrl ||
+    cafeLogo;
+  const companyNameFromSettings =
+    branchForm?.name ||
+    branch?.name ||
+    (typeof window !== 'undefined' ? window.localStorage.getItem('branch_name') : null) ||
+    'Cafe Chapter 1 Restro Private Limited';
+  const pdfBuildOpts = {
+    logoUrl: String(logoUrl),
+    companyName: companyNameFromSettings,
+    companyAddress: branchForm?.location ?? branch?.location ?? 'Gautam Nagar',
+    companyPincode: branchForm?.pincode || branch?.pincode || '',
+    phone: branchForm?.phone || '',
+  };
+  return (
+    <div className="w-full min-w-0 space-y-6 overflow-hidden">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-2">
+          <IndianRupee className="h-5 w-5 shrink-0 text-emerald-600" />
+          <h2 className="truncate text-xl font-bold">Salary Slips</h2>
+        </div>
+        <Button
+          type="button"
+          onClick={e => {
+            e.preventDefault();
+            e.stopPropagation();
+            onOpenGenerateDialog();
+          }}
+          className="min-h-12 w-full shrink-0 rounded-lg bg-gradient-to-r from-[#064E3B] to-[#047857] font-semibold text-white hover:opacity-90 sm:w-auto"
+        >
+          <IndianRupee className="mr-2 h-5 w-5" />
+          Generate Salary Slip
+        </Button>
+      </div>
+
+      {/* Analytics cards */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Card className="overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-muted-foreground text-sm font-medium">
+                Total Salary Paid This Month
+              </p>
+              <p className="mt-1 text-2xl font-bold text-emerald-700">
+                {formatINR(salaryTotalThisMonth)}
+              </p>
+            </div>
+            <div className="rounded-xl bg-emerald-100 p-3">
+              <IndianRupee className="h-8 w-8 text-emerald-700" />
+            </div>
+          </div>
+        </Card>
+        <Card className="overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-muted-foreground text-sm font-medium">Payslips Generated</p>
+              <p className="mt-1 text-2xl font-bold text-slate-800">
+                {salarySlipsFiltered.length}
+              </p>
+            </div>
+            <div className="rounded-xl bg-slate-100 p-3">
+              <Users className="h-8 w-8 text-slate-600" />
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      <Card className="w-full min-w-0 overflow-hidden rounded-xl border border-slate-200 shadow-sm">
+        <CardHeader className="px-3 sm:px-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <CardTitle className="text-lg">Generated Slips</CardTitle>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <Input
+                placeholder="Search employee..."
+                value={salaryTableSearch}
+                onChange={e => {
+                  setSalaryTableSearch(e.target.value);
+                  setSalaryTablePage(0);
+                }}
+                className="h-11 w-full min-w-0 rounded-lg border border-slate-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 sm:w-48"
+              />
+              <input
+                type="month"
+                value={salaryTableMonthFilter}
+                onChange={e => {
+                  setSalaryTableMonthFilter(e.target.value);
+                  setSalaryTablePage(0);
+                }}
+                className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm sm:w-40"
+                title="Filter by month"
+              />
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="-mx-1 overflow-x-auto px-1">
+            <Table className="min-w-[600px]">
+              <TableHeader>
+                <TableRow className="bg-slate-50">
+                  <TableHead className="whitespace-nowrap">Slip No.</TableHead>
+                  <TableHead className="whitespace-nowrap">Employee</TableHead>
+                  <TableHead className="whitespace-nowrap">Month</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Net Salary</TableHead>
+                  <TableHead className="whitespace-nowrap">Status</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {salarySlipsPaginated.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-muted-foreground py-8 text-center">
+                      {salarySlipsFiltered.length === 0
+                        ? 'No salary slips yet. Generate one above.'
+                        : 'No results for this search or filter.'}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  salarySlipsPaginated.map(slip => {
+                    const rowBg = getSalarySlipMonthColor(slip);
+                    return (
+                      <TableRow
+                        key={slip.id}
+                        className="hover:opacity-95"
+                        style={{ backgroundColor: rowBg }}
+                      >
+                        <TableCell className="font-mono text-xs">
+                          {slip.salaryNumber ?? '—'}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {slip.employee?.name ?? '—'}
+                        </TableCell>
+                        <TableCell>
+                          {slip.month} {slip.year}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {formatINR(slip.netSalary)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            className={
+                              slip.status === 'Sent'
+                                ? 'border-emerald-200 bg-emerald-100 text-emerald-800'
+                                : 'bg-slate-100 text-slate-800'
+                            }
+                          >
+                            {slip.status ?? 'Paid'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-9 rounded-lg border-slate-300"
+                              >
+                                <MoreHorizontal className="mr-1 h-4 w-4" /> Actions
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-48">
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  const html = buildPayslipHtmlFromSlip(slip, pdfBuildOpts);
+                                  const w = window.open('', '_blank');
+                                  if (w) {
+                                    w.document.write(html);
+                                    w.document.close();
+                                    w.focus();
+                                  }
+                                }}
+                              >
+                                <Eye className="mr-2 h-4 w-4" /> View PDF
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => onOpenGenerateAgain(slip)}>
+                                <RefreshCw className="mr-2 h-4 w-4" /> Generate Again
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  const html = buildPayslipHtmlFromSlip(slip, pdfBuildOpts);
+                                  const w = window.open('', '_blank');
+                                  if (w) {
+                                    w.document.write(html);
+                                    w.document.close();
+                                    w.focus();
+                                    setTimeout(() => {
+                                      w.print();
+                                      w.close();
+                                    }, 400);
+                                  }
+                                }}
+                              >
+                                <Download className="mr-2 h-4 w-4" /> Download PDF
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+          {salarySlipsFiltered.length > SALARY_TABLE_PAGE_SIZE && (
+            <div className="mt-4 flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-muted-foreground order-2 text-center text-sm sm:order-1 sm:text-left">
+                Showing {salaryTablePage * SALARY_TABLE_PAGE_SIZE + 1}–
+                {Math.min(
+                  (salaryTablePage + 1) * SALARY_TABLE_PAGE_SIZE,
+                  salarySlipsFiltered.length
+                )}{' '}
+                of {salarySlipsFiltered.length}
+              </p>
+              <div className="order-1 flex justify-center gap-2 sm:order-2 sm:justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 flex-1 rounded-lg sm:flex-initial"
+                  disabled={salaryTablePage === 0}
+                  onClick={() => setSalaryTablePage(p => p - 1)}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 flex-1 rounded-lg sm:flex-initial"
+                  disabled={
+                    (salaryTablePage + 1) * SALARY_TABLE_PAGE_SIZE >= salarySlipsFiltered.length
+                  }
+                  onClick={() => setSalaryTablePage(p => p + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
+// Certificates Section - extracted to avoid hooks violation
+const CertificatesSection = memo(({ certificates, setIsCertificateDialogOpen, toast }: {
+  certificates: any[];
+  setIsCertificateDialogOpen: (val: boolean) => void;
+  toast: any;
+}) => (
+  <div className="w-full min-w-0 space-y-6">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 items-center gap-2">
+        <Award className="h-5 w-5 shrink-0 text-emerald-600" />
+        <h2 className="text-xl font-bold">Employee Certificates</h2>
+      </div>
+      <Button
+        onClick={() => setIsCertificateDialogOpen(true)}
+        className="min-h-12 w-full rounded-lg bg-gradient-to-r from-[#064E3B] to-[#047857] font-semibold text-white hover:opacity-90 sm:w-auto"
+      >
+        <Plus className="mr-2 h-5 w-5" />
+        Generate Certificate
+      </Button>
+    </div>
+    <Card className="w-full min-w-0 overflow-hidden rounded-xl border border-slate-200 shadow-sm">
+      <CardHeader>
+        <CardTitle className="text-lg">Generated Certificates</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="-mx-1 overflow-x-auto px-1">
+          <Table className="min-w-[600px]">
+            <TableHeader>
+              <TableRow className="bg-slate-50">
+                <TableHead className="whitespace-nowrap">Employee</TableHead>
+                <TableHead className="whitespace-nowrap">Certificate Name</TableHead>
+                <TableHead className="whitespace-nowrap">Type</TableHead>
+                <TableHead className="whitespace-nowrap">Issue Date</TableHead>
+                <TableHead className="whitespace-nowrap">Expiry Date</TableHead>
+                <TableHead className="text-right whitespace-nowrap">Download</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {certificates.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-muted-foreground py-8 text-center">
+                    No certificates yet. Generate one above.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                certificates.map(cert => (
+                  <TableRow key={cert.id} className="hover:bg-slate-50/50">
+                    <TableCell className="font-medium">{cert.employee?.name ?? '—'}</TableCell>
+                    <TableCell>{cert.name}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs">
+                        {cert.type}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">{cert.issueDate}</TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {cert.expiryDate || 'N/A'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        size="sm"
+                        className="h-9 rounded-lg bg-gradient-to-r from-[#064E3B] to-[#047857] text-white hover:opacity-90"
+                        onClick={() =>
+                          toast({
+                            title: 'Download',
+                            description: 'Certificate download in next update',
+                          })
+                        }
+                      >
+                        <Download className="mr-1 h-4 w-4" /> PDF
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
+  </div>
+));
+
+// Certificate Dialog - extracted to avoid hooks violation
+const CertificateDialog = ({
+  isCertificateDialogOpen,
+  setIsCertificateDialogOpen,
+  employees,
+  setCertificates,
+  toast,
+}: {
+  isCertificateDialogOpen: boolean;
+  setIsCertificateDialogOpen: (val: boolean) => void;
+  employees: any[];
+  setCertificates: (val: any) => void;
+  toast: any;
+}) => {
+  const [localForm, setLocalForm] = useState({
+    employeeId: 0,
+    name: '',
+    issueDate: new Date().toISOString().split('T')[0],
+    expiryDate: '',
+    type: '',
+  });
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const handleGenerate = async () => {
+    const employee = employees.find(e => e.id === localForm.employeeId);
+    if (!employee) return;
+
+    setIsGenerating(true);
+
+    // Simulate async generation
+    setTimeout(() => {
+      const newCertificate = {
+        id: Date.now(),
+        employee: { name: employee.name },
+        name: localForm.name,
+        type: localForm.type,
+        issueDate: localForm.issueDate,
+        expiryDate: localForm.expiryDate,
+        createdAt: new Date().toISOString(),
+      };
+
+      setCertificates(prev => [...prev, newCertificate]);
+      setIsCertificateDialogOpen(false);
+      setIsGenerating(false);
+
+      toast({
+        title: 'Certificate generated',
+        description: `${localForm.name} for ${employee.name}`,
+      });
+    }, 1000);
+  };
+
+  return (
+    <Dialog open={isCertificateDialogOpen} onOpenChange={setIsCertificateDialogOpen}>
+      <DialogContent
+        className="max-h-[90vh] w-[calc(100vw-1rem)] max-w-md overflow-y-auto p-4 sm:w-[calc(100vw-2rem)] sm:p-6"
+        aria-describedby="certificate-dialog-desc"
+      >
+        <DialogHeader>
+          <DialogTitle>Generate Certificate</DialogTitle>
+          <DialogDescription id="certificate-dialog-desc" className="sr-only">
+            Choose employee, certificate name and type, then set issue and expiry dates.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          <div className="grid gap-2">
+            <Label>Employee</Label>
+            <Select
+              value={String(localForm.employeeId)}
+              onValueChange={v => setLocalForm({ ...localForm, employeeId: Number(v) })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select employee" />
+              </SelectTrigger>
+              <SelectContent>
+                {employees
+                  .filter(e => String(e.status || '').toUpperCase() === 'ACTIVE')
+                  .map(emp => (
+                    <SelectItem key={emp.id} value={String(emp.id)}>
+                      {emp.name}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-2">
+            <Label>Certificate Name</Label>
+            <Input
+              placeholder="e.g., Employee of the Month"
+              value={localForm.name}
+              onChange={e => setLocalForm({ ...localForm, name: e.target.value })}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label>Certificate Type</Label>
+            <Select
+              value={localForm.type}
+              onValueChange={v => setLocalForm({ ...localForm, type: v })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="experience">Experience Certificate</SelectItem>
+                <SelectItem value="completion">Completion Certificate</SelectItem>
+                <SelectItem value="appreciation">Appreciation Certificate</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-2">
+              <Label>Issue Date</Label>
+              <Input
+                type="date"
+                value={localForm.issueDate}
+                onChange={e => setLocalForm({ ...localForm, issueDate: e.target.value })}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Expiry Date (Optional)</Label>
+              <Input
+                type="date"
+                value={localForm.expiryDate}
+                onChange={e => setLocalForm({ ...localForm, expiryDate: e.target.value })}
+              />
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setIsCertificateDialogOpen(false)}>
+            Cancel
+          </Button>
+          <Button onClick={handleGenerate} disabled={isGenerating}>
+            {isGenerating ? (
+              <>
+                <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                Generating...
+              </>
+            ) : (
+              'Generate'
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
 const AdminDashboard = () => {
   const { toast } = useToast();
   const validSectionKeys = [
@@ -5113,7 +6127,11 @@ const AdminDashboard = () => {
       });
       if (res.ok) {
         const data = await res.json();
-        setShifts(data.shifts);
+        // Deduplicate shifts by ID to prevent duplicate entries
+        const uniqueShifts = Array.from(
+          new Map(data.shifts.map((shift: any) => [shift.id, shift])).values()
+        );
+        setShifts(uniqueShifts);
         setHoursSummary(data.summary);
         setDailyStats(data.dailyStats);
       }
@@ -6364,12 +7382,50 @@ const AdminDashboard = () => {
                 <Timer className="h-5 w-5 text-emerald-600" />
                 <CardTitle className="text-lg">Currently on Shift</CardTitle>
               </div>
-              <Badge
-                variant="outline"
-                className="border-emerald-200 bg-emerald-50 text-emerald-700"
-              >
-                {activeShiftsNow.length} active
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge
+                  variant="outline"
+                  className="border-emerald-200 bg-emerald-50 text-emerald-700"
+                >
+                  {activeShiftsNow.length} active
+                </Badge>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(`${apiBase}/shift/auto-close`, {
+                        method: 'POST',
+                        headers: { Authorization: `Bearer ${token}` },
+                      });
+                      if (res.ok) {
+                        const data = await res.json();
+                        toast({
+                          title: 'Auto-close completed',
+                          description: data.message,
+                        });
+                        // Reload active shifts
+                        loadActiveShifts();
+                      } else {
+                        toast({
+                          title: 'Failed',
+                          description: 'Failed to run auto-close',
+                          variant: 'destructive',
+                        });
+                      }
+                    } catch (e) {
+                      toast({
+                        title: 'Error',
+                        description: 'Failed to run auto-close',
+                        variant: 'destructive',
+                      });
+                    }
+                  }}
+                  className="h-8 text-xs"
+                >
+                  Auto-Close Old Shifts
+                </Button>
+              </div>
             </div>
             <CardDescription>Employees with an active shift right now</CardDescription>
           </CardHeader>
@@ -9699,481 +10755,16 @@ const AdminDashboard = () => {
     setSalarySlipPrefill(slip);
     setIsSalarySlipDialogOpen(true);
   }, []);
-  const SalarySlipsSection = (sectionProps: {
-    onOpenGenerateDialog: () => void;
-    onOpenGenerateAgain: (slip: any) => void;
-  }) => {
-    const { onOpenGenerateDialog, onOpenGenerateAgain } = sectionProps;
-    const logoUrl =
-      (typeof window !== 'undefined' && window.localStorage.getItem('branch_logo_url')) ||
-      branchForm?.logoUrl ||
-      cafeLogo;
-    const companyNameFromSettings =
-      branchForm?.name ||
-      branch?.name ||
-      (typeof window !== 'undefined' ? window.localStorage.getItem('branch_name') : null) ||
-      'Cafe Chapter 1 Restro Private Limited';
-    const pdfBuildOpts = {
-      logoUrl: String(logoUrl),
-      companyName: companyNameFromSettings,
-      companyAddress: branchForm?.location ?? branch?.location ?? 'Gautam Nagar',
-      companyPincode: branchForm?.pincode || branch?.pincode || '',
-      phone: branchForm?.phone || '',
-    };
-    return (
-      <div className="w-full min-w-0 space-y-6 overflow-hidden">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 items-center gap-2">
-            <IndianRupee className="h-5 w-5 shrink-0 text-emerald-600" />
-            <h2 className="truncate text-xl font-bold">Salary Slips</h2>
-          </div>
-          <Button
-            type="button"
-            onClick={e => {
-              e.preventDefault();
-              e.stopPropagation();
-              onOpenGenerateDialog();
-            }}
-            className="min-h-12 w-full shrink-0 rounded-lg bg-gradient-to-r from-[#064E3B] to-[#047857] font-semibold text-white hover:opacity-90 sm:w-auto"
-          >
-            <IndianRupee className="mr-2 h-5 w-5" />
-            Generate Salary Slip
-          </Button>
-        </div>
-
-        {/* Analytics cards */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Card className="overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-muted-foreground text-sm font-medium">
-                  Total Salary Paid This Month
-                </p>
-                <p className="mt-1 text-2xl font-bold text-emerald-700">
-                  {formatINR(salaryTotalThisMonth)}
-                </p>
-              </div>
-              <div className="rounded-xl bg-emerald-100 p-3">
-                <IndianRupee className="h-8 w-8 text-emerald-700" />
-              </div>
-            </div>
-          </Card>
-          <Card className="overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-muted-foreground text-sm font-medium">Payslips Generated</p>
-                <p className="mt-1 text-2xl font-bold text-slate-800">
-                  {salarySlipsFiltered.length}
-                </p>
-              </div>
-              <div className="rounded-xl bg-slate-100 p-3">
-                <Users className="h-8 w-8 text-slate-600" />
-              </div>
-            </div>
-          </Card>
-        </div>
-
-        <Card className="w-full min-w-0 overflow-hidden rounded-xl border border-slate-200 shadow-sm">
-          <CardHeader className="px-3 sm:px-6">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <CardTitle className="text-lg">Generated Slips</CardTitle>
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <Input
-                  placeholder="Search employee..."
-                  value={salaryTableSearch}
-                  onChange={e => {
-                    setSalaryTableSearch(e.target.value);
-                    setSalaryTablePage(0);
-                  }}
-                  className="h-11 w-full min-w-0 rounded-lg border border-slate-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 sm:w-48"
-                />
-                <input
-                  type="month"
-                  value={salaryTableMonthFilter}
-                  onChange={e => {
-                    setSalaryTableMonthFilter(e.target.value);
-                    setSalaryTablePage(0);
-                  }}
-                  className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm sm:w-40"
-                  title="Filter by month"
-                />
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="-mx-1 overflow-x-auto px-1">
-              <Table className="min-w-[600px]">
-                <TableHeader>
-                  <TableRow className="bg-slate-50">
-                    <TableHead className="whitespace-nowrap">Slip No.</TableHead>
-                    <TableHead className="whitespace-nowrap">Employee</TableHead>
-                    <TableHead className="whitespace-nowrap">Month</TableHead>
-                    <TableHead className="text-right whitespace-nowrap">Net Salary</TableHead>
-                    <TableHead className="whitespace-nowrap">Status</TableHead>
-                    <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {salarySlipsPaginated.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-muted-foreground py-8 text-center">
-                        {salarySlipsFiltered.length === 0
-                          ? 'No salary slips yet. Generate one above.'
-                          : 'No results for this search or filter.'}
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    salarySlipsPaginated.map(slip => {
-                      const rowBg = getSalarySlipMonthColor(slip);
-                      return (
-                        <TableRow
-                          key={slip.id}
-                          className="hover:opacity-95"
-                          style={{ backgroundColor: rowBg }}
-                        >
-                          <TableCell className="font-mono text-xs">
-                            {slip.salaryNumber ?? '—'}
-                          </TableCell>
-                          <TableCell className="font-medium">
-                            {slip.employee?.name ?? '—'}
-                          </TableCell>
-                          <TableCell>
-                            {slip.month} {slip.year}
-                          </TableCell>
-                          <TableCell className="text-right font-medium">
-                            {formatINR(slip.netSalary)}
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              className={
-                                slip.status === 'Sent'
-                                  ? 'border-emerald-200 bg-emerald-100 text-emerald-800'
-                                  : 'bg-slate-100 text-slate-800'
-                              }
-                            >
-                              {slip.status ?? 'Paid'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-9 rounded-lg border-slate-300"
-                                >
-                                  <MoreHorizontal className="mr-1 h-4 w-4" /> Actions
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-48">
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    const html = buildPayslipHtmlFromSlip(slip, pdfBuildOpts);
-                                    const w = window.open('', '_blank');
-                                    if (w) {
-                                      w.document.write(html);
-                                      w.document.close();
-                                      w.focus();
-                                    }
-                                  }}
-                                >
-                                  <Eye className="mr-2 h-4 w-4" /> View PDF
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => onOpenGenerateAgain(slip)}>
-                                  <RefreshCw className="mr-2 h-4 w-4" /> Generate Again
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    const html = buildPayslipHtmlFromSlip(slip, pdfBuildOpts);
-                                    const w = window.open('', '_blank');
-                                    if (w) {
-                                      w.document.write(html);
-                                      w.document.close();
-                                      w.focus();
-                                      setTimeout(() => {
-                                        w.print();
-                                        w.close();
-                                      }, 400);
-                                    }
-                                  }}
-                                >
-                                  <Download className="mr-2 h-4 w-4" /> Download PDF
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-            {salarySlipsFiltered.length > SALARY_TABLE_PAGE_SIZE && (
-              <div className="mt-4 flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-muted-foreground order-2 text-center text-sm sm:order-1 sm:text-left">
-                  Showing {salaryTablePage * SALARY_TABLE_PAGE_SIZE + 1}–
-                  {Math.min(
-                    (salaryTablePage + 1) * SALARY_TABLE_PAGE_SIZE,
-                    salarySlipsFiltered.length
-                  )}{' '}
-                  of {salarySlipsFiltered.length}
-                </p>
-                <div className="order-1 flex justify-center gap-2 sm:order-2 sm:justify-end">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-9 flex-1 rounded-lg sm:flex-initial"
-                    disabled={salaryTablePage === 0}
-                    onClick={() => setSalaryTablePage(p => p - 1)}
-                  >
-                    Previous
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-9 flex-1 rounded-lg sm:flex-initial"
-                    disabled={
-                      (salaryTablePage + 1) * SALARY_TABLE_PAGE_SIZE >= salarySlipsFiltered.length
-                    }
-                    onClick={() => setSalaryTablePage(p => p + 1)}
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    );
-  };
-
-  // 10. CERTIFICATES SECTION (same layout as Salary Slips)
-  const CertificatesSection = memo(() => (
-    <div className="w-full min-w-0 space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-center gap-2">
-          <Award className="h-5 w-5 shrink-0 text-emerald-600" />
-          <h2 className="text-xl font-bold">Employee Certificates</h2>
-        </div>
-        <Button
-          onClick={() => setIsCertificateDialogOpen(true)}
-          className="min-h-12 w-full rounded-lg bg-gradient-to-r from-[#064E3B] to-[#047857] font-semibold text-white hover:opacity-90 sm:w-auto"
-        >
-          <Plus className="mr-2 h-5 w-5" />
-          Generate Certificate
-        </Button>
-      </div>
-      <Card className="w-full min-w-0 overflow-hidden rounded-xl border border-slate-200 shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-lg">Generated Certificates</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="-mx-1 overflow-x-auto px-1">
-            <Table className="min-w-[600px]">
-              <TableHeader>
-                <TableRow className="bg-slate-50">
-                  <TableHead className="whitespace-nowrap">Employee</TableHead>
-                  <TableHead className="whitespace-nowrap">Certificate Name</TableHead>
-                  <TableHead className="whitespace-nowrap">Type</TableHead>
-                  <TableHead className="whitespace-nowrap">Issue Date</TableHead>
-                  <TableHead className="whitespace-nowrap">Expiry Date</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">Download</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {certificates.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-muted-foreground py-8 text-center">
-                      No certificates yet. Generate one above.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  certificates.map(cert => (
-                    <TableRow key={cert.id} className="hover:bg-slate-50/50">
-                      <TableCell className="font-medium">{cert.employee?.name ?? '—'}</TableCell>
-                      <TableCell>{cert.name}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-xs">
-                          {cert.type}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">{cert.issueDate}</TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {cert.expiryDate || 'N/A'}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          size="sm"
-                          className="h-9 rounded-lg bg-gradient-to-r from-[#064E3B] to-[#047857] text-white hover:opacity-90"
-                          onClick={() =>
-                            toast({
-                              title: 'Download',
-                              description: 'Certificate download in next update',
-                            })
-                          }
-                        >
-                          <Download className="mr-1 h-4 w-4" /> PDF
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  ));
-
-  // Certificate Dialog with local state to prevent re-renders
-  const CertificateDialog = () => {
-    const [localForm, setLocalForm] = useState({
-      employeeId: 0,
-      name: '',
-      issueDate: new Date().toISOString().split('T')[0],
-      expiryDate: '',
-      type: '',
-    });
-    const [isGenerating, setIsGenerating] = useState(false);
-
-    const handleGenerate = async () => {
-      const employee = employees.find(e => e.id === localForm.employeeId);
-      if (!employee) return;
-
-      setIsGenerating(true);
-
-      // Simulate async generation
-      setTimeout(() => {
-        const newCertificate = {
-          id: Date.now(),
-          employee: { name: employee.name },
-          name: localForm.name,
-          type: localForm.type,
-          issueDate: localForm.issueDate,
-          expiryDate: localForm.expiryDate,
-          createdAt: new Date().toISOString(),
-        };
-
-        setCertificates(prev => [...prev, newCertificate]);
-        setIsCertificateDialogOpen(false);
-        setIsGenerating(false);
-
-        toast({
-          title: 'Certificate generated',
-          description: `${localForm.name} for ${employee.name}`,
-        });
-      }, 1000);
-    };
-
-    return (
-      <Dialog open={isCertificateDialogOpen} onOpenChange={setIsCertificateDialogOpen}>
-        <DialogContent
-          className="max-h-[90vh] w-[calc(100vw-1rem)] max-w-md overflow-y-auto p-4 sm:w-[calc(100vw-2rem)] sm:p-6"
-          aria-describedby="certificate-dialog-desc"
-        >
-          <DialogHeader>
-            <DialogTitle>Generate Certificate</DialogTitle>
-            <DialogDescription id="certificate-dialog-desc" className="sr-only">
-              Choose employee, certificate name and type, then set issue and expiry dates.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label>Employee</Label>
-              <Select
-                value={String(localForm.employeeId)}
-                onValueChange={v => setLocalForm({ ...localForm, employeeId: Number(v) })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select employee" />
-                </SelectTrigger>
-                <SelectContent>
-                  {employees
-                    .filter(e => String(e.status || '').toUpperCase() === 'ACTIVE')
-                    .map(emp => (
-                      <SelectItem key={emp.id} value={String(emp.id)}>
-                        {emp.name}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label>Certificate Name</Label>
-              <Input
-                placeholder="e.g., Employee of the Month"
-                value={localForm.name}
-                onChange={e => setLocalForm({ ...localForm, name: e.target.value })}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label>Certificate Type</Label>
-              <Select
-                value={localForm.type}
-                onValueChange={v => setLocalForm({ ...localForm, type: v })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="experience">Experience Certificate</SelectItem>
-                  <SelectItem value="completion">Completion Certificate</SelectItem>
-                  <SelectItem value="appreciation">Appreciation Certificate</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="grid gap-2">
-                <Label>Issue Date</Label>
-                <Input
-                  type="date"
-                  value={localForm.issueDate}
-                  onChange={e => setLocalForm({ ...localForm, issueDate: e.target.value })}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label>Expiry Date (Optional)</Label>
-                <Input
-                  type="date"
-                  value={localForm.expiryDate}
-                  onChange={e => setLocalForm({ ...localForm, expiryDate: e.target.value })}
-                />
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCertificateDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleGenerate} disabled={isGenerating}>
-              {isGenerating ? (
-                <>
-                  <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  Generating...
-                </>
-              ) : (
-                'Generate'
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    );
-  };
 
   const currentSection = validSectionKeys.includes(activeSection) ? activeSection : 'overview';
 
-  // Memoize section body so cards/lists do NOT re-render when only clock or unrelated state updates
-  const mainSectionContent = useMemo(() => {
+  // Render section content - components manage their own memoization internally
+  const mainSectionContent = (() => {
     switch (currentSection) {
       case 'overview':
         return OverviewSection();
       case 'performance':
-        return PerformanceSection();
+        return <PerformanceSection token={token} apiBase={apiBase} activeSection={activeSection} />;
       case 'menu':
         return MenuSection();
       case 'happy-hours':
@@ -10201,12 +10792,28 @@ const AdminDashboard = () => {
       case 'salary-slips':
         return (
           <SalarySlipsSection
+            salaryTotalThisMonth={salaryTotalThisMonth}
+            salarySlipsFiltered={salarySlipsFiltered}
+            salarySlipsPaginated={salarySlipsPaginated}
+            salaryTableSearch={salaryTableSearch}
+            salaryTableMonthFilter={salaryTableMonthFilter}
+            salaryTablePage={salaryTablePage}
+            SALARY_TABLE_PAGE_SIZE={SALARY_TABLE_PAGE_SIZE}
             onOpenGenerateDialog={handleOpenGenerateDialog}
             onOpenGenerateAgain={handleOpenGenerateAgain}
+            setSalaryTableSearch={setSalaryTableSearch}
+            setSalaryTablePage={setSalaryTablePage}
+            setSalaryTableMonthFilter={setSalaryTableMonthFilter}
+            branchForm={branchForm}
+            branch={branch}
+            cafeLogo={cafeLogo}
+            formatINR={formatINR}
+            buildPayslipHtmlFromSlip={buildPayslipHtmlFromSlip}
+            getSalarySlipMonthColor={getSalarySlipMonthColor}
           />
         );
       case 'certificates':
-        return <CertificatesSection />;
+        return <CertificatesSection certificates={certificates} setIsCertificateDialogOpen={setIsCertificateDialogOpen} toast={toast} />;
       case 'settings':
         return (
           <SettingsSectionContent
@@ -10238,31 +10845,7 @@ const AdminDashboard = () => {
       default:
         return OverviewSection();
     }
-  }, [
-    currentSection,
-    ordersByTable,
-    handleOpenOrderDialog,
-    performanceSummary,
-    monthlyRevenueSnapshots,
-    revenueExpandedYearMonth,
-    branches,
-    branchesListUnavailable,
-    leaveRequests,
-    leaveLoading,
-    leaveStatusFilter,
-    leaveEmployeeFilter,
-    leaveDateFrom,
-    leaveDateTo,
-    leaveRemarksById,
-    leaveActionLoadingId,
-    loadLeaves,
-    updateLeaveStatus,
-    employees,
-    autoRefreshEnabled,
-    monthlyTargetInput,
-    monthlyTargetInfo,
-    savingMonthlyTarget,
-  ]);
+  })();
 
   if (!ready || !token) {
     return (
@@ -11166,7 +11749,13 @@ const AdminDashboard = () => {
         prefillSlip={salarySlipPrefill}
         token={token}
       />
-      <CertificateDialog />
+      <CertificateDialog
+        isCertificateDialogOpen={isCertificateDialogOpen}
+        setIsCertificateDialogOpen={setIsCertificateDialogOpen}
+        employees={employees}
+        setCertificates={setCertificates}
+        toast={toast}
+      />
     </DashboardShell>
   );
 };

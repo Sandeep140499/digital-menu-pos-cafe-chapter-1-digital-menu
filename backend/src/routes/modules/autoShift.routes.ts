@@ -40,28 +40,38 @@ autoShiftRouter.post('/start-if-needed', authenticate, requireRole('EMPLOYEE'), 
     
     // Check if already completed shift today
     const timeZone = process.env.TZ || 'Asia/Kolkata';
-    const { dateKey: todayBusinessKey } = getBusinessDayRange({
+    const { dateKey: todayBusinessKey, start: businessDayStart } = getBusinessDayRange({
       date: new Date(),
       boundaryHour: 4,
       timeZone,
     });
     
-    const completedToday = await prisma.employeeShift.findFirst({
-      where: { 
-        employeeId, 
-        shiftEnd: { not: null },
+    // Check for ANY shift (active or ended) started today
+    const anyShiftToday = await prisma.employeeShift.findFirst({
+      where: {
+        employeeId,
         shiftStart: {
-          gte: new Date(new Date().setHours(4, 0, 0, 0)) // Today 4 AM
-        }
+          gte: businessDayStart,
+        },
       },
-      select: { id: true }
+      select: { id: true, shiftStart: true, shiftEnd: true },
     });
     
-    if (completedToday) {
-      return res.status(400).json({ 
-        message: 'Shift already completed today. Cannot start new shift until next business day.',
-        shiftStarted: false 
-      });
+    if (anyShiftToday) {
+      if (!anyShiftToday.shiftEnd) {
+        // Active shift exists
+        return res.json({ 
+          message: 'Shift already active', 
+          shiftStarted: false,
+          shiftId: anyShiftToday.id 
+        });
+      } else {
+        // Shift already completed today
+        return res.status(400).json({ 
+          message: 'Shift already completed today. Cannot start new shift until next business day.',
+          shiftStarted: false 
+        });
+      }
     }
     
     // Auto-start shift

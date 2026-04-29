@@ -101,6 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const bootstrapped = useRef(false);
   const sessionGeneration = useRef(0);
   const lastFocusRefreshAtRef = useRef(0);
+  const last429ErrorAtRef = useRef(0);
 
   const setSession = useCallback((t: string | null, r: AuthRole | null) => {
     if (typeof window !== 'undefined') {
@@ -140,6 +141,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refreshing.current = (async () => {
       const genAtStart = sessionGeneration.current;
 
+      // Check if we recently got a 429 error and back off
+      const now = Date.now();
+      const timeSinceLast429 = now - last429ErrorAtRef.current;
+      if (timeSinceLast429 < 60000) { // 1 minute backoff
+        console.log(`Backing off refresh due to recent 429 error (${Math.round((60000 - timeSinceLast429) / 1000)}s remaining)`);
+        return null;
+      }
+
       if (!readBrowserCookie('csrf')) {
         invalidateSessionIfRefreshCannotRecover(genAtStart);
         return null;
@@ -150,6 +159,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signal: AbortSignal.timeout(20_000),
       });
       if (!res.ok) {
+        if (res.status === 429) {
+          // Rate limited - don't log out, just back off
+          last429ErrorAtRef.current = now;
+          console.warn('Rate limited on refresh (429), backing off for 1 minute');
+          return null;
+        }
         if (res.status === 401 || res.status === 403) {
           invalidateSessionIfRefreshCannotRecover(genAtStart);
         }
@@ -193,9 +208,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!res.ok) {
         const data: unknown = await res.json().catch(() => ({}));
         const msg =
-          res.status === 403
-            ? extractMessage(data) || 'Please verify your email before logging in.'
-            : extractMessage(data) || 'Login failed';
+          res.status === 429
+            ? 'Too many login attempts. Please wait a few minutes and try again.'
+            : res.status === 403
+              ? extractMessage(data) || 'Please verify your email before logging in.'
+              : extractMessage(data) || 'Login failed';
         throw new Error(msg);
       }
       const data = (await res.json()) as { accessToken: string; role: AuthRole };

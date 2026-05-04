@@ -11,6 +11,7 @@ import EmployeeDashboard from './pages/employee/EmployeeDashboard';
 import EmployeeVerifyEmail from './pages/employee/EmployeeVerifyEmail';
 import EmployeeConfirmEmail from './pages/employee/EmployeeConfirmEmail';
 import ResetPassword from './pages/common/ResetPassword';
+import PrivacyPolicy from './pages/common/PrivacyPolicy';
 import { GlobalLoadingProvider } from './components/GlobalLoadingProvider';
 import { AuthProvider } from '@/auth/AuthProvider';
 import { RequireAuth } from '@/auth/RequireAuth';
@@ -47,6 +48,7 @@ const App = () => (
               <Route path="/employee/verify-email" element={<EmployeeVerifyEmail />} />
               <Route path="/employee/confirm-email" element={<EmployeeConfirmEmail />} />
               <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/privacy-policy" element={<PrivacyPolicy />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

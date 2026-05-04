@@ -141,12 +141,14 @@ function OrderCartDialog({
   const [customerMobile, setCustomerMobile] = useState('');
   const [tableNumber, setTableNumber] = useState('');
   const [orderType, setOrderType] = useState<'DINE_IN' | 'TAKE_AWAY'>('DINE_IN');
+  const [privacyConsent, setPrivacyConsent] = useState(false);
 
   useEffect(() => {
     if (open) {
       setCustomerName(lastCustomerName || '');
       setCustomerMobile(lastCustomerMobile || '');
       setOrderType('DINE_IN');
+      setPrivacyConsent(false);
     }
   }, [open, lastCustomerName, lastCustomerMobile]);
 
@@ -242,8 +244,32 @@ function OrderCartDialog({
                 placeholder="10-digit mobile number"
                 className="w-full rounded-md border px-2 py-1 text-sm focus:ring-2 focus:ring-emerald-600 focus:outline-none"
               />
-              <span className="text-muted-foreground text-[10px]">Mobile number is optional</span>
+              <span className="text-muted-foreground text-[10px]">
+                Optional. Used only to notify you when your order is ready. We do not use it for marketing.
+              </span>
             </label>
+            {customerMobile.replace(/\D/g, '').length > 0 && (
+              <label className="flex items-start gap-2 text-[11px] text-stone-600">
+                <input
+                  type="checkbox"
+                  checked={privacyConsent}
+                  onChange={e => setPrivacyConsent(e.target.checked)}
+                  className="mt-0.5 h-3.5 w-3.5 accent-emerald-600"
+                />
+                <span>
+                  I consent to sharing my mobile number for order-related communication only.
+                  <a
+                    href="/privacy-policy"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ml-1 font-semibold text-emerald-700 underline"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    Privacy Policy
+                  </a>
+                </span>
+              </label>
+            )}
             {/* Table number — only shown for Dine In */}
             {orderType === 'DINE_IN' && (
               <label className="flex flex-col gap-1">
@@ -289,7 +315,8 @@ function OrderCartDialog({
                 !cart.length ||
                 isSubmittingOrder ||
                 !customerName.trim() ||
-                !/^\d$/.test(tableNumber.trim())
+                !/^\d$/.test(tableNumber.trim()) ||
+                (customerMobile.replace(/\D/g, '').length > 0 && !privacyConsent)
               }
               className="min-h-[48px] bg-emerald-700 text-sm font-bold text-white hover:bg-emerald-800 disabled:opacity-50"
               onClick={() => {
@@ -314,7 +341,11 @@ function OrderCartDialog({
             <Button
               type="button"
               disabled={
-                !checkoutEnabled || !cart.length || isSubmittingOrder || !customerName.trim()
+                !checkoutEnabled ||
+                !cart.length ||
+                isSubmittingOrder ||
+                !customerName.trim() ||
+                (customerMobile.replace(/\D/g, '').length > 0 && !privacyConsent)
               }
               className="min-h-[48px] border-2 border-emerald-700 bg-white text-sm font-bold text-emerald-800 hover:bg-emerald-50 disabled:opacity-50"
               onClick={() => {
@@ -1861,6 +1892,15 @@ const Index = () => {
                 >
                   Feel the taste
                 </motion.p>
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.45, ease: 'easeOut', delay: 0.1 }}
+                  className="mt-1 text-center text-[10px] text-white/70 sm:text-xs"
+                >
+                  <p className="font-semibold">Cafe Chapter 1 Restaurant Pvt. Ltd.</p>
+                  <p>Green Park, Gautam Nagar, New Delhi | +91 7800327061</p>
+                </motion.div>
               </div>
 
               {/* Touch-friendly: 44px min height for thumbs on phones */}
@@ -2415,7 +2455,17 @@ const Index = () => {
           {/* Footer */}
           <div className="py-8 text-center text-olive-700">
             <p className="text-lg font-light">Scan QR code for quick access to our digital menu</p>
-            <p className="mt-2 text-sm">Call us: +91 7800327061</p>
+            <p className="mt-2 text-sm font-semibold">Cafe Chapter 1 Restaurant Pvt. Ltd.</p>
+            <p className="text-sm">Green Park, Gautam Nagar, New Delhi</p>
+            <p className="mt-1 text-sm">Call us: +91 7800327061</p>
+            <a
+              href="/privacy-policy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 inline-block text-sm font-semibold text-emerald-700 underline hover:text-emerald-800"
+            >
+              Privacy Policy
+            </a>
           </div>
         </div>
       )}

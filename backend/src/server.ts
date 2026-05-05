@@ -298,7 +298,7 @@ app.get('/api/docs', (_req, res) => {
 // switch to a shared store (Redis). In-memory is still useful for single instance or per-worker protection.
 const apiLimiter = rateLimit({
   windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS || 60_000) || 60_000,
-  limit: Number(process.env.RATE_LIMIT_MAX || 60) || 60, // requests per window per IP
+  limit: Number(process.env.RATE_LIMIT_MAX || 120) || 120, // requests per window per IP
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later.' },

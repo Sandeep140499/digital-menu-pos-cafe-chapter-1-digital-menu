@@ -5216,7 +5216,7 @@ const AdminDashboard = () => {
     s.on('connect', () => {
       try {
         // Only refresh on Overview and when allowed by existing toggle.
-        if (!isOrderDialogOpenRef.current && autoRefreshEnabled) {
+        if (!isOrderDialogOpenRef.current && autoRefreshEnabled && activeSection === 'overview') {
           // Background refresh: do not block the UI (no full-screen overlay / loading flag).
           void loadDashboardData({ background: true });
           setNewOrdersBadge(0);
@@ -5237,19 +5237,53 @@ const AdminDashboard = () => {
     };
   }, [activeSection, ready, toast, token, autoRefreshEnabled]);
 
+  // Lightweight shared-data loader: fetches only branches + employees (needed by sidebar/dropdowns).
+  // Does NOT fetch orders, menu, salary slips, etc. — those load in section-specific effects.
+  const loadSharedData = async () => {
+    if (!tokenRef.current) { stopGlobalLoading(); return; }
+    try {
+      const [branchesRes, empRes] = await Promise.allSettled([
+        fetchWithTimeoutRetryAuthed(`${apiBase}/branches`, { timeout: API_TIMEOUT_MS }),
+        fetchWithTimeoutRetryAuthed(`${apiBase}/employees`, { timeout: API_TIMEOUT_MS }),
+      ]);
+      const parseBranchesPayload = (raw: unknown) =>
+        Array.isArray(raw) ? raw
+          : Array.isArray((raw as any)?.branches) ? (raw as any).branches
+          : Array.isArray((raw as any)?.data) ? (raw as any).data : [];
+      if (branchesRes.status === 'fulfilled' && branchesRes.value.ok) {
+        const branchList = parseBranchesPayload(await branchesRes.value.json());
+        setBranches(branchList);
+        setBranchesListUnavailable(false);
+      }
+      if (empRes.status === 'fulfilled' && empRes.value.ok) {
+        const empData = await empRes.value.json();
+        const employeeList = Array.isArray(empData) ? empData
+          : Array.isArray((empData as any)?.data) ? (empData as any).data
+          : Array.isArray((empData as any)?.employees) ? (empData as any).employees : [];
+        setEmployees(employeeList);
+      }
+    } catch { /* non-fatal */ }
+  };
+
   useEffect(() => {
     if (!token || !ready) return;
     if (isOrderDialogOpen) return;
-    // Overview: full refresh + reset new-order badge.
+    // Overview: full data refresh + reset new-order badge.
     if (activeSection === 'overview') {
       loadDashboardData();
       setNewOrdersBadge(0);
       return;
     }
-    // Any other saved section (menu, orders, …) still needs the first bulk load or the shell
-    // stays on loading forever (loading=true, hasLoadedOnce=false).
+    // For non-overview sections: do a lightweight shared-data load once so the shell
+    // (sidebar employee count, branch dropdowns) doesn't stay empty.
+    // Section-specific useEffect hooks handle their own data loading.
     if (!hasLoadedOnce) {
-      void loadDashboardData();
+      setLoading(true);
+      loadSharedData().finally(() => {
+        setLoading(false);
+        setHasLoadedOnce(true);
+        stopGlobalLoading();
+      });
     }
   }, [token, ready, isOrderDialogOpen, activeSection, autoRefreshEnabled, hasLoadedOnce]);
 
@@ -5417,7 +5451,7 @@ const AdminDashboard = () => {
         // Transient 503/timeouts must not wipe the list — branches may still exist in the DB.
         setBranchesListUnavailable(true);
         try {
-          const retry = await fetchWithTimeoutRetry(`${apiBase}/branches`, fetchOpts);
+          const retry = await fetchWithTimeoutRetryAuthed(`${apiBase}/branches`, { timeout: API_TIMEOUT_MS });
           if (retry.ok) {
             const branchList = parseBranchesPayload(await retry.json());
             setBranches(branchList);
@@ -5719,7 +5753,13 @@ const AdminDashboard = () => {
           highlightAsNewLaunch: true,
         });
         setIsItemDialogOpen(false);
-        loadDashboardData();
+        // Reload menu categories only, not all dashboard data
+        try {
+          const bid = Number((branch as { id?: number })?.id ?? (branches[0] as { id?: number })?.id);
+          const murl = Number.isFinite(bid) && bid > 0 ? `${apiBase}/menu/admin?branchId=${bid}` : `${apiBase}/menu/admin`;
+          const mres = await fetchWithTimeoutRetryAuthed(murl, { timeout: API_TIMEOUT_MS });
+          if (mres.ok) { const md = await mres.json(); if (Array.isArray(md)) setCategories(md); }
+        } catch { /* ignore */ }
         toast({ title: 'Success', description: 'Menu item created' });
         if (data.broadcast?.mobileCount > 0) {
           toast({
@@ -5803,7 +5843,7 @@ const AdminDashboard = () => {
         toast({ title: 'Success', description: 'Menu item updated' });
         setEditingItem(null);
         setIsItemDialogOpen(false);
-        void loadDashboardData({ background: true });
+        // Menu item updated — categories already patched inline above via mergeMenuItemFromServerIntoCategories
       } else {
         const description = await readApiErrorMessage(res);
         toast({
@@ -5839,7 +5879,13 @@ const AdminDashboard = () => {
       });
       if (res.ok) {
         toast({ title: 'Removed', description: 'This item no longer appears on the customer menu.' });
-        loadDashboardData();
+        // Reload menu categories only after item deletion
+        try {
+          const bid = Number((branch as { id?: number })?.id ?? (branches[0] as { id?: number })?.id);
+          const murl = Number.isFinite(bid) && bid > 0 ? `${apiBase}/menu/admin?branchId=${bid}` : `${apiBase}/menu/admin`;
+          const mres = await fetchWithTimeoutRetryAuthed(murl, { timeout: API_TIMEOUT_MS });
+          if (mres.ok) { const md = await mres.json(); if (Array.isArray(md)) setCategories(md); }
+        } catch { /* ignore */ }
       } else {
         const description = await readApiErrorMessage(res);
         toast({ title: 'Error', description, variant: 'destructive' });
@@ -5872,7 +5918,13 @@ const AdminDashboard = () => {
             ? 'Customers will no longer see this item on the menu.'
             : 'This item is visible on the customer menu again.',
         });
-        loadDashboardData();
+        // Reload menu categories only after toggle live/unlisted
+        try {
+          const bid = Number((branch as { id?: number })?.id ?? (branches[0] as { id?: number })?.id);
+          const murl = Number.isFinite(bid) && bid > 0 ? `${apiBase}/menu/admin?branchId=${bid}` : `${apiBase}/menu/admin`;
+          const mres = await fetchWithTimeoutRetryAuthed(murl, { timeout: API_TIMEOUT_MS });
+          if (mres.ok) { const md = await mres.json(); if (Array.isArray(md)) setCategories(md); }
+        } catch { /* ignore */ }
       } else {
         const err = await res.json().catch(() => ({}));
         toast({
@@ -5911,7 +5963,13 @@ const AdminDashboard = () => {
             ? 'Guests can see this category on the digital menu.'
             : 'This category is hidden from the customer menu.',
         });
-        loadDashboardData();
+        // Reload menu categories only after category visibility toggle
+        try {
+          const bid = Number((branch as { id?: number })?.id ?? (branches[0] as { id?: number })?.id);
+          const murl = Number.isFinite(bid) && bid > 0 ? `${apiBase}/menu/admin?branchId=${bid}` : `${apiBase}/menu/admin`;
+          const mres = await fetchWithTimeoutRetryAuthed(murl, { timeout: API_TIMEOUT_MS });
+          if (mres.ok) { const md = await mres.json(); if (Array.isArray(md)) setCategories(md); }
+        } catch { /* ignore */ }
       } else {
         const err = await res.json().catch(() => ({}));
         toast({
@@ -5941,7 +5999,15 @@ const AdminDashboard = () => {
       });
       if (res.ok) {
         toast({ title: 'Success', description: 'Verification email sent.' });
-        loadDashboardData();
+        // Reload employees only after resend verification
+        try {
+          const eres = await fetchWithTimeoutRetryAuthed(`${apiBase}/employees`, { timeout: API_TIMEOUT_MS });
+          if (eres.ok) {
+            const ed = await eres.json();
+            const el = Array.isArray(ed) ? ed : Array.isArray((ed as any)?.data) ? (ed as any).data : Array.isArray((ed as any)?.employees) ? (ed as any).employees : [];
+            setEmployees(el);
+          }
+        } catch { /* ignore */ }
       } else {
         const data = await res.json().catch(() => ({}));
         toast({
@@ -6807,11 +6873,158 @@ const AdminDashboard = () => {
     return () => {};
   }, [token, activeSection]);
 
-  // Auto refresh orders every 10 seconds when on orders page – skip while order dialog is open to keep popup stable
+  // ---- Section-specific data loading: each section fetches only what it needs ----
+
+  // Menu: load categories when entering (branch-specific reload is already handled by another effect)
   useEffect(() => {
-    // Requirement: disable non-live auto-refresh. All Orders should be manual refresh/filter-driven.
-    return;
-  }, []);
+    if (!token || activeSection !== 'menu') return;
+    if (categories.length > 0) return; // already loaded
+    let cancelled = false;
+    (async () => {
+      try {
+        const bid = Number((branch as { id?: number })?.id ?? (branches[0] as { id?: number })?.id);
+        const url = Number.isFinite(bid) && bid > 0
+          ? `${apiBase}/menu/admin?branchId=${bid}`
+          : `${apiBase}/menu/admin`;
+        const res = await fetchWithTimeoutRetryAuthed(url, { timeout: API_TIMEOUT_MS });
+        if (cancelled || !res.ok) return;
+        const data = await res.json();
+        if (Array.isArray(data)) setCategories(data);
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [token, activeSection]);
+
+  // Employees: reload when entering employee section (if not already loaded)
+  useEffect(() => {
+    if (!token || activeSection !== 'employees') return;
+    if (employees.length > 0) return; // already populated by shared data or overview
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetchWithTimeoutRetryAuthed(`${apiBase}/employees`, { timeout: API_TIMEOUT_MS });
+        if (cancelled || !res.ok) return;
+        const empData = await res.json();
+        const employeeList = Array.isArray(empData) ? empData
+          : Array.isArray((empData as any)?.data) ? (empData as any).data
+          : Array.isArray((empData as any)?.employees) ? (empData as any).employees : [];
+        setEmployees(employeeList);
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [token, activeSection]);
+
+  // Revenue section: load monthly revenue snapshots + monthly target
+  useEffect(() => {
+    if (!token || activeSection !== 'revenue') return;
+    if (monthlyRevenueSnapshots.length > 0) return; // already loaded
+    let cancelled = false;
+    (async () => {
+      try {
+        const [revenueRes, targetRes] = await Promise.allSettled([
+          fetchWithTimeoutRetryAuthed(`${apiBase}/reports/monthly-revenue-snapshots`, { timeout: API_TIMEOUT_MS }),
+          fetchWithTimeoutRetryAuthed(`${apiBase}/monthly-targets/branch/${Number((branch as any)?.id || 0)}`, { timeout: API_TIMEOUT_MS }),
+        ]);
+        if (cancelled) return;
+        if (revenueRes.status === 'fulfilled' && revenueRes.value.ok) {
+          const monthlyRevenueData = await revenueRes.value.json();
+          const raw = Array.isArray((monthlyRevenueData as any)?.snapshots)
+            ? (monthlyRevenueData as any).snapshots
+            : Array.isArray(monthlyRevenueData) ? monthlyRevenueData : [];
+          const live = (monthlyRevenueData as any)?.currentMonthLive;
+          const normalizeRow = (r: any, isLive?: boolean) => {
+            const paid = Number(r.paidOrdersCount ?? 0);
+            const totalSales = Number(r.totalSales ?? 0);
+            const avgFromApi = Number(r.avgOrderValue ?? NaN);
+            const avgOrderValue = Number.isFinite(avgFromApi) && avgFromApi >= 0 ? avgFromApi : paid > 0 ? totalSales / paid : 0;
+            return {
+              id: typeof r.id === 'number' && Number.isFinite(r.id) ? r.id : 0,
+              year: Number(r.year), month: Number(r.month), yearMonth: String(r.yearMonth ?? ''),
+              totalOrders: Number(r.totalOrders ?? 0), totalSales,
+              uniqueCustomers: Number(r.uniqueCustomers ?? 0),
+              newCustomersCount: Number(r.newCustomersCount ?? r.uniqueCustomers ?? 0),
+              avgOrdersPerDay: Number(r.avgOrdersPerDay ?? 0), paidOrdersCount: paid, avgOrderValue,
+              totalLoss: Number(r.totalLoss ?? 0), overtimeHoursApproved: Number(r.overtimeHoursApproved ?? 0),
+              approvedLeavesCount: Number(r.approvedLeavesCount ?? 0), lateEntriesCount: Number(r.lateEntriesCount ?? 0),
+              ...(isLive ? { isLive: true as const } : {}),
+            };
+          };
+          let combined = raw.map((r: any) => normalizeRow(r));
+          if (live && typeof live.yearMonth === 'string' && !combined.some(x => x.yearMonth === live.yearMonth)) {
+            combined = [normalizeRow(live, true), ...combined];
+          }
+          combined.sort((a, b) => b.year - a.year || b.month - a.month);
+          setMonthlyRevenueSnapshots(combined);
+        }
+        if (targetRes.status === 'fulfilled' && targetRes.value.ok) {
+          const monthlyTargetData = await targetRes.value.json();
+          if (monthlyTargetData && typeof monthlyTargetData === 'object') {
+            const y = Number((monthlyTargetData as any).year);
+            const m = Number((monthlyTargetData as any).month);
+            const ym = Number.isFinite(y) && Number.isFinite(m)
+              ? `${y}-${String(m).padStart(2, '0')}` : String((monthlyTargetData as any).yearMonth || '');
+            setMonthlyTargetInfo({
+              yearMonth: ym,
+              monthLabel: String((monthlyTargetData as any).monthLabel || ym),
+              targetSet: Boolean((monthlyTargetData as any).targetSet),
+              targetAmount: Number((monthlyTargetData as any).targetAmount ?? 0),
+              achievedAmount: Number((monthlyTargetData as any).achievedAmount ?? 0),
+              achievedPct: Number((monthlyTargetData as any).achievedPct ?? 0),
+              expectedPct: Number((monthlyTargetData as any).expectedPct ?? 0),
+              daysLeft: Number((monthlyTargetData as any).daysLeft ?? 0),
+              status: (['ON_TRACK', 'NEED_TO_PUSH', 'CRITICAL'] as const).includes((monthlyTargetData as any).status)
+                ? (monthlyTargetData as any).status : undefined,
+              updatedAt: typeof (monthlyTargetData as any).updatedAt === 'string' ? (monthlyTargetData as any).updatedAt : undefined,
+            });
+          }
+        }
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [token, activeSection]);
+
+  // Salary slips section: load salary slips + ensure employees are loaded
+  useEffect(() => {
+    if (!token || activeSection !== 'salary-slips') return;
+    if (salarySlips.length > 0) return; // already loaded
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetchWithTimeoutRetryAuthed(`${apiBase}/reports/salary-slips`, { timeout: API_TIMEOUT_MS });
+        if (cancelled || !res.ok) return;
+        const salarySlipData = await res.json();
+        const slipsRaw = Array.isArray((salarySlipData as any)?.slips)
+          ? (salarySlipData as any).slips
+          : Array.isArray(salarySlipData) ? salarySlipData : [];
+        const normalized = slipsRaw.map((s: any) => ({
+          ...s,
+          month: typeof s?.month === 'number'
+            ? (monthNumberToName(s.month) ?? String(s.month)) : s?.month,
+          employeeCode: s?.employee?.employeeCode ?? s?.employeeCode,
+          allowances: Array.isArray(s?.allowances) ? s.allowances : [],
+          deductions: Array.isArray(s?.deductions) ? s.deductions : [],
+        }));
+        setSalarySlips(normalized);
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [token, activeSection]);
+
+  // Certificates section: load certificates
+  useEffect(() => {
+    if (!token || activeSection !== 'certificates') return;
+    if (certificates.length > 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetchAuthed(`${apiBase}/certificates`, { method: 'GET' });
+        if (cancelled || !res.ok) return;
+        const data = await res.json();
+        setCertificates(Array.isArray(data) ? data : []);
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [token, activeSection]);
 
   // ============ SECTIONS ============
 
@@ -10550,7 +10763,32 @@ const AdminDashboard = () => {
         }
         const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
         setMonthlyTargetInput('');
-        await loadDashboardData();
+        // Reload monthly target info only, not entire dashboard
+        try {
+          const tRes = await fetchWithTimeoutRetryAuthed(`${apiBase}/monthly-targets/branch/${Number((branch as any)?.id || 0)}`, { timeout: API_TIMEOUT_MS });
+          if (tRes.ok) {
+            const mtd = await tRes.json();
+            if (mtd && typeof mtd === 'object') {
+              const y = Number((mtd as any).year);
+              const m = Number((mtd as any).month);
+              const ym = Number.isFinite(y) && Number.isFinite(m)
+                ? `${y}-${String(m).padStart(2, '0')}` : String((mtd as any).yearMonth || '');
+              setMonthlyTargetInfo({
+                yearMonth: ym,
+                monthLabel: String((mtd as any).monthLabel || ym),
+                targetSet: Boolean((mtd as any).targetSet),
+                targetAmount: Number((mtd as any).targetAmount ?? 0),
+                achievedAmount: Number((mtd as any).achievedAmount ?? 0),
+                achievedPct: Number((mtd as any).achievedPct ?? 0),
+                expectedPct: Number((mtd as any).expectedPct ?? 0),
+                daysLeft: Number((mtd as any).daysLeft ?? 0),
+                status: (['ON_TRACK', 'NEED_TO_PUSH', 'CRITICAL'] as const).includes((mtd as any).status)
+                  ? (mtd as any).status : undefined,
+                updatedAt: typeof (mtd as any).updatedAt === 'string' ? (mtd as any).updatedAt : undefined,
+              });
+            }
+          }
+        } catch { /* ignore */ }
         toast({
           title: 'Monthly target saved',
           description:
@@ -10913,24 +11151,15 @@ const AdminDashboard = () => {
         if (!validSectionKeys.includes(key)) return;
         // Make navigation feel instant:
         // - switch section synchronously
-        // - start that section's fetch immediately (no "blank first visit" feeling)
+        // - section-specific useEffect hooks handle data loading automatically
         flushSync(() => setActiveSection(key));
         queueMicrotask(() => {
           if (!ready || !tokenRef.current) return;
-          if (!hasLoadedOnce) {
-            void loadDashboardData();
-          }
+          // These sections have dedicated eager loaders that don't rely on useEffect
           if (key === 'customer-leaderboard') {
             void loadLeaderboard();
           } else if (key === 'customer-queries') {
             void loadCustomerQueries();
-          } else if (key === 'menu') {
-            // Ensure menu data is present when switching in.
-            if (!categories || categories.length === 0) void loadDashboardData();
-          } else if (key === 'employees') {
-            if (!employees || employees.length === 0) void loadDashboardData();
-          } else if (key === 'all-orders') {
-            if (!orders || orders.length === 0) void loadDashboardData();
           }
         });
       }}

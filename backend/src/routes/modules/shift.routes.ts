@@ -13,10 +13,33 @@ export const shiftRouter = Router();
 // Employee: get current shift status (active or not)
 shiftRouter.get('/current', authenticate, requireRole('EMPLOYEE'), async (req, res) => {
   const employeeId = req.user!.id;
-  const activeShift = await prisma.employeeShift.findFirst({
+  let activeShift = await prisma.employeeShift.findFirst({
     where: { employeeId, shiftEnd: null },
     include: { orders: { select: { id: true } } },
   });
+
+  if (activeShift) {
+    const timeZone = process.env.TZ || 'Asia/Kolkata';
+    const now = new Date();
+    const { dateKey: nowKey, start: boundaryAtStartOfNowsBusinessDay } = getBusinessDayRange({
+      date: now,
+      boundaryHour: 4,
+      timeZone,
+    });
+    const { dateKey: shiftKey } = getBusinessDayRange({
+      date: activeShift.shiftStart,
+      boundaryHour: 4,
+      timeZone,
+    });
+    
+    if (shiftKey < nowKey) {
+      // Auto-close open shift from previous day
+      const { endShiftAndCreateOvertimeIfNeeded } = await import('../../services/shiftAutoClose.js');
+      await endShiftAndCreateOvertimeIfNeeded(activeShift.id, boundaryAtStartOfNowsBusinessDay, 'Auto Closed');
+      activeShift = null;
+    }
+  }
+
   return res.json({
     active: !!activeShift,
     shift: activeShift
@@ -149,27 +172,48 @@ shiftRouter.post('/start', authenticate, requireRole('EMPLOYEE'), async (req, re
     return res.status(400).json({ message: 'Branch not found. Contact admin.' });
   }
 
-  const activeShift = await prisma.employeeShift.findFirst({
+  let activeShift = await prisma.employeeShift.findFirst({
     where: { employeeId, shiftEnd: null },
     include: { orders: { select: { id: true } } },
   });
+  
+  const timeZone = process.env.TZ || 'Asia/Kolkata';
+  
   if (activeShift) {
-    return res.status(200).json({
-      id: activeShift.id,
-      branchId: activeShift.branchId,
-      shiftStart: activeShift.shiftStart,
-      shiftEnd: activeShift.shiftEnd,
-      totalHours: activeShift.totalHours,
-      totalSales: activeShift.totalSales ?? 0,
-      ordersCount: activeShift.orders.length,
-      status: (activeShift as any).status ?? 'ACTIVE',
-      pauseCount: (activeShift as any).pauseCount ?? 0,
-      lastPauseAt: (activeShift as any).lastPauseAt ?? null,
+    const now = new Date();
+    const { dateKey: nowKey, start: boundaryAtStartOfNowsBusinessDay } = getBusinessDayRange({
+      date: now,
+      boundaryHour: 4,
+      timeZone,
     });
+    const { dateKey: shiftKey } = getBusinessDayRange({
+      date: activeShift.shiftStart,
+      boundaryHour: 4,
+      timeZone,
+    });
+
+    if (shiftKey < nowKey) {
+      // Auto-close open shift from previous day
+      const { endShiftAndCreateOvertimeIfNeeded } = await import('../../services/shiftAutoClose.js');
+      await endShiftAndCreateOvertimeIfNeeded(activeShift.id, boundaryAtStartOfNowsBusinessDay, 'Auto Closed');
+      activeShift = null;
+    } else {
+      return res.status(200).json({
+        id: activeShift.id,
+        branchId: activeShift.branchId,
+        shiftStart: activeShift.shiftStart,
+        shiftEnd: activeShift.shiftEnd,
+        totalHours: activeShift.totalHours,
+        totalSales: activeShift.totalSales ?? 0,
+        ordersCount: activeShift.orders.length,
+        status: (activeShift as any).status ?? 'ACTIVE',
+        pauseCount: (activeShift as any).pauseCount ?? 0,
+        lastPauseAt: (activeShift as any).lastPauseAt ?? null,
+      });
+    }
   }
 
   // One shift per day: if employee already ended a shift today, they cannot start again until next day
-  const timeZone = process.env.TZ || 'Asia/Kolkata';
   const { dateKey: todayBusinessKey, start: businessDayStart } = getBusinessDayRange({
     date: new Date(),
     boundaryHour: 4,

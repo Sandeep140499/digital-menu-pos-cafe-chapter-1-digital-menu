@@ -16,6 +16,9 @@ import { GlobalLoadingProvider } from './components/GlobalLoadingProvider';
 import { AuthProvider } from '@/auth/AuthProvider';
 import { RequireAuth } from '@/auth/RequireAuth';
 
+import RefundPolicy from './pages/common/RefundPolicy';
+import TermsAndConditions from './pages/common/TermsAndConditions';
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -49,6 +52,8 @@ const App = () => (
               <Route path="/employee/confirm-email" element={<EmployeeConfirmEmail />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+              <Route path="/refund-policy" element={<RefundPolicy />} />
+              <Route path="/terms-and-conditions" element={<TermsAndConditions />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

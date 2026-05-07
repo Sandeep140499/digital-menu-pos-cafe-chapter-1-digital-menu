@@ -257,15 +257,25 @@ function OrderCartDialog({
                   className="mt-0.5 h-3.5 w-3.5 accent-emerald-600"
                 />
                 <span>
-                  I consent to sharing my mobile number for order-related communication only.
+                  I consent to sharing my mobile number for order-related communication only. View our{' '}
                   <a
                     href="/privacy-policy"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="ml-1 font-semibold text-emerald-700 underline"
+                    className="font-semibold text-emerald-700 underline"
                     onClick={e => e.stopPropagation()}
                   >
                     Privacy Policy
+                  </a>{' '}
+                  and{' '}
+                  <a
+                    href="/terms-and-conditions"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-semibold text-emerald-700 underline"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    Terms
                   </a>
                 </span>
               </label>
@@ -2458,14 +2468,32 @@ const Index = () => {
             <p className="mt-2 text-sm font-semibold">Cafe Chapter 1 Restaurant Pvt. Ltd.</p>
             <p className="text-sm">Green Park, Gautam Nagar, New Delhi</p>
             <p className="mt-1 text-sm">Call us: +91 7800327061</p>
-            <a
-              href="/privacy-policy"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-3 inline-block text-sm font-semibold text-emerald-700 underline hover:text-emerald-800"
-            >
-              Privacy Policy
-            </a>
+            <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-2 text-sm font-semibold text-emerald-700">
+              <a
+                href="/privacy-policy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-emerald-800"
+              >
+                Privacy Policy
+              </a>
+              <a
+                href="/terms-and-conditions"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-emerald-800"
+              >
+                Terms & Conditions
+              </a>
+              <a
+                href="/refund-policy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-emerald-800"
+              >
+                Refund Policy
+              </a>
+            </div>
           </div>
         </div>
       )}

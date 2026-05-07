@@ -110,23 +110,23 @@ branchRouter.delete('/:id', authenticate, requireRole('ADMIN'), async (req, res)
         },
       },
     });
-    
+
     if (!branch) {
       return res.status(404).json({ message: 'Branch not found' });
     }
-    
+
     if ((branch._count?.employees || 0) > 0) {
-      return res.status(400).json({ 
-        message: 'Cannot delete branch with active employees. Please remove all employees first.' 
+      return res.status(400).json({
+        message: 'Cannot delete branch with active employees. Please remove all employees first.',
       });
     }
-    
+
     if ((branch._count?.orders || 0) > 0) {
-      return res.status(400).json({ 
-        message: 'Cannot delete branch with order history. Please archive orders first.' 
+      return res.status(400).json({
+        message: 'Cannot delete branch with order history. Please archive orders first.',
       });
     }
-    
+
     await prisma.branch.delete({ where: { id } });
     return res.json({ message: 'Branch deleted successfully' });
   } catch (e: unknown) {

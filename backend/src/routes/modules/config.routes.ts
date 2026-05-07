@@ -134,84 +134,88 @@ configRouter.get('/public-traffic', authenticate, requireRole('ADMIN'), (_req, r
 // Public: branch contact for menu (Call / WhatsApp) and branch id for placing orders
 // Optional `?branchId=` (or `?branch=`) pins a physical menu / QR deployment to one branch.
 // Cache briefly: reduces DB load under customer traffic while keeping "orderingOpen" responsive.
-configRouter.get('/branch-contact', cacheMiddleware(10, ['public', 'branch-contact']), async (req, res) => {
-  const raw = req.query.branchId ?? req.query.branch;
-  let requestedId: number | null = null;
-  if (raw !== undefined && raw !== '') {
-    const n = Number.parseInt(String(raw), 10);
-    if (!Number.isFinite(n) || n < 1) {
-      return res.status(400).json({ message: 'Invalid branchId' });
+configRouter.get(
+  '/branch-contact',
+  cacheMiddleware(10, ['public', 'branch-contact']),
+  async (req, res) => {
+    const raw = req.query.branchId ?? req.query.branch;
+    let requestedId: number | null = null;
+    if (raw !== undefined && raw !== '') {
+      const n = Number.parseInt(String(raw), 10);
+      if (!Number.isFinite(n) || n < 1) {
+        return res.status(400).json({ message: 'Invalid branchId' });
+      }
+      requestedId = n;
     }
-    requestedId = n;
-  }
 
-  const branchSelect = {
-    id: true,
-    name: true,
-    phone: true,
-    location: true,
-    googleReviewUrl: true,
-    logoUrl: true,
-    showTotalAmountToCustomers: true,
-  } as const;
+    const branchSelect = {
+      id: true,
+      name: true,
+      phone: true,
+      location: true,
+      googleReviewUrl: true,
+      logoUrl: true,
+      showTotalAmountToCustomers: true,
+    } as const;
 
-  let branch = null;
-  if (requestedId) {
-    branch = await prisma.branch.findUnique({
-      where: { id: requestedId },
-      select: branchSelect,
-    });
-  } else {
-    const defaultId = await getDefaultPublicBranchId();
-    branch = defaultId
-      ? await prisma.branch.findUnique({
-          where: { id: defaultId },
-          select: branchSelect,
-        })
-      : null;
-  }
-
-  if (requestedId && !branch) {
-    return res.status(404).json({
-      message: 'Branch not found. Check the menu link or ask staff for the correct QR code.',
-    });
-  }
-
-  let orderingOpen = false;
-  if (branch?.id) {
-    // ONLY check for active shifts - customers can only order when employee has started shift
-    const liveShift = await prisma.employeeShift.findFirst({
-      where: {
-        branchId: branch.id,
-        shiftEnd: null,
-        status: 'ACTIVE',
-        employee: { status: 'ACTIVE' },
-      },
-      select: { id: true },
-    });
-    
-    orderingOpen = !!liveShift;
-    
-    // Debug logging
-    if (liveShift) {
-      console.log(`Ordering open for branch ${branch.id} - active shift found`);
+    let branch = null;
+    if (requestedId) {
+      branch = await prisma.branch.findUnique({
+        where: { id: requestedId },
+        select: branchSelect,
+      });
     } else {
-      console.log(`Ordering CLOSED for branch ${branch.id} - no active shifts found`);
+      const defaultId = await getDefaultPublicBranchId();
+      branch = defaultId
+        ? await prisma.branch.findUnique({
+            where: { id: defaultId },
+            select: branchSelect,
+          })
+        : null;
     }
-  }
 
-  return res.json({
-    id: branch?.id ?? null,
-    name: branch?.name ?? process.env.RESTAURANT_NAME ?? 'CAFE CHAPTER 1 RESTRO',
-    phone: branch?.phone ?? process.env.RESTAURANT_PHONE ?? null,
-    location: branch?.location ?? process.env.RESTAURANT_ADDRESS ?? null,
-    googleReviewUrl: branch?.googleReviewUrl ?? process.env.GOOGLE_REVIEW_URL ?? null,
-    logoUrl: branch?.logoUrl ?? null,
-    showTotalAmountToCustomers: branch?.showTotalAmountToCustomers ?? true,
-    /** True when at least one employee has an active shift - customers can only order when shift is started */
-    orderingOpen,
-  });
-});
+    if (requestedId && !branch) {
+      return res.status(404).json({
+        message: 'Branch not found. Check the menu link or ask staff for the correct QR code.',
+      });
+    }
+
+    let orderingOpen = false;
+    if (branch?.id) {
+      // ONLY check for active shifts - customers can only order when employee has started shift
+      const liveShift = await prisma.employeeShift.findFirst({
+        where: {
+          branchId: branch.id,
+          shiftEnd: null,
+          status: 'ACTIVE',
+          employee: { status: 'ACTIVE' },
+        },
+        select: { id: true },
+      });
+
+      orderingOpen = !!liveShift;
+
+      // Debug logging
+      if (liveShift) {
+        console.log(`Ordering open for branch ${branch.id} - active shift found`);
+      } else {
+        console.log(`Ordering CLOSED for branch ${branch.id} - no active shifts found`);
+      }
+    }
+
+    return res.json({
+      id: branch?.id ?? null,
+      name: branch?.name ?? process.env.RESTAURANT_NAME ?? 'CAFE CHAPTER 1 RESTRO',
+      phone: branch?.phone ?? process.env.RESTAURANT_PHONE ?? null,
+      location: branch?.location ?? process.env.RESTAURANT_ADDRESS ?? null,
+      googleReviewUrl: branch?.googleReviewUrl ?? process.env.GOOGLE_REVIEW_URL ?? null,
+      logoUrl: branch?.logoUrl ?? null,
+      showTotalAmountToCustomers: branch?.showTotalAmountToCustomers ?? true,
+      /** True when at least one employee has an active shift - customers can only order when shift is started */
+      orderingOpen,
+    });
+  }
+);
 
 // Employee: settings that affect employee UX (ringing, etc.)
 configRouter.get('/employee-settings', authenticate, requireRole('EMPLOYEE'), async (req, res) => {
@@ -247,18 +251,22 @@ configRouter.get('/employee-settings', authenticate, requireRole('EMPLOYEE'), as
 
 // Public: lightweight settings for customer UI
 // Cache: branch setting changes rarely; safe to cache longer.
-configRouter.get('/public-settings', cacheMiddleware(300, ['public', 'public-settings']), async (_req, res) => {
-  const defaultId = await getDefaultPublicBranchId();
-  const branch = defaultId
-    ? await prisma.branch.findUnique({
-        where: { id: defaultId },
-        select: { showTotalAmountToCustomers: true },
-      })
-    : null;
-  return res.json({
-    showTotalAmountToCustomers: branch?.showTotalAmountToCustomers ?? true,
-  });
-});
+configRouter.get(
+  '/public-settings',
+  cacheMiddleware(300, ['public', 'public-settings']),
+  async (_req, res) => {
+    const defaultId = await getDefaultPublicBranchId();
+    const branch = defaultId
+      ? await prisma.branch.findUnique({
+          where: { id: defaultId },
+          select: { showTotalAmountToCustomers: true },
+        })
+      : null;
+    return res.json({
+      showTotalAmountToCustomers: branch?.showTotalAmountToCustomers ?? true,
+    });
+  }
+);
 
 // Admin: new item broadcast message (for WhatsApp broadcast to all customer mobiles)
 configRouter.get(

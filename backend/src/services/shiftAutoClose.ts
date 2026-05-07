@@ -109,7 +109,9 @@ export async function runAutoCloseAt4AM(): Promise<number> {
       boundaryHour: 4,
       timeZone: TIMEZONE,
     });
-    console.log(`[Auto-close] Shift ${shift.id} (${shift.employee.name}): shiftKey=${shiftKey}, nowKey=${nowKey}, shouldClose=${shiftKey < nowKey}`);
+    console.log(
+      `[Auto-close] Shift ${shift.id} (${shift.employee.name}): shiftKey=${shiftKey}, nowKey=${nowKey}, shouldClose=${shiftKey < nowKey}`
+    );
     if (shiftKey >= nowKey) continue;
 
     try {

@@ -31,7 +31,10 @@ function toMobileLast10(mobile: string | null | undefined): string | null {
   return raw.length === 10 && /^[6-9]/.test(raw) ? raw : null;
 }
 
-function toCustomerKey(args: { mobileLast10: string | null; sessionToken: string | null | undefined }): string | null {
+function toCustomerKey(args: {
+  mobileLast10: string | null;
+  sessionToken: string | null | undefined;
+}): string | null {
   if (args.mobileLast10) return `m:${args.mobileLast10}`;
   const st = (args.sessionToken || '').trim();
   return st ? `s:${st}` : null;
@@ -74,8 +77,7 @@ const createOrderSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['tableNumber'],
-          message:
-            'Enter a valid table number (digits only). Example: 1, 10, 101.',
+          message: 'Enter a valid table number (digits only). Example: 1, 10, 101.',
         });
       }
     }
@@ -180,11 +182,14 @@ orderRouter.post('/', async (req, res) => {
       customerName: rawName,
       customerMobile: rawMobile,
     } = parsed.data;
-  const tableNumber = orderType === 'TAKE_AWAY' ? 'TAKE_AWAY' : (rawTableNumber || '').trim();
-  const customerMobile = normalizeIndianMobile(rawMobile ?? null);
-  const customerName = (rawName || '').trim().toUpperCase() || (rawName || '').trim();
-  const customerMobileLast10 = toMobileLast10(customerMobile);
-  const customerKey = toCustomerKey({ mobileLast10: customerMobileLast10, sessionToken: sessionToken ?? null });
+    const tableNumber = orderType === 'TAKE_AWAY' ? 'TAKE_AWAY' : (rawTableNumber || '').trim();
+    const customerMobile = normalizeIndianMobile(rawMobile ?? null);
+    const customerName = (rawName || '').trim().toUpperCase() || (rawName || '').trim();
+    const customerMobileLast10 = toMobileLast10(customerMobile);
+    const customerKey = toCustomerKey({
+      mobileLast10: customerMobileLast10,
+      sessionToken: sessionToken ?? null,
+    });
 
     const branchExists = await prisma.branch.findUnique({
       where: { id: branchId },
@@ -219,47 +224,47 @@ orderRouter.post('/', async (req, res) => {
       resolvedTableId = table.id;
     }
 
-  // Normalize item name: store base name without "(5pc / 8pc)" so variant (HALF/FULL) carries size for analytics
-  const normalizeItemName = (name: string) =>
-    (name || '').replace(/\s*\(5pc\s*\/\s*8pc\)\s*/gi, '').trim() || name;
+    // Normalize item name: store base name without "(5pc / 8pc)" so variant (HALF/FULL) carries size for analytics
+    const normalizeItemName = (name: string) =>
+      (name || '').replace(/\s*\(5pc\s*\/\s*8pc\)\s*/gi, '').trim() || name;
 
     const { rules: happyHourRules, tz: happyHourTz } = await loadActiveHappyHourRules();
     const happyHourNow = new Date();
 
-  async function resolveMenuItemForLine(item: (typeof items)[0]) {
-    const select = {
-      id: true,
-      name: true,
-      basePrice: true,
-      halfPrice: true,
-      hasHalf: true,
-      categoryId: true,
-      isActive: true,
-    } as const;
-    const branchMenuWhere = {
-      isActive: true,
-      category: { branchId },
-    } as const;
+    async function resolveMenuItemForLine(item: (typeof items)[0]) {
+      const select = {
+        id: true,
+        name: true,
+        basePrice: true,
+        halfPrice: true,
+        hasHalf: true,
+        categoryId: true,
+        isActive: true,
+      } as const;
+      const branchMenuWhere = {
+        isActive: true,
+        category: { branchId },
+      } as const;
 
-    if (item.menuItemId) {
-      return prisma.menuItem.findFirst({
-        where: { id: item.menuItemId, ...branchMenuWhere },
+      if (item.menuItemId) {
+        return prisma.menuItem.findFirst({
+          where: { id: item.menuItemId, ...branchMenuWhere },
+          select,
+        });
+      }
+      const baseName = normalizeItemName(item.name);
+      let mi = await prisma.menuItem.findFirst({
+        where: { name: baseName, ...branchMenuWhere },
         select,
       });
+      if (!mi && baseName !== (item.name || '').trim()) {
+        mi = await prisma.menuItem.findFirst({
+          where: { name: (item.name || '').trim(), ...branchMenuWhere },
+          select,
+        });
+      }
+      return mi;
     }
-    const baseName = normalizeItemName(item.name);
-    let mi = await prisma.menuItem.findFirst({
-      where: { name: baseName, ...branchMenuWhere },
-      select,
-    });
-    if (!mi && baseName !== (item.name || '').trim()) {
-      mi = await prisma.menuItem.findFirst({
-        where: { name: (item.name || '').trim(), ...branchMenuWhere },
-        select,
-      });
-    }
-    return mi;
-  }
 
     let totalAmount = 0;
     const orderItemsData: Array<{
@@ -308,8 +313,8 @@ orderRouter.post('/', async (req, res) => {
       });
     }
 
-  // Take away is already shown via orderType TAKE_AWAY — do not add a separate "Packaging" line
-  // (it cluttered order cards, emails, and receipts at ₹0).
+    // Take away is already shown via orderType TAKE_AWAY — do not add a separate "Packaging" line
+    // (it cluttered order cards, emails, and receipts at ₹0).
 
     // Previously we rejected customer orders when no employee had an active shift (503).
     // That creates a bad customer experience ("Order failed") and blocks orders outside shift start times.
@@ -365,11 +370,11 @@ orderRouter.post('/', async (req, res) => {
         priority: true,
       },
     });
-  // Invoice generation/linking intentionally omitted from order-create response to keep the
-  // customer checkout path fast under high concurrency. Invoice endpoints remain available.
+    // Invoice generation/linking intentionally omitted from order-create response to keep the
+    // customer checkout path fast under high concurrency. Invoice endpoints remain available.
 
-  // For realtime employee popups we still need order details (items/table). Fetch once and emit.
-  // This keeps the customer API response small while preserving existing employee UX.
+    // For realtime employee popups we still need order details (items/table). Fetch once and emit.
+    // This keeps the customer API response small while preserving existing employee UX.
     const orderForRealtime = await prisma.order.findUnique({
       where: { id: order.id },
       include: {
@@ -380,26 +385,26 @@ orderRouter.post('/', async (req, res) => {
       },
     });
 
-  // Emit enhanced notifications using the new notification service
+    // Emit enhanced notifications using the new notification service
     const notificationService = new OrderNotificationService(req.app.locals.io);
 
-  // Prepare notification data
-  const notificationData = {
-    orderId: order.id,
-    branchId: order.branchId,
-    tableNumber: tableNumber === 'TAKE_AWAY' ? 'Take Away' : tableNumber,
-    customerName,
-    orderType: orderType as 'DINE_IN' | 'TAKE_AWAY',
-    orderSource: 'CUSTOMER' as const,
-    priority: order.priority as 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT',
-    totalAmount: order.totalAmount,
-    items: items.map(item => ({ name: item.name, quantity: item.quantity })),
-  };
+    // Prepare notification data
+    const notificationData = {
+      orderId: order.id,
+      branchId: order.branchId,
+      tableNumber: tableNumber === 'TAKE_AWAY' ? 'Take Away' : tableNumber,
+      customerName,
+      orderType: orderType as 'DINE_IN' | 'TAKE_AWAY',
+      orderSource: 'CUSTOMER' as const,
+      priority: order.priority as 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT',
+      totalAmount: order.totalAmount,
+      items: items.map(item => ({ name: item.name, quantity: item.quantity })),
+    };
 
-  // Send loud notification for new customer order
+    // Send loud notification for new customer order
     await notificationService.sendNewOrderNotification(notificationData);
 
-  // Keep legacy emissions for backward compatibility
+    // Keep legacy emissions for backward compatibility
     const payload = orderForRealtime ?? order;
     req.app.locals.io?.emit('order:new', payload);
     req.app.locals.io?.to(`branch:${order.branchId}`)?.emit('order:new', payload);
@@ -420,41 +425,41 @@ orderRouter.post('/', async (req, res) => {
       itemCount: items.length,
     });
 
-  // Send email notification to admin + branch directors for new orders
+    // Send email notification to admin + branch directors for new orders
     if (isMailConfigured()) {
       setImmediate(async () => {
         try {
-        const items = filterOrderItemsForReceipt(
-          await prisma.orderItem.findMany({
-            where: { orderId: order.id, isRemoved: false },
-            select: { name: true, quantity: true, price: true, variant: true, isRemoved: true },
-            orderBy: { id: 'asc' },
-          })
-        );
-        const branch = await prisma.branch.findUnique({
-          where: { id: order.branchId },
-          select: { directorsEmail: true },
-        });
-        const admin = await prisma.admin.findFirst({ select: { email: true } });
-        const directorEmails: string[] = (branch?.directorsEmail || '')
-          .split(',')
-          .map(s => s.trim())
-          .filter(Boolean);
-        const recipients = [
-          ...new Set([admin?.email, ...directorEmails].filter(Boolean)),
-        ] as string[];
-        if (recipients.length === 0) return;
+          const items = filterOrderItemsForReceipt(
+            await prisma.orderItem.findMany({
+              where: { orderId: order.id, isRemoved: false },
+              select: { name: true, quantity: true, price: true, variant: true, isRemoved: true },
+              orderBy: { id: 'asc' },
+            })
+          );
+          const branch = await prisma.branch.findUnique({
+            where: { id: order.branchId },
+            select: { directorsEmail: true },
+          });
+          const admin = await prisma.admin.findFirst({ select: { email: true } });
+          const directorEmails: string[] = (branch?.directorsEmail || '')
+            .split(',')
+            .map(s => s.trim())
+            .filter(Boolean);
+          const recipients = [
+            ...new Set([admin?.email, ...directorEmails].filter(Boolean)),
+          ] as string[];
+          if (recipients.length === 0) return;
 
-        const orderTypeLabel = orderType === 'TAKE_AWAY' ? 'Take Away' : 'Dine In';
-        const tableLabel = orderType === 'TAKE_AWAY' ? 'Take Away' : `Table ${tableNumber}`;
-        const itemRows = items
-          .map(i => {
-            const variantLabel = i.variant ? ` (${i.variant === 'HALF' ? 'Half' : 'Full'})` : '';
-            return `<tr><td style="padding:6px 12px;border-bottom:1px solid #eee;">${i.quantity}× ${i.name}${variantLabel}</td><td style="padding:6px 12px;border-bottom:1px solid #eee;text-align:right;">₹${(i.price * i.quantity).toFixed(0)}</td></tr>`;
-          })
-          .join('');
+          const orderTypeLabel = orderType === 'TAKE_AWAY' ? 'Take Away' : 'Dine In';
+          const tableLabel = orderType === 'TAKE_AWAY' ? 'Take Away' : `Table ${tableNumber}`;
+          const itemRows = items
+            .map(i => {
+              const variantLabel = i.variant ? ` (${i.variant === 'HALF' ? 'Half' : 'Full'})` : '';
+              return `<tr><td style="padding:6px 12px;border-bottom:1px solid #eee;">${i.quantity}× ${i.name}${variantLabel}</td><td style="padding:6px 12px;border-bottom:1px solid #eee;text-align:right;">₹${(i.price * i.quantity).toFixed(0)}</td></tr>`;
+            })
+            .join('');
 
-        const html = `
+          const html = `
 <div style="font-family:sans-serif;max-width:540px;margin:0 auto;background:#f9f9f9;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
   <div style="background:#1a5c38;color:#fff;padding:20px 24px;">
     <h2 style="margin:0;font-size:20px;">🛎️ New Order Received — #${order.id}</h2>
@@ -476,11 +481,11 @@ orderRouter.post('/', async (req, res) => {
   </div>
 </div>`;
 
-        await sendEmail({
-          to: recipients,
-          subject: `🛎️ New Order #${order.id} — ${customerName || 'Walk-in'} (${tableLabel})`,
-          html,
-        });
+          await sendEmail({
+            to: recipients,
+            subject: `🛎️ New Order #${order.id} — ${customerName || 'Walk-in'} (${tableLabel})`,
+            html,
+          });
         } catch (err) {
           console.error('[order-email] Failed to send new order notification:', err);
         }
@@ -1001,10 +1006,7 @@ const CUSTOMER_LEADERBOARD_MAX_LIMIT = 50_000;
 
 orderRouter.get('/customer-leaderboard', authenticate, requireRole('ADMIN'), async (req, res) => {
   const { limit = '20', sortBy = 'orders' } = req.query;
-  const limitNum = Math.min(
-    Math.max(Number(limit) || 20, 1),
-    CUSTOMER_LEADERBOARD_MAX_LIMIT
-  );
+  const limitNum = Math.min(Math.max(Number(limit) || 20, 1), CUSTOMER_LEADERBOARD_MAX_LIMIT);
 
   // Use DB aggregation; do NOT pull all orders into Node.
   const grouped = await prisma.order.groupBy({
@@ -1086,7 +1088,7 @@ orderRouter.get('/customer-leaderboard', authenticate, requireRole('ADMIN'), asy
       totalSpent: bestSpent,
       lastOrderDate: bestLast ?? null,
       leadName: existing.leadName ?? ((l.name || '').trim() || null),
-      leadSourceTag: existing.leadSourceTag ?? (l.sourceTag ?? null),
+      leadSourceTag: existing.leadSourceTag ?? l.sourceTag ?? null,
     });
   }
 
@@ -1109,7 +1111,9 @@ orderRouter.get('/customer-leaderboard', authenticate, requireRole('ADMIN'), asy
       })
     : [];
   const nameByMobile = new Map(
-    latestNames.map(r => [String(r.customerMobile || '').trim(), (r.customerName || '').trim()] as const)
+    latestNames.map(
+      r => [String(r.customerMobile || '').trim(), (r.customerName || '').trim()] as const
+    )
   );
 
   const toDisplayName = (name: string | null | undefined): string => {
@@ -1410,8 +1414,9 @@ orderRouter.patch('/:id/customer', authenticate, async (req, res) => {
   const data: Prisma.OrderUpdateInput = {};
 
   // Decide next mobile (canonical 10-digit or null).
-  const nextMobile: string | null =
-    mobileProvided ? (parsed.data.customerMobile ?? null) : normalizeIndianMobile(existing.customerMobile ?? null);
+  const nextMobile: string | null = mobileProvided
+    ? (parsed.data.customerMobile ?? null)
+    : normalizeIndianMobile(existing.customerMobile ?? null);
 
   if (mobileProvided) {
     data.customerMobile = nextMobile;
@@ -1425,7 +1430,10 @@ orderRouter.patch('/:id/customer', authenticate, async (req, res) => {
   // Keep normalized identity columns in sync.
   const nextLast10 = toMobileLast10(nextMobile);
   data.customerMobileLast10 = nextLast10;
-  data.customerKey = toCustomerKey({ mobileLast10: nextLast10, sessionToken: existing.sessionToken ?? null });
+  data.customerKey = toCustomerKey({
+    mobileLast10: nextLast10,
+    sessionToken: existing.sessionToken ?? null,
+  });
   if (customerName) {
     data.customerName = customerName;
   }
@@ -1480,7 +1488,10 @@ orderRouter.delete('/customer-leads/:mobile', authenticate, async (req, res) => 
               data: {
                 customerMobile: null,
                 customerMobileLast10: null,
-                customerKey: toCustomerKey({ mobileLast10: null, sessionToken: o.sessionToken ?? null }),
+                customerKey: toCustomerKey({
+                  mobileLast10: null,
+                  sessionToken: o.sessionToken ?? null,
+                }),
               },
             })
           )

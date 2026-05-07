@@ -67,9 +67,7 @@ function prismaDateToYmd(d: Date): string {
 function normalizeDays(raw: unknown): number[] | null {
   if (raw == null) return null;
   if (!Array.isArray(raw)) return null;
-  const nums = raw
-    .map(x => Number(x))
-    .filter(n => Number.isInteger(n) && n >= 0 && n <= 6);
+  const nums = raw.map(x => Number(x)).filter(n => Number.isInteger(n) && n >= 0 && n <= 6);
   return nums.length ? [...new Set(nums)].sort((a, b) => a - b) : null;
 }
 
@@ -201,7 +199,11 @@ export type HappyHourPublicBanner = {
   activeOfferIds: number[];
 };
 
-export function buildHappyHourBanner(rules: HappyHourRule[], now: Date, tz: string): HappyHourPublicBanner {
+export function buildHappyHourBanner(
+  rules: HappyHourRule[],
+  now: Date,
+  tz: string
+): HappyHourPublicBanner {
   const active = rules.filter(r => isHappyHourActiveNow(r, now, tz));
   if (active.length === 0) {
     return {
@@ -216,9 +218,7 @@ export function buildHappyHourBanner(rules: HappyHourRule[], now: Date, tz: stri
   const maxPct = Math.max(...active.map(r => Number(r.discountPercent) || 0));
   const names = [...new Set(active.map(r => r.name))];
   const headline =
-    names.length === 1
-      ? `Happy Hours — ${names[0]}`
-      : `Happy Hours — ${active.length} live offers`;
+    names.length === 1 ? `Happy Hours — ${names[0]}` : `Happy Hours — ${active.length} live offers`;
   const body =
     maxPct > 0
       ? `Save up to ${Math.round(maxPct)}% on eligible dishes. Offers apply automatically at checkout.`

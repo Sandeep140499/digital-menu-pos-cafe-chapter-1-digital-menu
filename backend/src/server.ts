@@ -74,30 +74,32 @@ app.use((req, res, next) => {
   const url = req.url.toLowerCase();
 
   const blockedPatterns = [
-    "phpunit",
-    "eval-stdin",
-    ".env",
-    "vendor",
-    "wp-admin",
-    "boaform",
-    "cgi-bin",
-    "xmlrpc",
-    "admin.php",
-    "config.php"
+    'phpunit',
+    'eval-stdin',
+    '.env',
+    'vendor',
+    'wp-admin',
+    'boaform',
+    'cgi-bin',
+    'xmlrpc',
+    'admin.php',
+    'config.php',
   ];
 
   if (blockedPatterns.some(pattern => url.includes(pattern))) {
-    return res.status(403).send("Blocked");
+    return res.status(403).send('Blocked');
   }
 
   next();
 });
 
 // 🚦 Global rate limit (extra safety)
-app.use(rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 200
-}));
+app.use(
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 200,
+  })
+);
 const server = http.createServer(app);
 
 // When behind a reverse proxy / load balancer (Render, Railway, Nginx, etc.)

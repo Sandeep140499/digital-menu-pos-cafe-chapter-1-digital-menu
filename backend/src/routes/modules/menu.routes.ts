@@ -98,7 +98,10 @@ const optionalUrl = z.preprocess(v => {
 const upsertMenuItemSchema = z
   .object({
     name: z.string().min(1),
-    description: z.preprocess(v => (typeof v === 'string' && v.trim() === '' ? undefined : v), z.string().optional()),
+    description: z.preprocess(
+      v => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+      z.string().optional()
+    ),
     imageUrl: optionalUrl,
     basePrice: z.number().positive(),
     hasHalf: z.boolean().optional(),
@@ -124,10 +127,7 @@ const upsertMenuItemSchema = z
 /** PATCH body: all fields optional; coerces numeric strings from JSON/clients. */
 const patchMenuItemSchema = z
   .object({
-    name: z.preprocess(
-      v => (typeof v === 'string' ? v.trim() : v),
-      z.string().min(1).optional()
-    ),
+    name: z.preprocess(v => (typeof v === 'string' ? v.trim() : v), z.string().min(1).optional()),
     description: z.preprocess(
       v =>
         v === null || v === undefined
@@ -177,12 +177,19 @@ const patchMenuItemSchema = z
 
 export const menuRouter = Router();
 
-type PublicMenuResponse = { categories: any[]; bestSellerItemIds: number[]; happyHourBanner?: unknown };
+type PublicMenuResponse = {
+  categories: any[];
+  bestSellerItemIds: number[];
+  happyHourBanner?: unknown;
+};
 
 // Simple in-memory cache to protect DB under high traffic (one entry per branch).
 // - categories change rarely; best-sellers can lag a little.
 // - If DB temporarily fails, we serve last known good menu instead of crashing customer UX.
-const publicMenuCacheByBranch = new Map<number, { data: PublicMenuResponse; ts: number; bestTs: number }>();
+const publicMenuCacheByBranch = new Map<
+  number,
+  { data: PublicMenuResponse; ts: number; bestTs: number }
+>();
 const MENU_CACHE_MS = 15_000;
 const BEST_SELLER_CACHE_MS = 5 * 60_000;
 
@@ -295,8 +302,7 @@ menuRouter.get('/', async (req, res) => {
     const categories = dedupePublicMenuCategories(
       categoriesRaw
         .map(cat => {
-          const catNew =
-            cat.highlightNewUntil != null && new Date(cat.highlightNewUntil) > nowDate;
+          const catNew = cat.highlightNewUntil != null && new Date(cat.highlightNewUntil) > nowDate;
           const itemNew = cat.items.some(
             it => it.highlightNewUntil != null && new Date(it.highlightNewUntil) > nowDate
           );
@@ -348,8 +354,7 @@ menuRouter.get('/', async (req, res) => {
     }));
 
     let bestSellerItemIds: number[] = branchCache?.data.bestSellerItemIds ?? [];
-    const bestStale =
-      !branchCache || requestTs - branchCache.bestTs > BEST_SELLER_CACHE_MS;
+    const bestStale = !branchCache || requestTs - branchCache.bestTs > BEST_SELLER_CACHE_MS;
     if (bestStale) {
       const { start, end } = getRolling7DayRange();
       const lastWeekOrderItems = await prisma.orderItem.groupBy({

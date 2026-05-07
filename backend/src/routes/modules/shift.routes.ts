@@ -31,11 +31,16 @@ shiftRouter.get('/current', authenticate, requireRole('EMPLOYEE'), async (req, r
       boundaryHour: 4,
       timeZone,
     });
-    
+
     if (shiftKey < nowKey) {
       // Auto-close open shift from previous day
-      const { endShiftAndCreateOvertimeIfNeeded } = await import('../../services/shiftAutoClose.js');
-      await endShiftAndCreateOvertimeIfNeeded(activeShift.id, boundaryAtStartOfNowsBusinessDay, 'Auto Closed');
+      const { endShiftAndCreateOvertimeIfNeeded } =
+        await import('../../services/shiftAutoClose.js');
+      await endShiftAndCreateOvertimeIfNeeded(
+        activeShift.id,
+        boundaryAtStartOfNowsBusinessDay,
+        'Auto Closed'
+      );
       activeShift = null;
     }
   }
@@ -176,9 +181,9 @@ shiftRouter.post('/start', authenticate, requireRole('EMPLOYEE'), async (req, re
     where: { employeeId, shiftEnd: null },
     include: { orders: { select: { id: true } } },
   });
-  
+
   const timeZone = process.env.TZ || 'Asia/Kolkata';
-  
+
   if (activeShift) {
     const now = new Date();
     const { dateKey: nowKey, start: boundaryAtStartOfNowsBusinessDay } = getBusinessDayRange({
@@ -194,8 +199,13 @@ shiftRouter.post('/start', authenticate, requireRole('EMPLOYEE'), async (req, re
 
     if (shiftKey < nowKey) {
       // Auto-close open shift from previous day
-      const { endShiftAndCreateOvertimeIfNeeded } = await import('../../services/shiftAutoClose.js');
-      await endShiftAndCreateOvertimeIfNeeded(activeShift.id, boundaryAtStartOfNowsBusinessDay, 'Auto Closed');
+      const { endShiftAndCreateOvertimeIfNeeded } =
+        await import('../../services/shiftAutoClose.js');
+      await endShiftAndCreateOvertimeIfNeeded(
+        activeShift.id,
+        boundaryAtStartOfNowsBusinessDay,
+        'Auto Closed'
+      );
       activeShift = null;
     } else {
       return res.status(200).json({
@@ -219,7 +229,7 @@ shiftRouter.post('/start', authenticate, requireRole('EMPLOYEE'), async (req, re
     boundaryHour: 4,
     timeZone,
   });
-  
+
   // Check for ANY shift (active or ended) started today
   const anyShiftToday = await prisma.employeeShift.findFirst({
     where: {
@@ -230,7 +240,7 @@ shiftRouter.post('/start', authenticate, requireRole('EMPLOYEE'), async (req, re
     },
     select: { id: true, shiftStart: true, shiftEnd: true },
   });
-  
+
   if (anyShiftToday) {
     if (!anyShiftToday.shiftEnd) {
       // Active shift exists

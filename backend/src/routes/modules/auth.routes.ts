@@ -119,12 +119,14 @@ export const authRouter = Router();
 
 function signAccessToken(payload: { id: number; role: 'ADMIN' | 'EMPLOYEE' }) {
   const expiresIn =
-    payload.role === 'EMPLOYEE'
-      ? jwtConfig.employeeAccessExpiresIn
-      : jwtConfig.accessExpiresIn;
-  return jwt.sign(payload, jwtConfig.secret as string, {
-    expiresIn,
-  } as SignOptions);
+    payload.role === 'EMPLOYEE' ? jwtConfig.employeeAccessExpiresIn : jwtConfig.accessExpiresIn;
+  return jwt.sign(
+    payload,
+    jwtConfig.secret as string,
+    {
+      expiresIn,
+    } as SignOptions
+  );
 }
 
 function parseExpiresToMs(expiresIn: string): number {

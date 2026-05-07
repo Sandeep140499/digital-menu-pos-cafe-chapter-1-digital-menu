@@ -10,9 +10,9 @@ export function normalizeMenuNameKey(name: string | null | undefined): string {
     .replace(/\s+/g, ' ');
 }
 
-export function dedupePublicMenuItems<T extends { id?: number; name?: string; isNewLaunch?: boolean }>(
-  items: T[]
-): T[] {
+export function dedupePublicMenuItems<
+  T extends { id?: number; name?: string; isNewLaunch?: boolean },
+>(items: T[]): T[] {
   const out: T[] = [];
   const seenId = new Set<number>();
   const seenName = new Set<string>();
@@ -49,7 +49,9 @@ export type PublicMenuCategoryShape = {
   items: Array<Record<string, unknown>>;
 };
 
-export function dedupePublicMenuCategories<T extends PublicMenuCategoryShape>(categories: T[]): T[] {
+export function dedupePublicMenuCategories<T extends PublicMenuCategoryShape>(
+  categories: T[]
+): T[] {
   const byMergeKey = new Map<string, T>();
 
   for (const cat of categories) {
@@ -64,10 +66,7 @@ export function dedupePublicMenuCategories<T extends PublicMenuCategoryShape>(ca
     const mergeKey = slugRaw ? `slug:${slugRaw}` : `id:${cat.id}`;
 
     const existing = byMergeKey.get(mergeKey);
-    const combinedItems = dedupePublicMenuItems([
-      ...(existing?.items ?? []),
-      ...(cat.items ?? []),
-    ]);
+    const combinedItems = dedupePublicMenuItems([...(existing?.items ?? []), ...(cat.items ?? [])]);
 
     if (!existing) {
       byMergeKey.set(mergeKey, { ...cat, items: combinedItems as T['items'] });

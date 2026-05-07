@@ -96,7 +96,9 @@ export async function buildHappyHourWaBroadcast(params: {
   });
   const nameByMobile = new Map(
     sampleNames.map(r => {
-      const k = String(r.customerMobile || '').replace(/\D/g, '').slice(-10);
+      const k = String(r.customerMobile || '')
+        .replace(/\D/g, '')
+        .slice(-10);
       return [k, r.customerName] as const;
     })
   );

@@ -1,5 +1,9 @@
 import { prisma } from '../config/prisma.js';
-import { DEFAULT_MENU_TIMEZONE, mapDbHappyHourToRule, type HappyHourRule } from './happyHourEngine.js';
+import {
+  DEFAULT_MENU_TIMEZONE,
+  mapDbHappyHourToRule,
+  type HappyHourRule,
+} from './happyHourEngine.js';
 import { getDefaultPublicBranchId } from '../utils/defaultPublicBranch.js';
 
 export async function loadActiveHappyHourRules(): Promise<{ rules: HappyHourRule[]; tz: string }> {

@@ -47,7 +47,11 @@ function parseCsvLine(line: string): string[] {
 }
 
 function parseNumber(raw: string): number {
-  const n = Number(String(raw || '').trim().replace(/,/g, ''));
+  const n = Number(
+    String(raw || '')
+      .trim()
+      .replace(/,/g, '')
+  );
   return Number.isFinite(n) ? n : 0;
 }
 
@@ -164,4 +168,3 @@ main().catch(err => {
   }
   process.exit(1);
 });
-

@@ -28,7 +28,9 @@ function splitCommaOrigins(raw: string): string[] {
 /** FRONTEND_* first, then first entry from CORS_ORIGIN (same merge idea as server CORS). */
 export function pickFrontendBaseUrlFromEnv(): string | null {
   const primary =
-    process.env.FRONTEND_URL || process.env.FRONTEND_DASHBOARD_URL || process.env.FRONTEND_CUSTOMER_URL;
+    process.env.FRONTEND_URL ||
+    process.env.FRONTEND_DASHBOARD_URL ||
+    process.env.FRONTEND_CUSTOMER_URL;
   if (primary) {
     const first = splitCommaOrigins(primary)[0];
     if (first) return normalizeUrl(first);

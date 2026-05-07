@@ -59,7 +59,10 @@ const createHappyHourSchema = z
           message: 'Choose who should receive the WhatsApp message',
         });
       }
-      if (data.notifyAudience === 'SELECTED' && (!data.selectedMobiles || data.selectedMobiles.length === 0)) {
+      if (
+        data.notifyAudience === 'SELECTED' &&
+        (!data.selectedMobiles || data.selectedMobiles.length === 0)
+      ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['selectedMobiles'],
@@ -222,61 +225,70 @@ const sendNotificationSchema = z.object({
 });
 
 /** Send (prepare) WhatsApp broadcast for offers created with SEND_MANUAL while PENDING. */
-happyHourRouter.post('/:id/send-notification', authenticate, requireRole('ADMIN'), async (req, res) => {
-  const id = Number(req.params.id);
-  if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ message: 'Invalid id' });
-  const parsed = sendNotificationSchema.safeParse(req.body ?? {});
-  if (!parsed.success) {
-    return res.status(400).json({ message: 'Invalid input', errors: parsed.error.issues });
-  }
+happyHourRouter.post(
+  '/:id/send-notification',
+  authenticate,
+  requireRole('ADMIN'),
+  async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ message: 'Invalid id' });
+    const parsed = sendNotificationSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ message: 'Invalid input', errors: parsed.error.issues });
+    }
 
-  const hh = await prisma.happyHour.findUnique({
-    where: { id },
-    include: { categoryLinks: true, itemLinks: true, excludedItemLinks: true },
-  });
-  if (!hh) return res.status(404).json({ message: 'Offer not found' });
-  if (hh.notificationPref !== 'SEND_MANUAL') {
-    return res.status(400).json({ message: 'This offer is not set for manual WhatsApp send.' });
-  }
-  if (hh.notificationStatus === 'SENT') {
-    return res.status(400).json({ message: 'Notifications were already marked as sent for this offer.' });
-  }
-  if (!hh.notifyAudience) {
-    return res.status(400).json({ message: 'Missing audience on this offer; recreate the offer with an audience.' });
-  }
+    const hh = await prisma.happyHour.findUnique({
+      where: { id },
+      include: { categoryLinks: true, itemLinks: true, excludedItemLinks: true },
+    });
+    if (!hh) return res.status(404).json({ message: 'Offer not found' });
+    if (hh.notificationPref !== 'SEND_MANUAL') {
+      return res.status(400).json({ message: 'This offer is not set for manual WhatsApp send.' });
+    }
+    if (hh.notificationStatus === 'SENT') {
+      return res
+        .status(400)
+        .json({ message: 'Notifications were already marked as sent for this offer.' });
+    }
+    if (!hh.notifyAudience) {
+      return res
+        .status(400)
+        .json({ message: 'Missing audience on this offer; recreate the offer with an audience.' });
+    }
 
-  try {
-    const defaultId = await getDefaultPublicBranchId();
-    const branch = defaultId
-      ? await prisma.branch.findUnique({
-          where: { id: defaultId },
-          select: { name: true, location: true, phone: true, googleReviewUrl: true },
-        })
-      : null;
-    const selected =
-      hh.notifyAudience === 'SELECTED' && Array.isArray(hh.selectedMobiles)
-        ? (hh.selectedMobiles as string[])
-        : undefined;
-    const broadcast = await buildHappyHourWaBroadcast({
-      discountPercent: Number(hh.discountPercent),
-      timeStart: hh.timeStart,
-      timeEnd: hh.timeEnd,
-      audience: hh.notifyAudience,
-      selectedMobiles: selected,
-      leadersLimit: parsed.data.leadersLimit,
-      branch: branch || undefined,
-    });
-    await prisma.happyHour.update({
-      where: { id },
-      data: { notificationStatus: 'SENT', sentAt: new Date() },
-    });
-    return res.json({ ok: true, broadcast });
-  } catch (e) {
-    console.error('Happy hour manual send failed:', e);
-    await prisma.happyHour.update({
-      where: { id },
-      data: { notificationStatus: 'FAILED' },
-    });
-    return res.status(500).json({ message: 'Failed to prepare WhatsApp broadcast' });
+    try {
+      const defaultId = await getDefaultPublicBranchId();
+      const branch = defaultId
+        ? await prisma.branch.findUnique({
+            where: { id: defaultId },
+            select: { name: true, location: true, phone: true, googleReviewUrl: true },
+          })
+        : null;
+      const selected =
+        hh.notifyAudience === 'SELECTED' && Array.isArray(hh.selectedMobiles)
+          ? (hh.selectedMobiles as string[])
+          : undefined;
+      const broadcast = await buildHappyHourWaBroadcast({
+        discountPercent: Number(hh.discountPercent),
+        timeStart: hh.timeStart,
+        timeEnd: hh.timeEnd,
+        audience: hh.notifyAudience,
+        selectedMobiles: selected,
+        leadersLimit: parsed.data.leadersLimit,
+        branch: branch || undefined,
+      });
+      await prisma.happyHour.update({
+        where: { id },
+        data: { notificationStatus: 'SENT', sentAt: new Date() },
+      });
+      return res.json({ ok: true, broadcast });
+    } catch (e) {
+      console.error('Happy hour manual send failed:', e);
+      await prisma.happyHour.update({
+        where: { id },
+        data: { notificationStatus: 'FAILED' },
+      });
+      return res.status(500).json({ message: 'Failed to prepare WhatsApp broadcast' });
+    }
   }
-});
+);

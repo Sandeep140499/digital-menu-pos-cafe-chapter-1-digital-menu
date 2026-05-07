@@ -159,7 +159,13 @@ export async function generateOrderInvoicePdf(order: OrderForPdf): Promise<Uint8
     page.drawText('Rate (Rs.)', { x: colPrice, y, size: 9, font: fontBold, color: rgb(0, 0, 0) });
     const amtHdr = 'Amount (Rs.)';
     const amtTw = fontBold.widthOfTextAtSize(amtHdr, 9);
-    page.drawText(amtHdr, { x: width - margin - amtTw - 2, y, size: 9, font: fontBold, color: rgb(0, 0, 0) });
+    page.drawText(amtHdr, {
+      x: width - margin - amtTw - 2,
+      y,
+      size: 9,
+      font: fontBold,
+      color: rgb(0, 0, 0),
+    });
     y -= lineHeight + 2;
     page.drawLine({
       start: { x: margin, y },
@@ -250,7 +256,10 @@ export async function generateOrderInvoicePdf(order: OrderForPdf): Promise<Uint8
     hour: '2-digit',
     minute: '2-digit',
   });
-  const titleMonth = order.createdAt.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+  const titleMonth = order.createdAt.toLocaleDateString('en-IN', {
+    month: 'long',
+    year: 'numeric',
+  });
   page.drawText(`Order Invoice — ${pdfWinAnsiSafe(titleMonth, 48)}`, {
     x: margin,
     y,
@@ -343,7 +352,13 @@ export async function generateOrderInvoicePdf(order: OrderForPdf): Promise<Uint8
     page.drawText(rs(safePrice), { x: colPrice, y, size: 9, font: fontSmall, color: rgb(0, 0, 0) });
     const totStr = rs(lineTotal);
     const tw = fontSmall.widthOfTextAtSize(totStr, 9);
-    page.drawText(totStr, { x: width - margin - tw - 2, y, size: 9, font: fontSmall, color: rgb(0, 0, 0) });
+    page.drawText(totStr, {
+      x: width - margin - tw - 2,
+      y,
+      size: 9,
+      font: fontSmall,
+      color: rgb(0, 0, 0),
+    });
     y -= lineHeightSmall;
     page.drawLine({
       start: { x: margin, y },
@@ -368,7 +383,13 @@ export async function generateOrderInvoicePdf(order: OrderForPdf): Promise<Uint8
   const totalAmt = Number(order.totalAmount);
   const safeTotal = Number.isFinite(totalAmt) ? totalAmt : 0;
 
-  const rowBetween = (left: string, right: string, sz: number, bold: boolean, color = rgb(0, 0, 0)) => {
+  const rowBetween = (
+    left: string,
+    right: string,
+    sz: number,
+    bold: boolean,
+    color = rgb(0, 0, 0)
+  ) => {
     const f = bold ? fontBold : font;
     page.drawText(left, { x: margin, y, size: sz, font: f, color });
     const tw = f.widthOfTextAtSize(right, sz);
@@ -393,7 +414,13 @@ export async function generateOrderInvoicePdf(order: OrderForPdf): Promise<Uint8
   y -= lineHeight + 16;
 
   if (MENU_BASE_URL || (reviewUrl && reviewUrl !== '-')) {
-    page.drawText('—', { x: (width - fontSmall.widthOfTextAtSize('—', 8)) / 2, y, size: 8, font: fontSmall, color: SLATE_200 });
+    page.drawText('—', {
+      x: (width - fontSmall.widthOfTextAtSize('—', 8)) / 2,
+      y,
+      size: 8,
+      font: fontSmall,
+      color: SLATE_200,
+    });
     y -= lineHeightSmall;
     if (MENU_BASE_URL) {
       page.drawText(`Menu: ${pdfWinAnsiSafe(MENU_BASE_URL, 200)}`, {
@@ -406,7 +433,13 @@ export async function generateOrderInvoicePdf(order: OrderForPdf): Promise<Uint8
       y -= lineHeightSmall;
     }
     if (reviewUrl && reviewUrl !== '-') {
-      page.drawText(`Review us: ${reviewUrl}`, { x: margin, y, size: 8, font: fontSmall, color: SLATE_500 });
+      page.drawText(`Review us: ${reviewUrl}`, {
+        x: margin,
+        y,
+        size: 8,
+        font: fontSmall,
+        color: SLATE_500,
+      });
       y -= lineHeightSmall;
     }
   }

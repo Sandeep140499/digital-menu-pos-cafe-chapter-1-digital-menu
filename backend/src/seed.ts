@@ -215,12 +215,18 @@ async function main() {
   const milkshake = await prisma.menuCategory.findFirst({
     where: { slug: 'milkshake', branchId: branch.id },
   });
-  const chai = await prisma.menuCategory.findFirst({ where: { slug: 'chai', branchId: branch.id } });
-  const pizza = await prisma.menuCategory.findFirst({ where: { slug: 'pizza', branchId: branch.id } });
+  const chai = await prisma.menuCategory.findFirst({
+    where: { slug: 'chai', branchId: branch.id },
+  });
+  const pizza = await prisma.menuCategory.findFirst({
+    where: { slug: 'pizza', branchId: branch.id },
+  });
   const burger = await prisma.menuCategory.findFirst({
     where: { slug: 'burger', branchId: branch.id },
   });
-  const rice = await prisma.menuCategory.findFirst({ where: { slug: 'rice', branchId: branch.id } });
+  const rice = await prisma.menuCategory.findFirst({
+    where: { slug: 'rice', branchId: branch.id },
+  });
 
   const sampleItems: {
     name: string;

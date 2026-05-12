@@ -30,7 +30,7 @@
     "reset-db-keep-menu": "node --loader ts-node/esm src/reset-db-keep-menu.ts"
   },
   "dependencies": {
-    "@prisma/client": "^6.2.1",
+    "@prisma/client": "^6.19.3",
     "bcryptjs": "^2.4.3",
     "compression": "^1.8.1",
     "cookie-parser": "^1.4.7",
@@ -70,7 +70,7 @@
     "globals": "^17.4.0",
     "nodemon": "^3.1.14",
     "prettier": "^3.8.1",
-    "prisma": "^6.2.1",
+    "prisma": "^6.19.3",
     "supertest": "^7.0.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.3",

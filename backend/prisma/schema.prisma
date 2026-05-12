@@ -357,8 +357,8 @@ model Order {
   sessionToken         String?
   removedItems         RemovedItemsReport[]
   modifications        OrderModification[]
-  orderSource          OrderSource          @default(CUSTOMER) // Distinguish between customer and employee orders
-  priority             OrderPriority        @default(NORMAL) // For notification urgency
+  orderSource          String?              @default("CUSTOMER") // Distinguish between customer and employee orders
+  priority             String?              @default("NORMAL") // For notification urgency
 
   @@index([branchId, status, createdAt]) // Optimized for order listing
   @@index([branchId, paymentStatus, createdAt]) // Optimized for payment tracking

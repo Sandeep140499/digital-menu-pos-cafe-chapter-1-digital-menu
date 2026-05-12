@@ -19,7 +19,7 @@
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
         { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" },
         { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains; preload" },
-        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://api.cafechapter1.online https://*.google.com; font-src 'self' data: https:; frame-src 'self' https:;" }
+        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://digital-menu-api-production.up.railway.app wss://digital-menu-api-production.up.railway.app https://*.google.com; font-src 'self' data: https:; frame-src 'self' https:;" }
       ]
     }
   ],
@@ -27,11 +27,11 @@
   "rewrites": [
   {
   "source": "/api/(.*)",
-  "destination": "https://api.cafechapter1.online/api/$1"
+  "destination": "https://digital-menu-api-production.up.railway.app/api/$1"
   },
   {
   "source": "/socket.io/(.*)",
-  "destination": "https://api.cafechapter1.online/socket.io/$1"
+  "destination": "https://digital-menu-api-production.up.railway.app/socket.io/$1"
   },
   {
   "source": "/(.*)",

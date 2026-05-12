@@ -16,6 +16,7 @@
   },
   "description": "Run test:api for backend only, test:e2e for E2E (requires backend on :4000). Use test:watch:api for API tests on every change.",
   "devDependencies": {
-    "husky": "^9.1.7"
+    "husky": "^9.1.7",
+    "prisma": "^6.2.1"
   }
 }

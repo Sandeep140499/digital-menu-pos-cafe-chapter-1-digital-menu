@@ -51,7 +51,7 @@ export default function TermsAndConditions() {
           </p>
           <ul className="ml-4 mt-2 list-disc text-sm leading-relaxed text-stone-700">
             <li>Phone: +91 7800327061</li>
-            <li>Address: Green Park, Gautam Nagar, New Delhi</li>
+            <li>Address: 135/3,Green Park, Gautam Nagar, New Delhi</li>
           </ul>
         </section>
 

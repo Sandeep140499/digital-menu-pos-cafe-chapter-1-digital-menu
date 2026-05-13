@@ -1782,6 +1782,8 @@ orderRouter.post('/:id/modify-v2', authenticate, requireRole('EMPLOYEE'), async 
       });
 
       return { updatedOrder, oldAmount, newAmount, removedCount: toRemove.length };
+    }, {
+      timeout: 15000, // Increase timeout to 15s to prevent production timeouts
     });
 
     if ('error' in result && result.error) {

@@ -21,9 +21,6 @@ import { metricsRouter } from './modules/metrics.routes.js';
 import { monthlyTargetsRouter } from './modules/monthlyTargets.routes.js';
 import { autoShiftRouter } from './modules/autoShift.routes.js';
 import { happyHourRouter } from './modules/happyHour.routes.js';
-import { isMailConfigured, sendEmail, verifyMailConnection } from '../config/mailer.js';
-import fs from 'fs/promises';
-import path from 'path';
 
 export const router = Router();
 
@@ -52,51 +49,3 @@ router.use('/leaves', leaveRouter);
 router.use('/attendance', attendanceRouter);
 router.use('/monthly-targets', monthlyTargetsRouter);
 router.use('/happy-hours', happyHourRouter);
-
-// 🧪 Temporary Debug Endpoint: Test Mail Connection
-router.get('/debug/mail-test', async (req, res) => {
-  const targetEmail = (req.query.to as string) || 'chapteronecafe11@gmail.com';
-  
-  try {
-    const results: any = {
-      timestamp: new Date().toISOString(),
-      config: {
-        host: process.env.EMAIL_SMTP_HOST,
-        user: process.env.EMAIL_SMTP_USER,
-        from: process.env.EMAIL_FROM_ADDRESS,
-        isConfigured: isMailConfigured(),
-      },
-      connection: 'Checking...',
-    };
-
-    await verifyMailConnection();
-    results.connection = 'SUCCESS ✅';
-
-    await sendEmail({
-      to: targetEmail,
-      subject: '🛎️ Production Mail Debug Test',
-      html: `<h3>Mail Test Successful!</h3><p>Sent at: ${new Date().toLocaleString()}</p>`,
-    });
-    results.emailSent = `SUCCESS to ${targetEmail} ✅`;
-
-    return res.json(results);
-  } catch (err: any) {
-    return res.status(500).json({
-      error: err.message || String(err),
-      code: err.code,
-      hint: 'Check if the sender email is verified in Brevo and SMTP credentials are correct.',
-    });
-  }
-});
-
-// 📜 Temporary Debug Endpoint: View Error Logs
-router.get('/debug/logs', async (req, res) => {
-  try {
-    const logPath = path.resolve(process.cwd(), 'logs', 'error.log');
-    const content = await fs.readFile(logPath, 'utf8');
-    const lines = content.split('\n').filter(Boolean).slice(-100).reverse();
-    return res.type('text/plain').send(lines.join('\n'));
-  } catch (err: any) {
-    return res.status(500).send(`Failed to read logs: ${err.message}. Dir: ${process.cwd()}`);
-  }
-});

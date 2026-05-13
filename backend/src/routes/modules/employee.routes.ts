@@ -586,15 +586,20 @@ employeeRouter.post(
     } catch (e: unknown) {
       const err = e as { code?: string; message?: string };
       console.error('Verify-and-send-invite email failed:', err?.code || err?.message || e);
-      const hint =
-        err?.code === 'EAUTH'
-          ? 'Check EMAIL_SMTP_USER and EMAIL_SMTP_PASS (use Gmail App Password, not regular password).'
-          : err?.code === 'ECONNECTION' || err?.code === 'ETIMEDOUT'
+      
+      const errorMessage = String(err?.message || e);
+      const isAuthError = err?.code === 'EAUTH' || errorMessage.includes('401') || errorMessage.includes('unauthorized') || errorMessage.includes('Key not found');
+      const isConnError = err?.code === 'ECONNECTION' || err?.code === 'ETIMEDOUT' || errorMessage.includes('ECONNREFUSED');
+
+      const hint = isAuthError
+          ? 'Check EMAIL_SMTP_USER and EMAIL_SMTP_PASS (or BREVO_API_KEY if used). Use Gmail App Password for Gmail, or Brevo SMTP key for Brevo.'
+          : isConnError
             ? 'Check EMAIL_SMTP_HOST, EMAIL_SMTP_PORT, and network/firewall.'
             : 'Check server logs and .env (EMAIL_SMTP_*, EMAIL_FROM_ADDRESS).';
+            
       return res.status(500).json({
         message: 'Failed to send email. ' + hint,
-        detail: process.env.NODE_ENV === 'development' ? String(err?.message || e) : undefined,
+        detail: process.env.NODE_ENV !== 'production' ? errorMessage : undefined,
       });
     }
     const updated = await prisma.employee.findUnique({ where: { id } });

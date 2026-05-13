@@ -59,7 +59,14 @@ function isLocalDevOrigin(origin: string): boolean {
     const u = new URL(origin);
     const host = u.hostname;
     const isLocalHost =
-      host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || host === '::1';
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === '0.0.0.0' ||
+      host === '::1' ||
+      // Also allow local network IPs (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+      /^192\.168\.\d{1,3}\.\d{1,3}$/.test(host) ||
+      /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host) ||
+      /^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$/.test(host);
     return isLocalHost;
   } catch {
     return false;
@@ -194,10 +201,12 @@ app.use(
       if (!isProd && isLocalDevOrigin(origin)) return cb(null, true);
       if (!allowedOrigins || allowedOrigins.length === 0) return cb(null, true);
       if (allowedOrigins.includes(origin)) return cb(null, true);
-      return cb(new Error('CORS: origin not allowed'));
+      // Return false instead of Error to avoid 500 Internal Server Error in middleware.
+      // The browser will still see a CORS error, but the backend won't crash.
+      return cb(null, false);
     },
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Requested-With', 'Accept'],
     credentials: true,
   })
 );
@@ -249,25 +258,6 @@ app.get('/', (_req, res) => res.status(200).send('OK'));
 // OpenAPI / Swagger docs
 app.get('/api/openapi.json', (_req, res) => {
   res.json(openApiSpec);
-});
-
-// Explicit OPTIONS (preflight) for all /api routes so POST /api/employees/:id/verify-and-send-invite works from frontend on Render etc.
-app.use('/api', (req, res, next) => {
-  if (req.method === 'OPTIONS') {
-    const origin =
-      allowedOrigins?.length && req.headers.origin && allowedOrigins.includes(req.headers.origin)
-        ? req.headers.origin
-        : allowedOrigins?.length
-          ? allowedOrigins[0]
-          : req.headers.origin || '*';
-    res.setHeader('Access-Control-Allow-Origin', String(origin));
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token');
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Max-Age', '86400');
-    return res.sendStatus(204);
-  }
-  next();
 });
 
 app.get('/api/docs', (_req, res) => {

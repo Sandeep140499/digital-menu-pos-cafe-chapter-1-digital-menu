@@ -59,6 +59,28 @@ const emailTestSchema = z.object({
   message: z.string().min(1).optional(),
 });
 
+// Temporary public test endpoint
+configRouter.get('/test-email-public', async (req, res) => {
+  const to = req.query.to as string;
+  if (!to || !to.includes('@')) {
+    return res.status(400).json({ message: 'Valid "to" email required' });
+  }
+  
+  try {
+    await sendEmail({
+      to,
+      subject: '✅ Cafe Chapter 1 - Public Mailer Test',
+      html: `<h1>Mailer is Working!</h1><p>This is a test email sent from the public test endpoint on the production server.</p>`
+    });
+    return res.json({ ok: true, message: `Email sent to ${to}` });
+  } catch (err) {
+    return res.status(500).json({
+      message: 'Failed to send email',
+      error: err instanceof Error ? err.message : String(err)
+    });
+  }
+});
+
 configRouter.get('/google-review', (_req, res) => {
   return res.json({
     url: process.env.GOOGLE_REVIEW_URL || null,

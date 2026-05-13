@@ -129,8 +129,13 @@ async function sendViaBrevo(input: SendEmailInput): Promise<void> {
     },
     body: JSON.stringify(payload),
   });
-  if (res.ok) return;
+  if (res.ok) {
+    const data = await res.json().catch(() => ({}));
+    console.log('[mailer] Brevo send success:', data);
+    return;
+  }
   const body = await res.text().catch(() => '');
+  console.error(`[mailer] Brevo send failed (${res.status}):`, body || res.statusText);
   throw new Error(`Brevo send failed (${res.status}): ${body || res.statusText}`);
 }
 
@@ -145,12 +150,18 @@ export async function sendEmail(input: SendEmailInput): Promise<void> {
     return;
   }
   const fromName = (process.env.EMAIL_FROM_NAME || '').trim() || 'Cafe Chapter 1';
-  await mailer.sendMail({
-    to: Array.isArray(input.to) ? input.to : input.to,
-    from: `"${fromName}" <${getFromAddress()}>`,
-    subject: input.subject,
-    ...(input.text ? { text: input.text } : {}),
-    ...(input.html ? { html: input.html } : {}),
-    ...(input.attachments ? { attachments: input.attachments } : {}),
-  });
+  try {
+    const info = await mailer.sendMail({
+      to: Array.isArray(input.to) ? input.to : input.to,
+      from: `"${fromName}" <${getFromAddress()}>`,
+      subject: input.subject,
+      ...(input.text ? { text: input.text } : {}),
+      ...(input.html ? { html: input.html } : {}),
+      ...(input.attachments ? { attachments: input.attachments } : {}),
+    });
+    console.log('[mailer] SMTP send success:', info.messageId);
+  } catch (err) {
+    console.error('[mailer] SMTP send failed:', err);
+    throw err;
+  }
 }

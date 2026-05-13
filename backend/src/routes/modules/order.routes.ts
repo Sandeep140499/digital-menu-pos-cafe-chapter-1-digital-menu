@@ -1796,9 +1796,36 @@ orderRouter.post('/:id/modify-v2', authenticate, requireRole('EMPLOYEE'), async 
       newAmount: result.newAmount,
       removedCount: result.removedCount,
     });
-  } catch (err) {
-    console.error('POST /orders/:id/modify-v2 error:', err);
-    return res.status(500).json({ message: 'Failed to modify order' });
+  } catch (err: unknown) {
+    // Log the error with full stack trace for debugging
+    logger.error('POST /orders/:id/modify-v2 error:', {
+      orderId,
+      employeeId,
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
+
+    if (err instanceof Prisma.PrismaClientKnownRequestError) {
+      if (err.code === 'P2002') {
+        return res.status(409).json({ message: 'A data conflict occurred. Please retry.' });
+      }
+      if (err.code === 'P2003') {
+        return res.status(400).json({ message: 'Invalid reference (e.g. menu item or employee not found).' });
+      }
+      if (err.code === 'P2025') {
+        return res.status(404).json({ message: 'The requested order or item was not found.' });
+      }
+      return res.status(500).json({
+        message: 'A database error occurred while modifying the order.',
+        code: err.code,
+      });
+    }
+
+    const msg = err instanceof Error ? err.message : String(err);
+    return res.status(500).json({
+      message: 'Failed to modify order. Please check server logs.',
+      ...(process.env.NODE_ENV === 'development' ? { detail: msg } : {}),
+    });
   }
 });
 

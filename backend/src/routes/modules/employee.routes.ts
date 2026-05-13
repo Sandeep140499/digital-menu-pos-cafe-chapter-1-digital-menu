@@ -356,7 +356,10 @@ Dashboard: ${baseUrl}/login
 This link expires in 24 hours.`,
       html: `<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:560px;"><p>Hi <strong>${n}</strong>,</p><p>Your employee account has been created.</p><p>You must <strong>verify your email</strong> before you can log in. Click the button below:</p><p><a href="${escapeHtml(verifyUrl)}" style="display:inline-block;background:#047857;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;">Verify my email</a></p><p style="color:#666;font-size:14px;">Or copy this link: ${escapeHtml(verifyUrl)}</p><p>After verification, we will email you your login password.</p><p><a href="${escapeHtml(baseUrl)}/login">Employee portal login</a></p><p style="color:#999;font-size:12px;">This link expires in 24 hours.</p></body></html>`,
     }).catch(mailErr => {
-      console.error('Failed to send employee welcome email:', mailErr);
+      console.error('[employee-create] Failed to send welcome email:', {
+        employee: email,
+        error: mailErr instanceof Error ? mailErr.message : String(mailErr),
+      });
     });
   } else {
     console.warn(

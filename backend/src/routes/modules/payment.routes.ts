@@ -88,7 +88,6 @@ paymentRouter.patch('/:orderId', authenticate, requireRole('EMPLOYEE'), async (r
     paymentStatus: order.paymentStatus,
     branchId: (order as any).branchId,
   };
-  req.app.locals.io?.emit('payment:updated', paymentEvent);
   if ((order as any).branchId) {
     req.app.locals.io
       ?.to(`branch:${(order as any).branchId}`)

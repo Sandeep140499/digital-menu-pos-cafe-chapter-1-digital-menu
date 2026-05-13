@@ -401,12 +401,12 @@ orderRouter.post('/', async (req, res) => {
       items: items.map(item => ({ name: item.name, quantity: item.quantity })),
     };
 
-    // Send loud notification for new customer order
+    // Send enhanced notification for new customer order (branch room only)
     await notificationService.sendNewOrderNotification(notificationData);
 
-    // Keep legacy emissions for backward compatibility
+    // Keep legacy emission ONLY to the relevant branch room for backward compatibility.
+    // Removed global io.emit to prevent redundant/insecure broadcasts.
     const payload = orderForRealtime ?? order;
-    req.app.locals.io?.emit('order:new', payload);
     req.app.locals.io?.to(`branch:${order.branchId}`)?.emit('order:new', payload);
 
     publishOrderStatus({
@@ -1790,7 +1790,12 @@ orderRouter.post('/:id/modify-v2', authenticate, requireRole('EMPLOYEE'), async 
       return res.status(result.error.status).json({ message: result.error.message });
     }
 
-    req.app.locals.io?.emit('order:modified', result.updatedOrder);
+    logger.info('Order modified successfully, emitting events', {
+      orderId,
+      branchId: (result.updatedOrder as any).branchId,
+    });
+
+    // Notify the specific branch only (legacy event)
     req.app.locals.io
       ?.to(`branch:${(result.updatedOrder as any).branchId}`)
       ?.emit('order:modified', result.updatedOrder);

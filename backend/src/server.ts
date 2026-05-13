@@ -255,19 +255,6 @@ app.use(morgan('dev'));
 
 app.get('/', (_req, res) => res.status(200).send('OK'));
 
-// 📜 Temporary Debug Endpoint: View Error Logs
-app.get('/debug/logs', async (req, res) => {
-  try {
-    const logPath = path.resolve(process.cwd(), 'logs', 'error.log');
-    const content = await fs.readFile(logPath, 'utf8');
-    // Read last 100 lines and reverse so newest are at the top
-    const lines = content.split('\n').filter(Boolean).slice(-100).reverse();
-    return res.type('text/plain').send(lines.join('\n'));
-  } catch (err: any) {
-    return res.status(500).send(`Failed to read logs: ${err.message}. Current Dir: ${process.cwd()}`);
-  }
-});
-
 // OpenAPI / Swagger docs
 app.get('/api/openapi.json', (_req, res) => {
   res.json(openApiSpec);

@@ -22,6 +22,8 @@ import { monthlyTargetsRouter } from './modules/monthlyTargets.routes.js';
 import { autoShiftRouter } from './modules/autoShift.routes.js';
 import { happyHourRouter } from './modules/happyHour.routes.js';
 import { isMailConfigured, sendEmail, verifyMailConnection } from '../config/mailer.js';
+import fs from 'fs/promises';
+import path from 'path';
 
 export const router = Router();
 
@@ -84,5 +86,17 @@ router.get('/debug/mail-test', async (req, res) => {
       code: err.code,
       hint: 'Check if the sender email is verified in Brevo and SMTP credentials are correct.',
     });
+  }
+});
+
+// 📜 Temporary Debug Endpoint: View Error Logs
+router.get('/debug/logs', async (req, res) => {
+  try {
+    const logPath = path.resolve(process.cwd(), 'logs', 'error.log');
+    const content = await fs.readFile(logPath, 'utf8');
+    const lines = content.split('\n').filter(Boolean).slice(-100).reverse();
+    return res.type('text/plain').send(lines.join('\n'));
+  } catch (err: any) {
+    return res.status(500).send(`Failed to read logs: ${err.message}. Dir: ${process.cwd()}`);
   }
 });

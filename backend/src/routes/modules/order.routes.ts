@@ -1620,13 +1620,15 @@ orderRouter.post('/:id/modify', authenticate, requireRole('EMPLOYEE'), async (re
 
 // Employee: modify order (remove + add + edit)
 orderRouter.post('/:id/modify-v2', authenticate, requireRole('EMPLOYEE'), async (req, res) => {
+  const orderId = Number(req.params.id);
+  const employeeId = req.user!.id;
+  logger.info('Received order modification request', { orderId, employeeId, body: req.body });
+
   const parsed = modifyOrderV2Schema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ message: 'Invalid input', errors: parsed.error.issues });
   }
 
-  const orderId = Number(req.params.id);
-  const employeeId = req.user!.id;
   const { removedItemIds, addedItems, updatedItems, reason } = parsed.data;
 
   try {

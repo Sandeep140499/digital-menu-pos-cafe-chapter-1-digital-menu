@@ -350,7 +350,7 @@ shiftRouter.post('/end', authenticate, requireRole('EMPLOYEE'), async (req, res)
 shiftRouter.get('/active', authenticate, requireRole('ADMIN'), async (_req, res) => {
   const activeShifts = await prisma.employeeShift.findMany({
     where: { shiftEnd: null },
-    orderBy: { shiftStart: 'asc' },
+    orderBy: { shiftStart: 'desc' },
     include: {
       employee: {
         select: { id: true, name: true, employeeCode: true, status: true, shiftStartTime: true },
@@ -366,7 +366,13 @@ shiftRouter.get('/active', authenticate, requireRole('ADMIN'), async (_req, res)
       : [];
   const lateByShiftId = new Map(lateEntries.map(le => [le.shiftId!, le]));
   const now = Date.now();
-  const normalized = activeShifts.map(s => {
+  const uniqueEmployeeIds = new Set<number>();
+  const normalized = [];
+
+  for (const s of activeShifts) {
+    if (uniqueEmployeeIds.has(s.employeeId)) continue;
+    uniqueEmployeeIds.add(s.employeeId);
+
     const liveHours = (now - s.shiftStart.getTime()) / (1000 * 60 * 60);
     const totalSales = (s.orders || [])
       .filter((o: any) => o.paymentStatus === 'PAID')
@@ -383,7 +389,7 @@ shiftRouter.get('/active', authenticate, requireRole('ADMIN'), async (_req, res)
         lateMinutes: late.lateDurationMinutes,
       };
     }
-    return {
+    normalized.push({
       id: s.id,
       shiftStart: s.shiftStart,
       status: (s as any).status ?? 'ACTIVE',
@@ -393,8 +399,8 @@ shiftRouter.get('/active', authenticate, requireRole('ADMIN'), async (_req, res)
       employee: s.employee,
       branch: s.branch,
       late: lateInfo,
-    };
-  });
+    });
+  }
   return res.json({ shifts: normalized });
 });
 

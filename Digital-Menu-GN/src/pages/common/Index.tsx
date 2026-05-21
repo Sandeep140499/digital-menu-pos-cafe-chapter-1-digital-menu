@@ -217,9 +217,9 @@ function OrderCartDialog({
               </div>
             ))
           )}
-        </div>
-        <div className="mt-2 space-y-2 border-t pt-3">
-          <div className="flex flex-col gap-2 text-xs sm:text-sm">
+          
+          <div className="mt-4 space-y-2 border-t pt-4">
+            <div className="flex flex-col gap-2 text-xs sm:text-sm">
             <label className="flex flex-col gap-1">
               <span className="font-semibold text-olive-900">
                 Your name <span className="text-red-500">*</span>
@@ -302,7 +302,10 @@ function OrderCartDialog({
               </label>
             )}
           </div>
+          </div>
+        </div>
 
+        <div className="mt-2 space-y-2 border-t pt-3 shrink-0">
           {showTotalAmount && (
             <div className="flex items-center justify-between pt-1 text-sm">
               <span className="font-semibold">Total</span>

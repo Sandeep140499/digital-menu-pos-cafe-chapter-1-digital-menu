@@ -22,8 +22,6 @@ import { resolveExpectedUnitPrice } from '../../services/happyHourEngine.js';
 import { loadActiveHappyHourRules } from '../../services/happyHourRulesLoader.js';
 import { normalizeIndianMobile } from '../../utils/indianMobile.js';
 
-const mobileRegex = /^[6-9]\d{9}$/;
-
 function toMobileLast10(mobile: string | null | undefined): string | null {
   const raw = String(mobile || '')
     .replace(/\D/g, '')
@@ -48,14 +46,6 @@ const createOrderSchema = z
     branchId: z.number().int(),
     sessionToken: z.string().optional(),
     packaging: z.boolean().optional(),
-    customerName: z.string().min(1, 'Name is required'),
-    customerMobile: z
-      .union([z.string().regex(mobileRegex), z.string().max(20)])
-      .optional()
-      .transform(s => {
-        if (s == null || s === undefined) return null;
-        return normalizeIndianMobile(String(s));
-      }),
     items: z
       .array(
         z.object({
@@ -179,12 +169,19 @@ orderRouter.post('/', async (req, res) => {
       branchId,
       items,
       sessionToken,
-      customerName: rawName,
-      customerMobile: rawMobile,
     } = parsed.data;
+    const rawName = (parsed.data as any).customerName;
+    const rawMobile = (parsed.data as any).customerMobile;
     const tableNumber = orderType === 'TAKE_AWAY' ? 'TAKE_AWAY' : (rawTableNumber || '').trim();
-    const customerMobile = normalizeIndianMobile(rawMobile ?? null);
-    const customerName = (rawName || '').trim().toUpperCase() || (rawName || '').trim();
+    let customerMobile = null;
+    let customerName = null;
+
+    if (rawMobile && typeof rawMobile === 'string' && rawMobile.trim()) {
+      customerMobile = normalizeIndianMobile(rawMobile);
+    }
+    if (rawName && typeof rawName === 'string' && rawName.trim()) {
+      customerName = rawName.trim().toUpperCase();
+    }
     const customerMobileLast10 = toMobileLast10(customerMobile);
     const customerKey = toCustomerKey({
       mobileLast10: customerMobileLast10,

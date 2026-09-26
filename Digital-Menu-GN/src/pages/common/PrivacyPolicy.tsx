@@ -20,22 +20,24 @@ export default function PrivacyPolicy() {
         <section className="mb-6">
           <h2 className="mb-2 text-lg font-semibold text-stone-900">2. What Data We Collect</h2>
           <p className="text-sm leading-relaxed">
-            When you place an order through our digital menu, we may collect:
+            When you place an order through our digital menu, we collect:
           </p>
           <ul className="ml-4 mt-2 list-disc text-sm leading-relaxed text-stone-700">
-            <li>Your name (to identify the order)</li>
-            <li>Your mobile phone number (optional, only for order-related communication)</li>
             <li>Your table number (for dine-in orders)</li>
             <li>Order items and preferences</li>
           </ul>
+          <p className="mt-2 text-sm leading-relaxed">
+            We do not ask for your name or mobile number at checkout. If you use the Help / Raise Issue
+            form, you may choose to share a name and contact number so staff can reach you.
+          </p>
         </section>
 
         <section className="mb-6">
           <h2 className="mb-2 text-lg font-semibold text-stone-900">3. Why We Collect Phone Numbers</h2>
           <p className="text-sm leading-relaxed">
-            We collect phone numbers <strong>only</strong> for order-related communication, such as notifying you when your
-            order is ready or if there is an issue with your order. We do not use your phone number for marketing,
-            advertising, or share it with any third parties.
+            Phone numbers are not required to place an order. If you provide one on the Help form, it is
+            used <strong>only</strong> for order-related or support communication. We do not use it for
+            marketing, advertising, or share it with any third parties.
           </p>
         </section>
 

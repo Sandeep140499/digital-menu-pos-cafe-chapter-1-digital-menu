@@ -6,7 +6,7 @@ export interface OrderNotificationData {
   orderId: number;
   branchId: number;
   tableNumber: string;
-  customerName: string;
+  customerName: string | null;
   orderType: 'DINE_IN' | 'TAKE_AWAY';
   orderSource: 'CUSTOMER' | 'EMPLOYEE';
   priority: 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';

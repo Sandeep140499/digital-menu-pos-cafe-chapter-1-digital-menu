@@ -21,9 +21,8 @@ describe('POST /api/orders', () => {
     const res = await request(app)
       .post('/api/orders')
       .send({
-        tableNumber: 'T1',
+        tableNumber: '1',
         branchId: 1,
-        customerName: 'Test User',
         customerMobile: '123',
         items: [{ name: 'Coffee', unitPrice: 100, quantity: 1 }],
       });

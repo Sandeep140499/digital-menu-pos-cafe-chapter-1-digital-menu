@@ -1140,8 +1140,6 @@ function AddOrderSection({
   const [menuCategories, setMenuCategories] = useState<any[]>([]);
   const [menuLoading, setMenuLoading] = useState(true);
   const [cart, setCart] = useState<AddCartItem[]>([]);
-  const [customerName, setCustomerName] = useState('');
-  const [customerMobile, setCustomerMobile] = useState('');
   const [tableNumber, setTableNumber] = useState('');
   const [orderType, setOrderType] = useState<'DINE_IN' | 'TAKE_AWAY'>('DINE_IN');
   const [submitting, setSubmitting] = useState(false);
@@ -1194,10 +1192,6 @@ function AddOrderSection({
       toast.error('Add at least one item');
       return;
     }
-    if (!customerName.trim()) {
-      toast.error('Customer name is required');
-      return;
-    }
     if (orderType === 'DINE_IN' && !/^\d$/.test(tableNumber.trim())) {
       toast.error('Table number: enter one digit only (0–9), as on the table sticker.');
       return;
@@ -1206,9 +1200,6 @@ function AddOrderSection({
       toast.error('Branch not loaded. Refresh and try again.');
       return;
     }
-
-    const mobileTrim = customerMobile.replace(/\D/g, '').slice(0, 10);
-    const validMobile = mobileTrim.length === 10 && /^[6-9]/.test(mobileTrim) ? mobileTrim : '';
 
     setSubmitting(true);
     try {
@@ -1219,8 +1210,6 @@ function AddOrderSection({
           branchId,
           orderType,
           tableNumber: orderType === 'TAKE_AWAY' ? '' : tableNumber.trim(),
-          customerName: customerName.trim().toUpperCase(),
-          customerMobile: validMobile || undefined,
           packaging: orderType === 'TAKE_AWAY',
           items: cart.map(item => ({
             name: item.name,
@@ -1251,8 +1240,6 @@ function AddOrderSection({
       const newOrderId = data.order?.id ?? null;
       setLastOrderId(newOrderId);
       setCart([]);
-      setCustomerName('');
-      setCustomerMobile('');
       setTableNumber('');
       toast.success(`Order #${newOrderId} placed successfully!`);
       if (newOrderId) onOrderPlaced(newOrderId);
@@ -1454,38 +1441,8 @@ function AddOrderSection({
                 </div>
               )}
 
-              {/* Customer Details */}
+              {/* Order Type */}
               <div className="space-y-3 border-t pt-2">
-                <h4 className="text-sm font-semibold text-slate-700">Customer Details</h4>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-600">
-                    Name <span className="text-red-500">*</span>
-                  </label>
-                  <Input
-                    placeholder="Customer name"
-                    value={customerName}
-                    onChange={e => setCustomerName(e.target.value)}
-                    className="h-9 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-600">
-                    Mobile <span className="font-normal text-slate-400">(optional)</span>
-                  </label>
-                  <Input
-                    type="tel"
-                    inputMode="numeric"
-                    maxLength={10}
-                    placeholder="10-digit number"
-                    value={customerMobile}
-                    onChange={e =>
-                      setCustomerMobile(e.target.value.replace(/\D/g, '').slice(0, 10))
-                    }
-                    className="h-9 text-sm"
-                  />
-                </div>
-
-                {/* Order Type */}
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
@@ -1532,7 +1489,6 @@ function AddOrderSection({
                 disabled={
                   submitting ||
                   cart.length === 0 ||
-                  !customerName.trim() ||
                   (orderType === 'DINE_IN' && !/^\d$/.test(tableNumber.trim()))
                 }
                 onClick={handleSubmit}

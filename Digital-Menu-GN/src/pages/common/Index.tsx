@@ -110,8 +110,6 @@ function OrderCartDialog({
   isSubmittingOrder,
   /** Which checkout path is in flight (fixes spinner on correct button). */
   pendingCheckoutType,
-  lastCustomerName,
-  lastCustomerMobile,
   showTotalAmount,
   checkoutEnabled,
   checkoutDisabledReason,
@@ -124,165 +122,97 @@ function OrderCartDialog({
   decrementCartItem: (id: string) => void;
   removeCartItem: (id: string) => void;
   onCheckout: (formData: {
-    customerName: string;
-    customerMobile: string;
     tableNumber: string;
     orderType: 'DINE_IN' | 'TAKE_AWAY';
-  }) => Promise<void>; // customerMobile optional – for WhatsApp invoice
+  }) => Promise<void>;
   isSubmittingOrder: boolean;
   pendingCheckoutType: 'DINE_IN' | 'TAKE_AWAY' | null;
-  lastCustomerName: string;
-  lastCustomerMobile: string;
   showTotalAmount: boolean;
   checkoutEnabled: boolean;
   checkoutDisabledReason: string;
 }) {
-  const [customerName, setCustomerName] = useState('');
-  const [customerMobile, setCustomerMobile] = useState('');
   const [tableNumber, setTableNumber] = useState('');
   const [orderType, setOrderType] = useState<'DINE_IN' | 'TAKE_AWAY'>('DINE_IN');
-  const [privacyConsent, setPrivacyConsent] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setCustomerName(lastCustomerName || '');
-      setCustomerMobile(lastCustomerMobile || '');
       setOrderType('DINE_IN');
-      setPrivacyConsent(false);
     }
-  }, [open, lastCustomerName, lastCustomerMobile]);
+  }, [open]);
 
   const descriptionId = 'order-dialog-description';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} key="order-cart-dialog">
       <DialogContent
-        className="flex max-h-[80dvh] w-[calc(100%-2rem)] max-w-full flex-col overflow-hidden rounded-xl sm:max-w-lg"
+        className="flex min-h-0 h-[min(92dvh,100svh)] max-h-[min(92dvh,100svh)] w-[calc(100vw-0.75rem)] max-w-lg flex-col gap-0 overflow-hidden rounded-xl p-0 sm:h-auto sm:max-h-[min(85dvh,720px)] sm:w-full"
         aria-describedby={descriptionId}
       >
-        <DialogHeader>
-          <DialogTitle>Your Order</DialogTitle>
-          <DialogDescription id={descriptionId}>
-            Review your items, fill in your details, then tap Dine In or Take Away to place your
-            order.
+        <DialogHeader className="shrink-0 space-y-1 border-b px-4 py-3 pr-12 text-left sm:px-6 sm:py-4">
+          <DialogTitle className="text-base sm:text-lg">Your Order</DialogTitle>
+          <DialogDescription id={descriptionId} className="text-xs leading-snug sm:text-sm">
+            Review items, enter table number for dine in, then tap Dine In or Take Away.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex-1 space-y-3 min-h-[100px] overflow-y-auto overscroll-contain pr-1">
-          {cart.length === 0 ? (
-            <p className="text-muted-foreground text-sm">
-              Your order is empty. Tap any item to add it.
-            </p>
-          ) : (
-            cart.map(item => (
-              <div
-                key={item.id}
-                className="flex items-center justify-between gap-3 rounded-xl border px-3 py-2"
-              >
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold">
-                    {getBaseItemName(item.name)}{' '}
-                    {item.variant && (
-                      <span className="text-xs text-emerald-700">({getDisplayVariant(item)})</span>
-                    )}
+
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-4 py-3 [-webkit-overflow-scrolling:touch] sm:px-6">
+          <div className="space-y-2.5">
+            {cart.length === 0 ? (
+              <p className="text-muted-foreground text-sm">
+                Your order is empty. Tap any item to add it.
+              </p>
+            ) : (
+              cart.map(item => (
+                <div
+                  key={item.id}
+                  className="flex flex-col gap-2 rounded-xl border px-2.5 py-2 min-[380px]:flex-row min-[380px]:items-center min-[380px]:justify-between min-[380px]:gap-3 min-[380px]:px-3"
+                >
+                  <div className="min-w-0">
+                    <div className="break-words text-sm font-semibold leading-snug">
+                      {getBaseItemName(item.name)}{' '}
+                      {item.variant && (
+                        <span className="text-xs text-emerald-700">
+                          ({getDisplayVariant(item)})
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-muted-foreground text-xs">₹{item.price.toFixed(0)} each</div>
                   </div>
-                  <div className="text-muted-foreground text-xs">₹{item.price.toFixed(0)} each</div>
+                  <div className="flex shrink-0 items-center justify-end gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9 min-h-[40px] min-w-[40px] shrink-0 touch-manipulation sm:h-10 sm:w-10 sm:min-h-[44px] sm:min-w-[44px]"
+                      onClick={() => decrementCartItem(item.id)}
+                    >
+                      <Minus className="h-4 w-4" />
+                    </Button>
+                    <span className="w-6 text-center text-sm font-semibold">{item.quantity}</span>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9 min-h-[40px] min-w-[40px] shrink-0 touch-manipulation sm:h-10 sm:w-10 sm:min-h-[44px] sm:min-w-[44px]"
+                      onClick={() => incrementCartItem(item.id)}
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 min-h-[40px] min-w-[40px] shrink-0 touch-manipulation text-red-500 hover:text-red-600 sm:h-10 sm:w-10 sm:min-h-[44px] sm:min-w-[44px]"
+                      onClick={() => removeCartItem(item.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-10 min-h-[44px] w-10 min-w-[44px] shrink-0 touch-manipulation"
-                    onClick={() => decrementCartItem(item.id)}
-                  >
-                    <Minus className="h-4 w-4" />
-                  </Button>
-                  <span className="w-6 text-center text-sm font-semibold">{item.quantity}</span>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-10 min-h-[44px] w-10 min-w-[44px] shrink-0 touch-manipulation"
-                    onClick={() => incrementCartItem(item.id)}
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-10 min-h-[44px] w-10 min-w-[44px] shrink-0 touch-manipulation text-red-500 hover:text-red-600"
-                    onClick={() => removeCartItem(item.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            ))
-          )}
-          
-          <div className="mt-4 space-y-2 border-t pt-4">
-            <div className="flex flex-col gap-2 text-xs sm:text-sm">
-            <label className="flex flex-col gap-1">
-              <span className="font-semibold text-olive-900">
-                Your name <span className="text-red-500">*</span>
-              </span>
-              <input
-                value={customerName}
-                onChange={e => setCustomerName(e.target.value)}
-                placeholder="e.g. Rahul Kumar"
-                className="w-full rounded-md border px-2 py-1 text-sm focus:ring-2 focus:ring-emerald-600 focus:outline-none"
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="font-semibold text-olive-900">
-                Mobile number <span className="text-muted-foreground font-normal">(optional)</span>
-              </span>
-              <input
-                type="tel"
-                inputMode="numeric"
-                maxLength={10}
-                value={customerMobile}
-                onChange={e => setCustomerMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                placeholder="10-digit mobile number"
-                className="w-full rounded-md border px-2 py-1 text-sm focus:ring-2 focus:ring-emerald-600 focus:outline-none"
-              />
-              <span className="text-muted-foreground text-[10px]">
-                Optional. Used only to notify you when your order is ready. We do not use it for marketing.
-              </span>
-            </label>
-            {customerMobile.replace(/\D/g, '').length > 0 && (
-              <label className="flex items-start gap-2 text-[11px] text-stone-600">
-                <input
-                  type="checkbox"
-                  checked={privacyConsent}
-                  onChange={e => setPrivacyConsent(e.target.checked)}
-                  className="mt-0.5 h-3.5 w-3.5 accent-emerald-600"
-                />
-                <span>
-                  I consent to sharing my mobile number for order-related communication only. View our{' '}
-                  <a
-                    href="/privacy-policy"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-semibold text-emerald-700 underline"
-                    onClick={e => e.stopPropagation()}
-                  >
-                    Privacy Policy
-                  </a>{' '}
-                  and{' '}
-                  <a
-                    href="/terms-and-conditions"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-semibold text-emerald-700 underline"
-                    onClick={e => e.stopPropagation()}
-                  >
-                    Terms
-                  </a>
-                </span>
-              </label>
+              ))
             )}
-            {/* Table number — only shown for Dine In */}
-            {orderType === 'DINE_IN' && (
-              <label className="flex flex-col gap-1">
+          </div>
+
+          {orderType === 'DINE_IN' && (
+            <div className="mt-4 border-t pt-3">
+              <label className="flex flex-col gap-1 text-xs sm:text-sm">
                 <span className="font-semibold text-olive-900">
                   Table number <span className="text-red-500">*</span>
                 </span>
@@ -292,22 +222,21 @@ function OrderCartDialog({
                   maxLength={1}
                   autoComplete="off"
                   onChange={e => setTableNumber(e.target.value.replace(/\D/g, '').slice(0, 1))}
-                  placeholder="One digit only (0–9)"
-                  className="w-full rounded-md border px-2 py-1 text-sm focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                  placeholder="0–9"
+                  className="h-11 w-full rounded-md border px-3 text-base focus:ring-2 focus:ring-emerald-600 focus:outline-none sm:h-auto sm:py-1 sm:text-sm"
                 />
-                <span className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] text-amber-900/80">
-                  Use one digit only (0–9), matching the number on your table. If your table shows
-                  two digits, ask staff which single digit to use.
+                <span className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] leading-snug text-amber-900/80">
+                  One digit only (0–9), matching your table. If the table shows two digits, ask staff
+                  which single digit to use.
                 </span>
               </label>
-            )}
-          </div>
-          </div>
+            </div>
+          )}
         </div>
 
-        <div className="mt-2 space-y-2 border-t pt-3 shrink-0">
+        <div className="shrink-0 space-y-2 border-t bg-background px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6 sm:pb-4">
           {showTotalAmount && (
-            <div className="flex items-center justify-between pt-1 text-sm">
+            <div className="flex items-center justify-between text-sm">
               <span className="font-semibold">Total</span>
               <span className="font-bold">₹{cartTotal.toFixed(0)}</span>
             </div>
@@ -319,24 +248,19 @@ function OrderCartDialog({
             </p>
           )}
 
-          {/* DINE IN / TAKE AWAY — these ARE the order placement buttons */}
-          <div className="grid grid-cols-2 gap-2 pt-1">
+          <div className="grid grid-cols-2 gap-2">
             <Button
               type="button"
               disabled={
                 !checkoutEnabled ||
                 !cart.length ||
                 isSubmittingOrder ||
-                !customerName.trim() ||
-                !/^\d$/.test(tableNumber.trim()) ||
-                (customerMobile.replace(/\D/g, '').length > 0 && !privacyConsent)
+                !/^\d$/.test(tableNumber.trim())
               }
-              className="min-h-[48px] bg-emerald-700 text-sm font-bold text-white hover:bg-emerald-800 disabled:opacity-50"
+              className="min-h-[44px] bg-emerald-700 text-xs font-bold text-white hover:bg-emerald-800 disabled:opacity-50 sm:min-h-[48px] sm:text-sm"
               onClick={() => {
                 setOrderType('DINE_IN');
                 void onCheckout({
-                  customerName,
-                  customerMobile,
                   tableNumber,
                   orderType: 'DINE_IN',
                 });
@@ -353,20 +277,12 @@ function OrderCartDialog({
             </Button>
             <Button
               type="button"
-              disabled={
-                !checkoutEnabled ||
-                !cart.length ||
-                isSubmittingOrder ||
-                !customerName.trim() ||
-                (customerMobile.replace(/\D/g, '').length > 0 && !privacyConsent)
-              }
-              className="min-h-[48px] border-2 border-emerald-700 bg-white text-sm font-bold text-emerald-800 hover:bg-emerald-50 disabled:opacity-50"
+              disabled={!checkoutEnabled || !cart.length || isSubmittingOrder}
+              className="min-h-[44px] border-2 border-emerald-700 bg-white text-xs font-bold text-emerald-800 hover:bg-emerald-50 disabled:opacity-50 sm:min-h-[48px] sm:text-sm"
               onClick={() => {
                 setTableNumber('');
                 setOrderType('TAKE_AWAY');
                 void onCheckout({
-                  customerName,
-                  customerMobile,
                   tableNumber: '',
                   orderType: 'TAKE_AWAY',
                 });
@@ -383,7 +299,7 @@ function OrderCartDialog({
             </Button>
           </div>
 
-          <p className="text-muted-foreground text-center text-[10px]">
+          <p className="text-muted-foreground text-center text-[10px] leading-snug">
             Show this screen to staff if there is any issue with order confirmation.
           </p>
         </div>
@@ -1552,8 +1468,6 @@ const Index = () => {
 
   const handleCheckout = useCallback(
     async (formData: {
-      customerName: string;
-      customerMobile: string;
       tableNumber: string;
       orderType: 'DINE_IN' | 'TAKE_AWAY';
     }) => {
@@ -1564,16 +1478,6 @@ const Index = () => {
         });
         return;
       }
-      const nameTrim = formData.customerName.trim();
-      if (!nameTrim) {
-        toast({
-          title: 'Name required',
-          description: 'Please enter your name.',
-        });
-        return;
-      }
-      const mobileTrim = formData.customerMobile.replace(/\D/g, '').slice(0, 10);
-      const validMobile = mobileTrim.length === 10 && /^[6-9]/.test(mobileTrim) ? mobileTrim : '';
       if (formData.orderType === 'DINE_IN' && !/^\d$/.test(formData.tableNumber.trim())) {
         toast({
           title: 'Table number: one digit only',
@@ -1607,8 +1511,6 @@ const Index = () => {
             branchId,
             sessionToken,
             packaging: formData.orderType === 'TAKE_AWAY',
-            customerName: nameTrim,
-            customerMobile: validMobile || undefined,
             items: cart.map(item => ({
               name: item.name,
               unitPrice: item.price,
@@ -1646,8 +1548,8 @@ const Index = () => {
         setLastOrderType(formData.orderType);
         setLastOrderStatus('NEW_ORDER');
         setLastOrderCreatedAt(data.order?.createdAt ?? new Date().toISOString());
-        setLastCustomerMobile(validMobile);
-        setLastCustomerName(nameTrim);
+        setLastCustomerMobile('');
+        setLastCustomerName('');
         toast({
           title: 'Order placed!',
           description: 'Your order has been sent to the kitchen.',
@@ -2058,8 +1960,6 @@ const Index = () => {
             onCheckout={handleCheckout}
             isSubmittingOrder={isSubmittingOrder}
             pendingCheckoutType={pendingCheckoutType}
-            lastCustomerName={lastCustomerName}
-            lastCustomerMobile={lastCustomerMobile}
             showTotalAmount={showTotalAmountToCustomers}
             checkoutEnabled={canPlaceOrderOnline}
             checkoutDisabledReason={checkoutDisabledReason}
@@ -2114,7 +2014,7 @@ const Index = () => {
 
           {/* Raise Issue / Need Help */}
           <Dialog open={issueDialogOpen} onOpenChange={setIssueDialogOpen}>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent className="max-h-[min(90dvh,100svh)] overflow-y-auto overscroll-contain sm:max-w-md">
               <DialogHeader>
                 <DialogTitle>Raise Issue / Need Help</DialogTitle>
               </DialogHeader>

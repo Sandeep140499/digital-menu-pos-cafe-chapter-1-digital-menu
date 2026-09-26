@@ -335,7 +335,7 @@ model Order {
   paymentStatus        PaymentStatus        @default(PAYMENT_PENDING)
   totalAmount          Float                @default(0)
   originalAmount       Float?               @default(0) // Track original amount before modifications
-  customerName         String? // Customer name (mandatory at checkout)
+  customerName         String? // Optional; staff can add later. Public QR checkout uses table only.
   customerMobile       String? // 10-digit mobile for WhatsApp & tracking
   /**
    * Cached 10-digit mobile for fast lookup/clearing (nullable when mobile absent).
